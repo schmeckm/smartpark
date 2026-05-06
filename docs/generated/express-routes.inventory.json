@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-06T19:52:46.863Z",
+  "generatedAt": "2026-05-06T20:01:52.840Z",
   "apiPrefix": "/api/v1",
   "routeCount": 328,
   "routes": [
@@ -190,21 +190,21 @@
       "path": "/api/v1/ai/assets/:assetId/effective-ml-config",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "PATCH",
       "path": "/api/v1/ai/assets/:assetId/ml-overrides",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "PUT",
       "path": "/api/v1/ai/assets/:assetId/ml-profile",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
@@ -218,21 +218,21 @@
       "path": "/api/v1/ai/factors/config",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/ai/feature-data-quality",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/ai/feature-store/monitor",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "DELETE",
@@ -260,7 +260,7 @@
       "path": "/api/v1/ai/forecast-accuracy/zone-crowd",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
@@ -281,28 +281,28 @@
       "path": "/api/v1/ai/global-factors/:id",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "PATCH",
       "path": "/api/v1/ai/global-factors/:id",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/ai/global-factors",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
       "path": "/api/v1/ai/global-factors",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
@@ -323,28 +323,28 @@
       "path": "/api/v1/ai/ml-profiles/:id",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "PATCH",
       "path": "/api/v1/ai/ml-profiles/:id",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/ai/ml-profiles",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
       "path": "/api/v1/ai/ml-profiles",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
@@ -379,14 +379,14 @@
       "path": "/api/v1/ai/parks/:parkId/factors",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "PATCH",
       "path": "/api/v1/ai/parks/:parkId/factors",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
@@ -400,7 +400,7 @@
       "path": "/api/v1/ai/pipeline-runs",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
@@ -442,14 +442,14 @@
       "path": "/api/v1/ai/studio/catalog",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/ai/studio/dataset-stats",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
@@ -470,63 +470,63 @@
       "path": "/api/v1/ai/studio/models/:id/activate",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/ai/studio/models/:id",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
       "path": "/api/v1/ai/studio/models/train",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/ai/studio/models",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
       "path": "/api/v1/ai/studio/predict",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
       "path": "/api/v1/ai/timeseries/calendar",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/ai/timeseries/rides-current",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/ai/timeseries/rides/:assetId",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/ai/training-dataset",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "DELETE",
@@ -883,7 +883,7 @@
       "path": "/api/v1/integrations/adapters/:adapterKey/inventory",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
@@ -911,14 +911,14 @@
       "path": "/api/v1/integrations/adapters/install-local",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/integrations/adapters/packages/:adapterKey/asset",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
@@ -1086,56 +1086,56 @@
       "path": "/api/v1/integrations/uns/manual/:id",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/integrations/uns/manual",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
       "path": "/api/v1/integrations/uns/manual",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
       "path": "/api/v1/integrations/uns/materialize-nodes",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "DELETE",
       "path": "/api/v1/integrations/uns/sparkplug-schema",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/integrations/uns/sparkplug-schema",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "PUT",
       "path": "/api/v1/integrations/uns/sparkplug-schema",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/integrations/uns/suggestions",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
@@ -2301,8 +2301,8 @@
     }
   ],
   "stats": {
-    "missingFromOpenapiCount": 100,
-    "openapiOperationCount": 228,
+    "missingFromOpenapiCount": 60,
+    "openapiOperationCount": 268,
     "documentedNotLiveCount": 0
   }
 }
