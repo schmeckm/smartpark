@@ -2058,63 +2058,151 @@ paths:
     get:
       tags: [UNS]
       summary: Get UNS tree by park
+      description: >-
+        Requires **integrations.read**. Returns `{ success, data }` where **`data`** is an array of root UNS nodes
+        with nested **`children`**. Leaf nodes may include derived Sparkplug topic hints (`sparkplugTopic`, etc.).
       parameters:
         - in: path
           name: parkId
           required: true
-          schema: { type: string }
-      responses: { '200': { description: OK } }
+          schema: { type: string, description: Park scope key (UUID string for platform parks). }
+      responses:
+        '200':
+          description: UNS hierarchy roots
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeUnsTree' }
+        '401':
+          description: Missing or invalid JWT
+        '403':
+          description: Missing integrations.read
   /uns/parks/{parkId}/nodes:
     post:
       tags: [UNS]
       summary: Create UNS node
+      description: Requires **integrations.manage**. Validates parent belongs to the same **`parkId`** when provided.
       parameters:
         - in: path
           name: parkId
           required: true
           schema: { type: string }
       requestBody:
+        required: true
         content:
           application/json:
             schema: { $ref: '#/components/schemas/UnsNodeCreate' }
-      responses: { '201': { description: Created } }
+      responses:
+        '201':
+          description: Created node
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeUnsNodeMutation' }
+        '401':
+          description: Missing or invalid JWT
+        '403':
+          description: Missing integrations.manage
+        '404':
+          description: Parent node not found for this park
+        '422':
+          description: Joi / domain validation failure
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorBody' }
   /uns/nodes/{id}:
     put:
       tags: [UNS]
       summary: Update UNS node
+      description: Requires **integrations.manage**. At least one mutable field required (see `UnsNodeUpdate`).
       parameters:
         - $ref: '#/components/parameters/IdPath'
       requestBody:
+        required: true
         content:
           application/json:
             schema: { $ref: '#/components/schemas/UnsNodeUpdate' }
-      responses: { '200': { description: OK } }
+      responses:
+        '200':
+          description: Updated node
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeUnsNodeMutation' }
+        '401':
+          description: Missing or invalid JWT
+        '403':
+          description: Missing integrations.manage
+        '404':
+          description: Node not found
+        '422':
+          description: Validation failure or empty patch
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorBody' }
     delete:
       tags: [UNS]
       summary: Delete UNS node
+      description: Requires **integrations.manage**.
       parameters:
         - $ref: '#/components/parameters/IdPath'
-      responses: { '204': { description: No content } }
+      responses:
+        '204':
+          description: No content
+        '401':
+          description: Missing or invalid JWT
+        '403':
+          description: Missing integrations.manage
+        '404':
+          description: Node not found
   /uns/parks/{parkId}/latest-state:
     get:
       tags: [UNS]
       summary: Get latest UNS topic values for park
+      description: >-
+        Requires **integrations.read**. Returns rows from **`uns_latest_states`** for the park (`topicPath`, JSON payload,
+        `eventTime`, `quality`, `source`), ordered by **`eventTime`** descending.
       parameters:
         - in: path
           name: parkId
           required: true
           schema: { type: string }
-      responses: { '200': { description: OK } }
+      responses:
+        '200':
+          description: Latest persisted UNS scalars / payloads per topic
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeUnsLatestStateList' }
+        '401':
+          description: Missing or invalid JWT
+        '403':
+          description: Missing integrations.read
   /uns/parks/{parkId}/topics:
     get:
       tags: [UNS]
       summary: List generated active UNS topics
+      description: >-
+        Requires **integrations.read**. Returns active leaf nodes with derived Sparkplug topic strings for the given
+        **`sparkplugMessageType`** (default **`DDATA`**). Other values follow Sparkplug B rules (`NBIRTH`, `DBIRTH`, …).
       parameters:
         - in: path
           name: parkId
           required: true
           schema: { type: string }
-      responses: { '200': { description: OK } }
+        - in: query
+          name: sparkplugMessageType
+          required: false
+          schema:
+            type: string
+            enum: [NBIRTH, NDEATH, DBIRTH, DDEATH, DDATA, NCMD, DCMD, STATE]
+            default: DDATA
+      responses:
+        '200':
+          description: Topic explorer rows
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeUnsTopicsList' }
+        '401':
+          description: Missing or invalid JWT
+        '403':
+          description: Missing integrations.read
 
   /uns/parks/{parkId}/hierarchy-schema:
     get:
@@ -2257,16 +2345,24 @@ paths:
     post:
       tags: [UNS]
       summary: Publish UNS test message to MQTT
+      description: >-
+        Requires **integrations.manage**. Publishes **`payload`** JSON to **`topic`** via the configured MQTT client.
+        Fails at runtime when MQTT is not connected (server error path — not a stable HTTP contract in all environments).
       requestBody:
+        required: true
         content:
           application/json:
-            schema:
-              type: object
-              required: [topic, payload]
-              properties:
-                topic: { type: string }
-                payload: { type: object }
-      responses: { '200': { description: OK } }
+            schema: { $ref: '#/components/schemas/UnsTestPublishRequest' }
+      responses:
+        '200':
+          description: Publish acknowledged
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeUnsTestPublish' }
+        '401':
+          description: Missing or invalid JWT
+        '403':
+          description: Missing integrations.manage
 
   /uns-registry/mirror/summary:
     get:
@@ -4985,6 +5081,111 @@ components:
         description: { type: string, nullable: true }
         isLeaf: { type: boolean }
         isActive: { type: boolean }
+
+    UnsTreeNode:
+      type: object
+      description: >
+        UNS node in hierarchy form (`children` nested). Responses may include extra Sequelize fields and Sparkplug hints
+        (`sparkplugTopic`, `sparkplugMessageType`, `sparkplug`) on leaf nodes after tree enrichment.
+      properties:
+        id: { type: string, format: uuid }
+        parkId: { type: string }
+        parentId: { type: string, format: uuid, nullable: true }
+        name: { type: string }
+        slug: { type: string }
+        nodeType: { type: string }
+        domain: { type: string, nullable: true }
+        metric: { type: string, nullable: true }
+        topicPath: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        isLeaf: { type: boolean }
+        isActive: { type: boolean }
+        entityKind: { type: string, nullable: true }
+        sparkplugEnabled: { type: boolean }
+        isStructureLocked: { type: boolean }
+        sortOrder: { type: integer }
+        children:
+          type: array
+          items: { $ref: '#/components/schemas/UnsTreeNode' }
+      additionalProperties: true
+
+    EnvelopeUnsTree:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: array
+          description: Root UNS nodes for the park (nested `children`).
+          items: { $ref: '#/components/schemas/UnsTreeNode' }
+
+    EnvelopeUnsNodeMutation:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          additionalProperties: true
+          description: Created or updated UNS node row (`UnsNode` Sequelize JSON).
+
+    UnsLatestStateRow:
+      type: object
+      description: One row from `uns_latest_states` (latest known payload per `topicPath` for a park).
+      properties:
+        id: { type: string, format: uuid }
+        parkId: { type: string }
+        topicPath: { type: string }
+        payloadJson:
+          type: object
+          additionalProperties: true
+        eventTime: { type: string, format: date-time }
+        quality: { type: string, nullable: true }
+        source: { type: string, nullable: true }
+      additionalProperties: true
+
+    EnvelopeUnsLatestStateList:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/UnsLatestStateRow' }
+
+    UnsTopicExplorerRow:
+      type: object
+      description: >
+        Topic explorer projection for an active leaf (identifiers, `topicPath`, derived Sparkplug topic, etc.).
+        Shape follows `UnsService.listTopicsByPark` runtime objects.
+      additionalProperties: true
+
+    EnvelopeUnsTopicsList:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/UnsTopicExplorerRow' }
+
+    UnsTestPublishRequest:
+      type: object
+      required: [topic, payload]
+      properties:
+        topic:
+          type: string
+          description: Topic string validated by UNS topic rules before publish.
+        payload:
+          type: object
+          additionalProperties: true
+
+    EnvelopeUnsTestPublish:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          required: [published, topic]
+          properties:
+            published: { type: boolean, enum: [true] }
+            topic: { type: string }
 
     AdapterInstallMetadata:
       type: object
