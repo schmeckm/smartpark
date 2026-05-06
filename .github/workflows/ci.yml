@@ -59,5 +59,8 @@ jobs:
       - name: Unit tests + RBAC verify
         run: npm test
 
+      - name: OpenAPI parse + route audit + drift baseline
+        run: npm run governance:ci
+
       - name: Smoke add-on board
         run: npm run smoke:addon-board

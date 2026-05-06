@@ -2,6 +2,7 @@
 
 const { ParkAsset, Park } = require('../models');
 const signalPreview = require('./signal-preview.service');
+const approvedSignals = require('./approved-operational-signal.service');
 
 const WIDGET_DRAFT_PROFILE_KEY = 'addonBoardWidgetSourceDraft';
 
@@ -41,12 +42,14 @@ function resolveDraftPreviewForAsset(assetRecord, draft) {
 }
 
 /**
+ * Phase T.3 — extensions + registry/capability governance (same resolver as ML / Operations Facts).
  * @param {import('sequelize').Model|null} asset
  * @param {string} signalKey
- * @returns {{ ok: true } | { ok: false, code: 'INVALID_SIGNAL' }}
+ * @returns {Promise<{ ok: true } | { ok: false, code: 'INVALID_SIGNAL', message?: string }>}
  */
-function assertSignalBoardEligible(asset, signalKey) {
-  return signalPreview.assertSignalBoardEligible(asset, signalKey);
+async function assertSignalBoardEligible(asset, signalKey) {
+  const id = asset?.assetId ?? asset?.get?.('assetId') ?? asset?.getDataValue?.('assetId');
+  return approvedSignals.assertBoardSignalApproved(String(id), signalKey);
 }
 
 /**
@@ -145,7 +148,7 @@ async function saveWidgetSourceDraft(parkId, rideAssetId, body) {
     /** @type {any} */ (err).code = 'ASSET_NOT_FOUND';
     throw err;
   }
-  const chk = assertSignalBoardEligible(asset, body.signalKey);
+  const chk = await assertSignalBoardEligible(asset, body.signalKey);
   if (!chk.ok) {
     const err = new Error('INVALID_SIGNAL');
     /** @type {any} */ (err).code = 'INVALID_SIGNAL';

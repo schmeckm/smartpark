@@ -11,6 +11,7 @@ const tabs = computed(() => [
   { to: '/uns/live', label: 'Live MQTT State' },
   { to: '/uns/oee-cockpit', label: 'OEE cockpit' },
   { to: '/uns/registry-mirror', label: t('menu.unsRegistryMirror') },
+  { to: '/uns/governance', label: t('menu.unsGovernance') },
   { to: '/uns/spy-inbox', label: t('menu.unsSpyInbox') },
   { to: '/uns/signal-view', label: t('unsHub.tabSignalView') },
   { to: '/analytics/sqdc', label: t('menu.sqdcBoard') },

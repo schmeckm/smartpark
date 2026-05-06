@@ -10,6 +10,7 @@ const {
   appendTpunsLiveFromMqtt,
   getSparkplugSubscribePatterns,
 } = require('./mqtt-sparkplug-live-buffer.service');
+const mqttCapabilityGuard = require('./mqtt-capability-guard.service');
 
 const TOPICS = [
   'park/+/zone/+/crowd',
@@ -43,8 +44,7 @@ function getMqttState() {
 
 async function safeEvaluateCapabilityGuard(topic, payloadJson) {
   try {
-    const { evaluateInboundMqttCapability } = require('./mqtt-capability-guard.service');
-    return await evaluateInboundMqttCapability({
+    return await mqttCapabilityGuard.evaluateInboundMqttCapability({
       topic: String(topic),
       payloadJson,
       receivedAt: new Date().toISOString(),
@@ -68,12 +68,11 @@ async function safeEvaluateCapabilityGuard(topic, payloadJson) {
 async function handleCapabilityEnforcedBlock(topic, message, guardResult, recorded) {
   logger.warn(
     { topic: String(topic).slice(0, 200), reason: guardResult.reason, decision: guardResult.decision },
-    'mqtt capability guard blocked inbound message (enforce)'
+    'mqtt capability guard quarantined live TPUNS/Sparkplug side-effects (enforce)'
   );
   try {
-    const { recordCapabilityGuardBlockDiscovery } = require('./mqtt-capability-guard.service');
     if (recorded?.mqttRow) {
-      await recordCapabilityGuardBlockDiscovery(recorded.mqttRow, guardResult);
+      await mqttCapabilityGuard.recordCapabilityGuardBlockDiscovery(recorded.mqttRow, guardResult);
     }
   } catch (e) {
     logger.warn({ err: e.message, topic: String(topic).slice(0, 120) }, 'capability guard block discovery failed');
@@ -103,7 +102,7 @@ function onMessage(topic, message) {
         const guardResult = await safeEvaluateCapabilityGuard(topic, payloadJson);
         const mqttObserver = require('./mqtt-topic-observer.service');
         const recorded = await mqttObserver.recordMqttInboundWithGuard(topic, message, guardResult);
-        if (env.mqttCapabilityGuardMode === 'enforce' && guardResult.decision === 'BLOCK') {
+        if (mqttCapabilityGuard.shouldQuarantineLiveMqttPersistence(env.mqttCapabilityGuardMode, guardResult.decision)) {
           await handleCapabilityEnforcedBlock(topic, message, guardResult, recorded);
           return;
         }
@@ -125,7 +124,7 @@ function onMessage(topic, message) {
         const mqttObserver = require('./mqtt-topic-observer.service');
         const { recordMqttInboundWithGuard, isSpyEnabled } = mqttObserver;
         const recorded = await recordMqttInboundWithGuard(topic, message, guardResult);
-        if (env.mqttCapabilityGuardMode === 'enforce' && guardResult.decision === 'BLOCK') {
+        if (mqttCapabilityGuard.shouldQuarantineLiveMqttPersistence(env.mqttCapabilityGuardMode, guardResult.decision)) {
           await handleCapabilityEnforcedBlock(topic, message, guardResult, recorded);
           return;
         }

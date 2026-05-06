@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
   getMqttInbound,
@@ -7,19 +8,27 @@ import {
   getUnsSpyEvents,
   getUnsSpyProposals,
   getRides,
+  listMasterData,
+  getRideSignalCapabilities,
   postUnsSpyDiscoveryApprove,
   postUnsSpyDiscoveryReject,
   postUnsSpyDiscoveryIgnore,
+  postUnsSpyProposalApprove,
+  postUnsSpyProposalReject,
   type MqttInboundRow,
   type UnsDiscoveryEventRow,
   type UnsTopicProposalRow,
+  type RideSignalCapabilitySignalRow,
+  type RideSignalSource,
 } from '@/api/client'
 import { useToast } from '@/composables/useToast'
 import { useRegionalDateTime } from '@/composables/useRegionalDateTime'
 import { useAuthStore } from '@/stores/auth'
+import { useParkContextStore } from '@/stores/parkContext'
 
 const { t } = useI18n()
 const auth = useAuthStore()
+const parkCtx = useParkContextStore()
 const { formatDateTime } = useRegionalDateTime()
 const { push } = useToast()
 
@@ -58,6 +67,25 @@ const modalEvent = ref<UnsDiscoveryEventRow | null>(null)
 const modalRideId = ref('')
 const modalApplyTemplate = ref(true)
 const rideOptions = ref<{ id: string; name: string }[]>([])
+
+const mqttProposalModalOpen = ref(false)
+const modalProposal = ref<UnsTopicProposalRow | null>(null)
+const modalMqttRideId = ref('')
+const modalSignalCatalogId = ref('')
+const modalSignalSource = ref<RideSignalSource>('MQTT_EDGE')
+const modalActivatePrepared = ref(true)
+const mqttRideOptions = ref<{ id: string; name: string }[]>([])
+const mqttSignalOptions = ref<RideSignalCapabilitySignalRow[]>([])
+
+const mqttSignalSources: RideSignalSource[] = [
+  'NOT_AVAILABLE',
+  'MASTER_DATA',
+  'MANUAL',
+  'ADAPTER',
+  'MQTT_EDGE',
+  'SIMULATION',
+  'ML',
+]
 
 const canWriteSpy = computed(
   () => auth.hasPermission('integrations', 'manage') || auth.hasPermission('rides', 'update')
@@ -124,6 +152,10 @@ function suggestedActionText(classification: string): string {
 function isAdapterDiscoveryRow(row: UnsDiscoveryEventRow): boolean {
   const d = row.details || {}
   return String(d.source || '') === 'adapter'
+}
+
+function isPendingProposal(row: UnsTopicProposalRow): boolean {
+  return String(row.status || '').toLowerCase() === 'pending'
 }
 
 function discoveryReviewStatus(row: UnsDiscoveryEventRow): string {
@@ -198,6 +230,87 @@ async function submitIgnore() {
     await refresh()
   } catch (e) {
     push(e instanceof Error ? e.message : t('unsSpyInbox.actionsFailed'), 'error')
+  } finally {
+    actionBusy.value = false
+  }
+}
+
+function closeMqttProposalModal() {
+  mqttProposalModalOpen.value = false
+  modalProposal.value = null
+}
+
+async function openMqttProposalModal(row: UnsTopicProposalRow) {
+  modalProposal.value = row
+  modalMqttRideId.value = ''
+  modalSignalCatalogId.value = ''
+  modalSignalSource.value = 'MQTT_EDGE'
+  modalActivatePrepared.value = true
+  mqttSignalOptions.value = []
+  mqttProposalModalOpen.value = true
+  try {
+    const params: Record<string, string | number> = { page: 0, pageSize: 200 }
+    if (parkCtx.activeParkId) params.parkId = parkCtx.activeParkId
+    const page = await listMasterData('rides', params)
+    mqttRideOptions.value = page.rows.map((r) => ({
+      id: r.id,
+      name: r.parkName ? `${r.name} (${r.parkName})` : r.name,
+    }))
+  } catch {
+    mqttRideOptions.value = []
+  }
+}
+
+watch(modalMqttRideId, async (id) => {
+  const rid = String(id || '').trim()
+  mqttSignalOptions.value = []
+  modalSignalCatalogId.value = ''
+  if (!rid) return
+  try {
+    const cap = await getRideSignalCapabilities(rid)
+    mqttSignalOptions.value = cap.signals || []
+  } catch {
+    mqttSignalOptions.value = []
+  }
+})
+
+async function submitMqttProposalApprove() {
+  if (!modalProposal.value || !modalMqttRideId.value) {
+    push(t('unsSpyInbox.mqttProposalPickRide'), 'error')
+    return
+  }
+  if (!modalSignalCatalogId.value) {
+    push(t('unsSpyInbox.mqttProposalPickSignal'), 'error')
+    return
+  }
+  actionBusy.value = true
+  try {
+    await postUnsSpyProposalApprove(modalProposal.value.id, {
+      rideAssetId: modalMqttRideId.value,
+      signalCatalogId: modalSignalCatalogId.value,
+      signalSource: modalSignalSource.value,
+      activatePrepared: modalActivatePrepared.value,
+    })
+    push(t('unsSpyInbox.mqttProposalDone'), 'success')
+    closeMqttProposalModal()
+    await refresh()
+  } catch (e) {
+    push(e instanceof Error ? e.message : t('unsSpyInbox.mqttProposalFailed'), 'error')
+  } finally {
+    actionBusy.value = false
+  }
+}
+
+async function submitMqttProposalReject() {
+  if (!modalProposal.value) return
+  actionBusy.value = true
+  try {
+    await postUnsSpyProposalReject(modalProposal.value.id, {})
+    push(t('unsSpyInbox.mqttProposalDone'), 'success')
+    closeMqttProposalModal()
+    await refresh()
+  } catch (e) {
+    push(e instanceof Error ? e.message : t('unsSpyInbox.mqttProposalFailed'), 'error')
   } finally {
     actionBusy.value = false
   }
@@ -282,6 +395,9 @@ onMounted(() => {
         <h1 class="font-display text-xl font-semibold text-white">{{ t('unsSpyInbox.title') }}</h1>
         <p class="mt-1 max-w-3xl text-sm text-slate-400">{{ t('unsSpyInbox.subtitle') }}</p>
         <p class="mt-2 max-w-3xl text-xs text-slate-500">{{ t('unsSpyInbox.subtitleAdapterActions') }}</p>
+        <p class="mt-2 text-xs text-slate-500">
+          <RouterLink class="text-brand-300 hover:underline" to="/uns/governance">{{ t('menu.unsGovernance') }}</RouterLink>
+        </p>
       </div>
       <button
         type="button"
@@ -557,6 +673,66 @@ onMounted(() => {
       </div>
     </div>
 
+    <div
+      v-if="mqttProposalModalOpen"
+      class="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center"
+      role="dialog"
+      aria-modal="true"
+      @click.self="closeMqttProposalModal"
+    >
+      <div class="w-full max-w-md rounded-xl border border-slate-700 bg-slate-950 p-4 shadow-xl" @click.stop>
+        <h3 class="font-display text-lg font-semibold text-white">{{ t('unsSpyInbox.mqttProposalTitle') }}</h3>
+        <p v-if="modalProposal" class="mt-1 break-all font-mono text-xs text-slate-400">{{ modalProposal.proposedTopic }}</p>
+        <label class="mt-4 block text-xs text-slate-400">
+          {{ t('unsSpyInbox.mqttProposalRide') }}
+          <select v-model="modalMqttRideId" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white">
+            <option value="">{{ t('unsSpyInbox.actionsRidePlaceholder') }}</option>
+            <option v-for="r in mqttRideOptions" :key="'m-' + r.id" :value="r.id">{{ r.name }}</option>
+          </select>
+        </label>
+        <label class="mt-3 block text-xs text-slate-400">
+          {{ t('unsSpyInbox.mqttProposalSignal') }}
+          <select v-model="modalSignalCatalogId" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white">
+            <option value="">{{ t('unsSpyInbox.actionsRidePlaceholder') }}</option>
+            <option v-for="s in mqttSignalOptions" :key="s.signalCatalogId" :value="s.signalCatalogId">
+              {{ s.signalCode }} — {{ s.label || s.signalCode }}
+            </option>
+          </select>
+        </label>
+        <label class="mt-3 block text-xs text-slate-400">
+          {{ t('unsSpyInbox.mqttProposalSource') }}
+          <select v-model="modalSignalSource" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white">
+            <option v-for="src in mqttSignalSources" :key="src" :value="src">{{ src }}</option>
+          </select>
+        </label>
+        <label class="mt-3 flex items-center gap-2 text-xs text-slate-300">
+          <input v-model="modalActivatePrepared" type="checkbox" class="rounded border-slate-600" />
+          {{ t('unsSpyInbox.mqttProposalActivate') }}
+        </label>
+        <div class="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            class="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
+            :disabled="actionBusy"
+            @click="submitMqttProposalApprove"
+          >
+            {{ t('unsSpyInbox.mqttProposalApprove') }}
+          </button>
+          <button
+            type="button"
+            class="rounded-lg border border-rose-700 px-3 py-1.5 text-xs text-rose-200 hover:bg-rose-950/50 disabled:opacity-50"
+            :disabled="actionBusy"
+            @click="submitMqttProposalReject"
+          >
+            {{ t('unsSpyInbox.mqttProposalReject') }}
+          </button>
+          <button type="button" class="ml-auto text-xs text-slate-500 hover:text-slate-300" @click="closeMqttProposalModal">
+            {{ t('unsSpyInbox.mqttProposalClose') }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Proposals -->
     <section class="space-y-3">
       <h2 class="font-display text-lg font-semibold text-white">{{ t('unsSpyInbox.proposalsTitle') }}</h2>
@@ -572,11 +748,12 @@ onMounted(() => {
               <th class="px-3 py-2">{{ t('unsSpyInbox.colSourceType') }}</th>
               <th class="px-3 py-2">{{ t('unsSpyInbox.colStatus') }}</th>
               <th class="px-3 py-2">{{ t('unsSpyInbox.colDiscoveryEvent') }}</th>
+              <th class="px-3 py-2">{{ t('unsSpyInbox.colActions') }}</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="!busy && !proposalRows.length">
-              <td colspan="7" class="px-3 py-8 text-center text-slate-500">—</td>
+              <td colspan="8" class="px-3 py-8 text-center text-slate-500">—</td>
             </tr>
             <tr v-for="row in proposalRows" :key="row.id" class="border-t border-slate-800/90 hover:bg-slate-900/40">
               <td class="whitespace-nowrap px-3 py-2 text-xs text-slate-400">{{ formatDateTime(row.createdAt) }}</td>
@@ -588,6 +765,17 @@ onMounted(() => {
                 <span class="rounded bg-slate-800 px-1.5 py-0.5 text-xs">{{ row.status }}</span>
               </td>
               <td class="max-w-[10rem] truncate px-3 py-2 font-mono text-xs" :title="row.discoveryEventId">{{ row.discoveryEventId }}</td>
+              <td class="px-3 py-2">
+                <button
+                  v-if="isPendingProposal(row) && canWriteSpy"
+                  type="button"
+                  class="rounded border border-slate-600 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-800"
+                  @click="openMqttProposalModal(row)"
+                >
+                  {{ t('unsSpyInbox.mqttProposalOpen') }}
+                </button>
+                <span v-else class="text-xs text-slate-600">—</span>
+              </td>
             </tr>
           </tbody>
         </table>

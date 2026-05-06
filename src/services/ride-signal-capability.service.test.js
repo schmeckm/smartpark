@@ -212,3 +212,38 @@ test('prepareSparkplugMetricsForRide: separate rows per ride for same signal key
   assert.equal(keys.length, 2);
   assert.notEqual(keys[0].rideAssetId, keys[1].rideAssetId);
 });
+
+test('mergeOperatorCapabilityForRide updates existing OPERATOR row', async () => {
+  let updates = 0;
+  const s = svc({
+    SignalCatalog: {
+      findByPk: async (id) =>
+        id === CAT
+          ? {
+              id: CAT,
+              get(k) {
+                if (k === 'signalCode') return 'queue_time';
+                if (k === 'id') return CAT;
+                return undefined;
+              },
+            }
+          : null,
+    },
+    RideSignalCapability: {
+      findOrCreate: async () => [
+        {
+          get(k) {
+            if (k === 'capabilityJson') return { signalSource: 'NOT_AVAILABLE', valueType: 'number' };
+            return null;
+          },
+          update: async () => {
+            updates += 1;
+          },
+        },
+        false,
+      ],
+    },
+  });
+  await s.mergeOperatorCapabilityForRide(RIDE_A, { signalCatalogId: CAT, signalSource: 'MANUAL', valueType: 'number' });
+  assert.equal(updates, 1);
+});

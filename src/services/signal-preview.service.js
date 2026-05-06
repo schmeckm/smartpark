@@ -29,17 +29,19 @@ function metricFromSignalKey(signalKey) {
 
 /**
  * @param {unknown} entry
- * @returns {{ enabled: boolean, boardEligible: boolean, mlEligible: boolean }}
+ * @returns {{ enabled: boolean, boardEligible: boolean, mlEligible: boolean, operationsEligible: boolean }}
  */
 function eligibilityFromEntry(entry) {
   if (!entry || typeof entry !== 'object') {
-    return { enabled: false, boardEligible: false, mlEligible: false };
+    return { enabled: false, boardEligible: false, mlEligible: false, operationsEligible: false };
   }
   const o = /** @type {Record<string, unknown>} */ (entry);
   return {
     enabled: Boolean(o.enabled),
     boardEligible: Boolean(o.boardEligible),
     mlEligible: Boolean(o.mlEligible),
+    /** Default true when omitted — Operations Facts keeps legacy behaviour for older extension rows. */
+    operationsEligible: o.operationsEligible !== false,
   };
 }
 
@@ -98,7 +100,7 @@ function buildLegacyBoardResolved(meta, sourceEntityMismatch) {
  *   sourceEntityMismatch: boolean,
  *   domainSupported: boolean,
  *   hasEntry: boolean,
- *   eligibility: { enabled: boolean, boardEligible: boolean, mlEligible: boolean },
+ *   eligibility: { enabled: boolean, boardEligible: boolean, mlEligible: boolean, operationsEligible: boolean },
  *   usage: SignalPreviewUsage,
  *   latestValue: unknown | null,
  *   skipLatestValue: boolean,
@@ -212,7 +214,7 @@ function shouldRunLatestLookup(usage, meta, sourceEntityMismatch) {
  *   signalKey: string,
  *   domain: string | null,
  *   metric: string,
- *   eligibility: { enabled: boolean, boardEligible: boolean, mlEligible: boolean },
+ *   eligibility: { enabled: boolean, boardEligible: boolean, mlEligible: boolean, operationsEligible: boolean },
  *   status: SignalPreviewStatus,
  *   latestValue: ReturnType<typeof normalizeLatestValueRow>,
  * }} p
@@ -318,25 +320,6 @@ function resolveDraftPreviewForAsset(assetRecord, draft) {
 }
 
 /**
- * @param {unknown} asset
- * @param {string} signalKey
- * @returns {{ ok: true } | { ok: false, code: 'INVALID_SIGNAL' }}
- */
-function assertSignalBoardEligible(asset, signalKey) {
-  const meta = computeSignalMetadata(signalKey, asset);
-  if (!meta.domainSupported) return { ok: false, code: 'INVALID_SIGNAL' };
-  if (!meta.hasEntry || !meta.eligibility.enabled || !meta.eligibility.boardEligible) {
-    return { ok: false, code: 'INVALID_SIGNAL' };
-  }
-  return { ok: true };
-}
-
-/**
- * ML Studio draft validation — unchanged semantics vs Phase O (enabled + mlEligible + key present).
- * @param {unknown} rideOrAsset
- * @param {string[]} selectedSignalKeys
- */
-/**
  * @param {Awaited<ReturnType<typeof resolveSignalPreview>>} preview
  */
 function serializeSignalPreview(preview) {
@@ -346,32 +329,16 @@ function serializeSignalPreview(preview) {
   return out;
 }
 
-function assertMlEligibleSelections(rideOrAsset, selectedSignalKeys) {
-  if (!Array.isArray(selectedSignalKeys)) {
-    throw new AppError('selectedSignalKeys must be an array', 400, { code: 'INVALID_ML_FEATURE_DRAFT' });
-  }
-  const ext = getExtensions(rideOrAsset);
-  const signals = ext.signals && typeof ext.signals === 'object' ? ext.signals : {};
-  const invalid = [];
-  for (const raw of selectedSignalKeys) {
-    const key = typeof raw === 'string' ? raw.trim() : '';
-    if (!key) {
-      invalid.push(String(raw));
-      continue;
-    }
-    const entry = signals[key];
-    if (!entry || typeof entry !== 'object') {
-      invalid.push(key);
-      continue;
-    }
-    if (!entry.enabled || !entry.mlEligible) invalid.push(key);
-  }
-  if (invalid.length) {
-    throw new AppError('One or more signal keys are missing or not enabled+mlEligible on extensions', 400, {
-      code: 'INVALID_ML_FEATURE_DRAFT',
-      details: { invalidSignalKeys: invalid },
-    });
-  }
+/**
+ * ML Studio draft validation — Phase T.3 uses `approved-operational-signal` when `park_assets.asset_id`
+ * is linked from the entity; otherwise extensions-only (legacy).
+ * @param {unknown} rideOrAsset
+ * @param {string[]} selectedSignalKeys
+ * @param {'ride'|'park_asset'} [entityType]
+ */
+async function assertMlEligibleSelections(rideOrAsset, selectedSignalKeys, entityType = 'park_asset') {
+  const { assertMlEligibleSignalSelections } = require('./approved-operational-signal.service');
+  await assertMlEligibleSignalSelections(rideOrAsset, selectedSignalKeys, entityType);
 }
 
 module.exports = {
@@ -384,7 +351,6 @@ module.exports = {
   resolveSignalPreview,
   buildBoardDraftResolved,
   resolveDraftPreviewForAsset,
-  assertSignalBoardEligible,
   assertMlEligibleSelections,
   normalizeLatestValueRow,
   serializeSignalPreview,

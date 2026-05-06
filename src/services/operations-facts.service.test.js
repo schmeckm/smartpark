@@ -162,6 +162,7 @@ test('sourceBreakdown shape: getRideFacts exposes source + confidence on KPI que
       },
       SignalCatalog: {},
       UnsRegistryTopic: { findAll: async () => [] },
+      SparkplugMetricDefinition: { findAll: async () => [] },
       CanonicalInboundMessage: { findOne: async () => null },
       AssetObservation: { findOne: async () => null },
       RideWaitTimeSample: { findOne: async () => null },
@@ -190,6 +191,9 @@ test('sourceBreakdown shape: getRideFacts exposes source + confidence on KPI que
       }),
       preparedUnsTopicsForRide: () => [],
       capabilitySignalSource: () => 'ADAPTER',
+    },
+    './approved-operational-signal.service': {
+      evaluateApprovedForOperationsFactsRow: () => ({ approved: true, reason: 'ok' }),
     },
   });
 
@@ -250,6 +254,7 @@ test('getRideFacts: legacy fallback disabled yields MISSING and skips uns_latest
       },
       SignalCatalog: {},
       UnsRegistryTopic: { findAll: async () => [] },
+      SparkplugMetricDefinition: { findAll: async () => [] },
       CanonicalInboundMessage: { findOne: async () => null },
       AssetObservation: { findOne: async () => null },
       RideWaitTimeSample: { findOne: async () => null },
@@ -275,6 +280,9 @@ test('getRideFacts: legacy fallback disabled yields MISSING and skips uns_latest
       }),
       preparedUnsTopicsForRide: () => [],
       capabilitySignalSource: () => 'ADAPTER',
+    },
+    './approved-operational-signal.service': {
+      evaluateApprovedForOperationsFactsRow: () => ({ approved: true, reason: 'ok' }),
     },
   });
 

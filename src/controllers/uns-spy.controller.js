@@ -10,6 +10,7 @@ const {
   rejectAdapterDiscoveryEvent,
   ignoreAdapterDiscoveryEvent,
 } = require('../services/uns-spy-adapter-discovery.service');
+const { approveMqttTopicProposal, rejectMqttTopicProposal } = require('../services/uns-mqtt-proposal-approval.service');
 
 const auditLogService = new AuditLogService();
 
@@ -118,10 +119,52 @@ const ignoreEvent = asyncHandler(async (req, res) => {
   res.json({ success: true, data });
 });
 
+const approveMqttProposal = asyncHandler(async (req, res) => {
+  const v = req.validated || {};
+  const { id: proposalId, ...body } = v;
+  const userId = req.user?.id || null;
+  const proposal = await UnsTopicProposal.findByPk(proposalId);
+  if (!proposal) {
+    return res.status(404).json({ success: false, message: 'Topic proposal not found', code: 'NOT_FOUND' });
+  }
+  const data = await approveMqttTopicProposal(proposalId, body, { userId });
+  await auditLogService.log({
+    action: AUDIT.UNS_SPY_MQTT_PROPOSAL_APPROVE,
+    entityType: 'uns_topic_proposal',
+    entityId: proposalId,
+    oldValue: null,
+    newValue: { proposalId, discoveryEventId: data.discoveryEventId, rideAssetId: data.rideAssetId, registryTopicId: data.registryTopicId },
+    userId: userId ?? null,
+  });
+  res.json({ success: true, data });
+});
+
+const rejectMqttProposal = asyncHandler(async (req, res) => {
+  const v = req.validated || {};
+  const { id: proposalId, reason } = v;
+  const userId = req.user?.id || null;
+  const proposal = await UnsTopicProposal.findByPk(proposalId);
+  if (!proposal) {
+    return res.status(404).json({ success: false, message: 'Topic proposal not found', code: 'NOT_FOUND' });
+  }
+  const data = await rejectMqttTopicProposal(proposalId, { reason }, { userId });
+  await auditLogService.log({
+    action: AUDIT.UNS_SPY_MQTT_PROPOSAL_REJECT,
+    entityType: 'uns_topic_proposal',
+    entityId: proposalId,
+    oldValue: null,
+    newValue: { proposalId, discoveryEventId: data.discoveryEventId, reason: reason || null },
+    userId: userId ?? null,
+  });
+  res.json({ success: true, data });
+});
+
 module.exports = {
   listEvents,
   listProposals,
   approveEvent,
   rejectEvent,
   ignoreEvent,
+  approveMqttProposal,
+  rejectMqttProposal,
 };

@@ -10,6 +10,7 @@ const signalEntrySchema = Joi.object({
   enabled: Joi.boolean(),
   mlEligible: Joi.boolean(),
   boardEligible: Joi.boolean(),
+  operationsEligible: Joi.boolean(),
 }).min(1);
 
 const signalKeySchema = Joi.string()

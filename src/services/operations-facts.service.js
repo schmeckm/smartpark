@@ -13,6 +13,7 @@ const {
   RideSignalCapability,
   SignalCatalog,
   UnsRegistryTopic,
+  SparkplugMetricDefinition,
   UnsLatestState,
   CanonicalInboundMessage,
   AssetObservation,
@@ -29,6 +30,7 @@ const {
 const { sparkplugDeviceTopicSegment } = require('../modules/uns/sparkplug-topic-builder.service');
 const env = require('../config/env');
 const { resolveRideContext, preparedUnsTopicsForRide, capabilitySignalSource } = require('./ride-signal-capability.service');
+const { evaluateApprovedForOperationsFactsRow } = require('./approved-operational-signal.service');
 
 const REGISTRY_SOURCE_OPERATOR = 'OPERATOR_CONFIGURED';
 const REGISTRY_SOURCE_MIRRORED = 'MIRRORED_FROM_LEGACY';
@@ -403,6 +405,17 @@ async function getRideFacts(rideAssetId) {
     if (sid) activeTopicByCatalogId.set(String(sid), t);
   }
 
+  const sparkRows = await SparkplugMetricDefinition.findAll({
+    where: { registrySource: REGISTRY_SOURCE_PREPARED_OPERATOR, rideAssetId: ctx.assetId },
+    limit: 300,
+  });
+  /** @type {Map<string, import('../models').SparkplugMetricDefinition>} */
+  const sparkBySignalCode = new Map();
+  for (const s of sparkRows) {
+    const sk = s.get('signalKey') ?? s.get('metricName');
+    if (sk != null && String(sk).trim()) sparkBySignalCode.set(String(sk).trim(), s);
+  }
+
   /** @type {Array<{ signalCode: string, resolution: ReturnType<typeof pickBetterResolution> extends infer X ? X : never, deprecationPolicy?: { registryAuthoritative: boolean, legacyPublishDisabled: boolean, legacyFallbackDisabled: boolean } | null }>} */
   const signalRows = [];
 
@@ -414,6 +427,17 @@ async function getRideFacts(rideAssetId) {
     const signalCode = cat.get('signalCode');
     if (!signalCode) continue;
 
+    const activeTopic = activeTopicByCatalogId.get(String(cap.get('signalCatalogId')));
+    const sparkRow = sparkBySignalCode.get(String(signalCode));
+    const approval = evaluateApprovedForOperationsFactsRow({
+      asset: ctx.asset,
+      cap,
+      cat,
+      activeTopicRow: activeTopic,
+      sparkRow,
+    });
+    if (!approval.approved) continue;
+
     const topicPath = buildCanonicalUnsTopic({
       parkSlug: ctx.parkSlug,
       entityType: 'ride',
@@ -421,7 +445,6 @@ async function getRideFacts(rideAssetId) {
       metric: signalCode,
     });
 
-    const activeTopic = activeTopicByCatalogId.get(String(cap.get('signalCatalogId')));
     const depRow =
       deprecationBySignalKey.get(String(signalCode)) || deprecationBySignalKey.get(normalizeSignalKey(signalCode));
     const deprecationPolicy = depRow

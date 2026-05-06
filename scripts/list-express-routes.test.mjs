@@ -6,11 +6,11 @@ import assert from 'node:assert/strict';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-test('list-express-routes.mjs runs without crashing', () => {
-  const r = spawnSync(process.execPath, [path.join(root, 'scripts', 'list-express-routes.mjs')], {
+test('OpenAPI drift gate (parse + inventory + orphans/missing limits + allowlist)', () => {
+  const drift = spawnSync(process.execPath, [path.join(root, 'scripts', 'check-openapi-drift.mjs')], {
     cwd: root,
     encoding: 'utf8',
     env: { ...process.env },
   });
-  assert.equal(r.status, 0, r.stderr || r.stdout);
+  assert.equal(drift.status, 0, drift.stderr || drift.stdout);
 });

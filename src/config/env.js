@@ -39,8 +39,9 @@ module.exports = {
   mqttEnforceCapabilities:
     process.env.MQTT_ENFORCE_CAPABILITIES === 'true' || process.env.MQTT_ENFORCE_CAPABILITIES === '1',
   /**
-   * Phase 13 — inbound MQTT capability guard: off | warn_only | enforce (default off).
-   * warn_only logs/persists decisions without blocking tpuns / Sparkplug live paths.
+   * Phase 13 / T.2 — inbound MQTT capability guard: off | warn_only | enforce (default off).
+   * warn_only: log/persist guard decisions; TPUNS/Sparkplug live ingest unchanged.
+   * enforce: only guard ALLOW updates live buffers, ingestion, uns_latest_states, and UNS sockets.
    */
   mqttCapabilityGuardMode: (() => {
     const raw = String(process.env.MQTT_CAPABILITY_GUARD_MODE || 'off')

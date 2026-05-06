@@ -1,7 +1,7 @@
 # Express route inventory (generated)
 
-- **Generated:** 2026-05-06T20:05:57.755Z
-- **Route count:** 328
+- **Generated:** 2026-05-06T21:09:20.712Z
+- **Route count:** 330
 
 | Method | Path | Mount origin | In OpenAPI |
 |--------|------|--------------|------------|
@@ -87,8 +87,8 @@
 | GET | `/api/v1/assets/:assetId/extensions` | src/routes/v1/index.js | yes |
 | PATCH | `/api/v1/assets/:assetId/extensions` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/assets/:assetId/oee/availability-summary` | src/routes/v1/index.js | yes |
-| GET | `/api/v1/assets/:assetId/oee/downtime-reason-pareto` | src/routes/v1/index.js | no |
-| POST | `/api/v1/assets/:assetId/ride-master/enrich-template` | src/routes/v1/index.js | no |
+| GET | `/api/v1/assets/:assetId/oee/downtime-reason-pareto` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/assets/:assetId/ride-master/enrich-template` | src/routes/v1/index.js | yes |
 | PUT | `/api/v1/assets/:assetId/ride-master` | src/routes/v1/index.js | yes |
 | PATCH | `/api/v1/assets/:assetId/runtime-overrides/:overrideId` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/assets/:assetId/runtime-overrides` | src/routes/v1/index.js | yes |
@@ -236,13 +236,13 @@
 | GET | `/api/v1/parks/:parkId/operational-context` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/parks/:parkId/shift-handovers` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/parks/:parkId/shift-handovers` | src/routes/v1/index.js | yes |
-| GET | `/api/v1/parks/:parkSlug/geo/entities` | src/routes/v1/index.js | no |
-| POST | `/api/v1/parks/:parkSlug/geo/flow/events/batch` | src/routes/v1/index.js | no |
-| GET | `/api/v1/parks/:parkSlug/geo/flow/simulation` | src/routes/v1/index.js | no |
-| GET | `/api/v1/parks/:parkSlug/geo/hotspots` | src/routes/v1/index.js | no |
-| GET | `/api/v1/parks/:parkSlug/geo/pressure/forecast` | src/routes/v1/index.js | no |
-| GET | `/api/v1/parks/:parkSlug/geo/pressure/live` | src/routes/v1/index.js | no |
-| POST | `/api/v1/parks/:parkSlug/geo/pressure/simulate` | src/routes/v1/index.js | no |
+| GET | `/api/v1/parks/:parkSlug/geo/entities` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/parks/:parkSlug/geo/flow/events/batch` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/parks/:parkSlug/geo/flow/simulation` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/parks/:parkSlug/geo/hotspots` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/parks/:parkSlug/geo/pressure/forecast` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/parks/:parkSlug/geo/pressure/live` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/parks/:parkSlug/geo/pressure/simulate` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/parks` | src/routes/v1/index.js | yes |
 | PATCH | `/api/v1/recommendations/:id/status` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/recommendations` | src/routes/v1/index.js | yes |
@@ -257,11 +257,11 @@
 | PATCH | `/api/v1/rides/:id` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/rides` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/rides` | src/routes/v1/index.js | yes |
-| GET | `/api/v1/simulator/attraction-oee/candidates` | src/routes/v1/index.js | no |
-| POST | `/api/v1/simulator/attraction-oee/scenario` | src/routes/v1/index.js | no |
-| POST | `/api/v1/simulator/attraction-oee/start` | src/routes/v1/index.js | no |
-| GET | `/api/v1/simulator/attraction-oee/status` | src/routes/v1/index.js | no |
-| POST | `/api/v1/simulator/attraction-oee/stop` | src/routes/v1/index.js | no |
+| GET | `/api/v1/simulator/attraction-oee/candidates` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/simulator/attraction-oee/scenario` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/simulator/attraction-oee/start` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/simulator/attraction-oee/status` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/simulator/attraction-oee/stop` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/simulator/scenario` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/simulator/start` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/simulator/status` | src/routes/v1/index.js | yes |
@@ -279,10 +279,10 @@
 | DELETE | `/api/v1/staff/:id` | src/app.js | yes |
 | GET | `/api/v1/staff/:id` | src/app.js | yes |
 | PATCH | `/api/v1/staff/:id` | src/app.js | yes |
-| GET | `/api/v1/staff/export/xlsx` | src/app.js | no |
-| GET | `/api/v1/staff/export` | src/app.js | no |
-| POST | `/api/v1/staff/import/xlsx` | src/app.js | no |
-| POST | `/api/v1/staff/import` | src/app.js | no |
+| GET | `/api/v1/staff/export/xlsx` | src/app.js | yes |
+| GET | `/api/v1/staff/export` | src/app.js | yes |
+| POST | `/api/v1/staff/import/xlsx` | src/app.js | yes |
+| POST | `/api/v1/staff/import` | src/app.js | yes |
 | GET | `/api/v1/staff` | src/app.js | yes |
 | POST | `/api/v1/staff` | src/app.js | yes |
 | POST | `/api/v1/sync/themeparks/:parkId` | src/routes/v1/index.js | yes |
@@ -298,6 +298,8 @@
 | POST | `/api/v1/uns-spy/events/:id/ignore` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/uns-spy/events/:id/reject` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/uns-spy/events` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/uns-spy/proposals/:id/approve` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/uns-spy/proposals/:id/reject` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/uns-spy/proposals` | src/routes/v1/index.js | yes |
 | DELETE | `/api/v1/uns/nodes/:id` | src/routes/v1/index.js | yes |
 | PUT | `/api/v1/uns/nodes/:id` | src/routes/v1/index.js | yes |

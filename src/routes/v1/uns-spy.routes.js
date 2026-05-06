@@ -22,6 +22,30 @@ const proposalsQuery = Joi.object({
   status: Joi.string().max(40).optional(),
 }).unknown(false);
 
+const MQTT_SIGNAL_SOURCES = [
+  'NOT_AVAILABLE',
+  'MASTER_DATA',
+  'MANUAL',
+  'ADAPTER',
+  'MQTT_EDGE',
+  'SIMULATION',
+  'ML',
+];
+
+const mqttProposalApproveBody = Joi.object({
+  id: Joi.string().uuid().required(),
+  rideAssetId: Joi.string().uuid().required(),
+  signalCatalogId: Joi.string().uuid().required(),
+  signalSource: Joi.string().valid(...MQTT_SIGNAL_SOURCES).required(),
+  valueType: Joi.string().trim().max(64).optional(),
+  activatePrepared: Joi.boolean().optional(),
+}).unknown(false);
+
+const mqttProposalRejectBody = Joi.object({
+  id: Joi.string().uuid().required(),
+  reason: Joi.string().max(500).allow('', null).optional(),
+}).unknown(false);
+
 const approveParamsBody = Joi.object({
   id: Joi.string().uuid().required(),
   createEntity: Joi.boolean().optional(),
@@ -45,6 +69,19 @@ router.get(
   requireAnyPermission(['integrations', 'read'], ['rides', 'read']),
   validate(proposalsQuery, 'query'),
   unsSpyController.listProposals
+);
+
+router.post(
+  '/proposals/:id/approve',
+  requireAnyPermission(['integrations', 'manage'], ['rides', 'update']),
+  validateMergedParamsBody(mqttProposalApproveBody),
+  unsSpyController.approveMqttProposal
+);
+router.post(
+  '/proposals/:id/reject',
+  requireAnyPermission(['integrations', 'manage'], ['rides', 'update']),
+  validateMergedParamsBody(mqttProposalRejectBody),
+  unsSpyController.rejectMqttProposal
 );
 
 router.post(

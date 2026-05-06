@@ -20,7 +20,7 @@ test('normalizeBundle tolerates junk', () => {
   assert.equal(b.parks.p1['ride:x:single_asset'].foo, 1);
 });
 
-test('assertMlEligibleSelections accepts enabled+mlEligible keys', () => {
+test('assertMlEligibleSelections accepts enabled+mlEligible keys', async () => {
   const row = {
     extensions: {
       schemaVersion: 1,
@@ -32,12 +32,10 @@ test('assertMlEligibleSelections accepts enabled+mlEligible keys', () => {
       capabilities: {},
     },
   };
-  assert.doesNotThrow(() =>
-    assertMlEligibleSelections(row, ['queue.wait_time_min', 'green.power_kw'])
-  );
+  await assert.doesNotReject(() => assertMlEligibleSelections(row, ['queue.wait_time_min', 'green.power_kw']));
 });
 
-test('assertMlEligibleSelections rejects unknown key', () => {
+test('assertMlEligibleSelections rejects unknown key', async () => {
   const row = {
     extensions: {
       schemaVersion: 1,
@@ -46,13 +44,13 @@ test('assertMlEligibleSelections rejects unknown key', () => {
       capabilities: {},
     },
   };
-  assert.throws(
+  await assert.rejects(
     () => assertMlEligibleSelections(row, ['queue.unknown']),
     (e) => e instanceof AppError && e.statusCode === 400 && e.code === 'INVALID_ML_FEATURE_DRAFT'
   );
 });
 
-test('assertMlEligibleSelections rejects not mlEligible', () => {
+test('assertMlEligibleSelections rejects not mlEligible', async () => {
   const row = {
     extensions: {
       schemaVersion: 1,
@@ -63,13 +61,13 @@ test('assertMlEligibleSelections rejects not mlEligible', () => {
       capabilities: {},
     },
   };
-  assert.throws(
+  await assert.rejects(
     () => assertMlEligibleSelections(row, ['queue.wait_time_min']),
     (e) => e instanceof AppError && e.code === 'INVALID_ML_FEATURE_DRAFT'
   );
 });
 
-test('assertMlEligibleSelections rejects disabled', () => {
+test('assertMlEligibleSelections rejects disabled', async () => {
   const row = {
     extensions: {
       schemaVersion: 1,
@@ -80,13 +78,13 @@ test('assertMlEligibleSelections rejects disabled', () => {
       capabilities: {},
     },
   };
-  assert.throws(
+  await assert.rejects(
     () => assertMlEligibleSelections(row, ['queue.wait_time_min']),
     (e) => e instanceof AppError && e.code === 'INVALID_ML_FEATURE_DRAFT'
   );
 });
 
-test('assertMlEligibleSelections allows empty selection', () => {
+test('assertMlEligibleSelections allows empty selection', async () => {
   const row = {
     extensions: {
       schemaVersion: 1,
@@ -95,5 +93,5 @@ test('assertMlEligibleSelections allows empty selection', () => {
       capabilities: {},
     },
   };
-  assert.doesNotThrow(() => assertMlEligibleSelections(row, []));
+  await assert.doesNotReject(() => assertMlEligibleSelections(row, []));
 });

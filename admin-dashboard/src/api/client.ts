@@ -2687,6 +2687,34 @@ export type RideSignalSource =
   | 'SIMULATION'
   | 'ML'
 
+export type UnsSpyMqttProposalApproveBody = {
+  rideAssetId: string
+  signalCatalogId: string
+  signalSource: RideSignalSource
+  valueType?: string
+  activatePrepared?: boolean
+}
+
+export async function postUnsSpyProposalApprove(
+  proposalId: string,
+  body: UnsSpyMqttProposalApproveBody
+): Promise<Record<string, unknown>> {
+  return fetchEnvelope(`/api/v1/uns-spy/proposals/${encodeURIComponent(proposalId)}/approve`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export async function postUnsSpyProposalReject(
+  proposalId: string,
+  body?: { reason?: string | null }
+): Promise<Record<string, unknown>> {
+  return fetchEnvelope(`/api/v1/uns-spy/proposals/${encodeURIComponent(proposalId)}/reject`, {
+    method: 'POST',
+    body: JSON.stringify(body ?? {}),
+  })
+}
+
 export type RideSignalCapabilitySignalRow = {
   signalCatalogId: string
   signalCode: string
@@ -3757,6 +3785,8 @@ export type OperationFactRide = {
   downtimeMinutes: unknown
   sourceBreakdown: Record<string, OperationFactBreakdownEntry>
   warnings: string[]
+  registryAuthoritativeSignals?: number
+  legacyFallbackDisabledSignals?: number
 }
 
 /**

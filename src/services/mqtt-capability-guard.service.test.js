@@ -4,6 +4,9 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const proxyquire = require('proxyquire').noCallThru();
 
+/** Real helper (capture before proxyquire replaces this module in cache). */
+const { shouldQuarantineLiveMqttPersistence } = require('./mqtt-capability-guard.service');
+
 const REGISTRY_SOURCE_PREPARED_OPERATOR = 'PREPARED_OPERATOR';
 
 const mockSequelize = {
@@ -236,4 +239,18 @@ test('allow-list excludes non-pilot ride from enforcement (ALLOW)', async () => 
   });
   assert.equal(r.decision, 'ALLOW');
   assert.equal(r.reason, 'pilot_allow_list_excluded');
+});
+
+test('shouldQuarantineLiveMqttPersistence: enforce quarantines non-ALLOW (unknown / SKIP / BLOCK)', () => {
+  assert.equal(shouldQuarantineLiveMqttPersistence('enforce', 'ALLOW'), false);
+  assert.equal(shouldQuarantineLiveMqttPersistence('enforce', 'BLOCK'), true);
+  assert.equal(shouldQuarantineLiveMqttPersistence('enforce', 'SKIP'), true);
+  assert.equal(shouldQuarantineLiveMqttPersistence('enforce', 'WARN'), true);
+});
+
+test('shouldQuarantineLiveMqttPersistence: warn_only and off never quarantine', () => {
+  assert.equal(shouldQuarantineLiveMqttPersistence('warn_only', 'BLOCK'), false);
+  assert.equal(shouldQuarantineLiveMqttPersistence('warn_only', 'WARN'), false);
+  assert.equal(shouldQuarantineLiveMqttPersistence('off', 'BLOCK'), false);
+  assert.equal(shouldQuarantineLiveMqttPersistence('off', 'SKIP'), false);
 });

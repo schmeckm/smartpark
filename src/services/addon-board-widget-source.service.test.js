@@ -6,9 +6,9 @@ const proxyquire = require('proxyquire').noCallThru();
 const modelsCore = require('../models');
 const {
   readDraftFromMasterProfile,
-  assertSignalBoardEligible,
   resolveDraftPreviewForAsset,
 } = require('./addon-board-widget-source.service');
+const { extensionConsumerApproved } = require('./approved-operational-signal.service');
 
 const RIDE_ID = '11111111-1111-1111-1111-111111111111';
 const PARK_ID = '22222222-2222-2222-2222-222222222222';
@@ -94,23 +94,23 @@ test('readDraftFromMasterProfile returns normalized draft', () => {
   assert.equal(d.entityType, 'park_asset');
 });
 
-test('assertSignalBoardEligible requires enabled and boardEligible', () => {
+test('extensionConsumerApproved requires enabled and boardEligible (shared T.3 gate)', () => {
   const a = assetWithSignals({
     'queue.ok': { enabled: true, boardEligible: true, mlEligible: false },
   });
-  assert.equal(assertSignalBoardEligible(a, 'queue.ok').ok, true);
-  assert.equal(assertSignalBoardEligible(a, 'queue.bad').ok, false);
+  assert.equal(extensionConsumerApproved('queue.ok', a, 'board').approved, true);
+  assert.equal(extensionConsumerApproved('queue.bad', a, 'board').approved, false);
   const a2 = assetWithSignals({
     'queue.off': { enabled: false, boardEligible: true, mlEligible: false },
   });
-  assert.equal(assertSignalBoardEligible(a2, 'queue.off').ok, false);
+  assert.equal(extensionConsumerApproved('queue.off', a2, 'board').approved, false);
 });
 
-test('assertSignalBoardEligible rejects unsupported domain prefix', () => {
+test('extensionConsumerApproved rejects unsupported domain prefix', () => {
   const a = assetWithSignals({
     'bogus.metric': { enabled: true, boardEligible: true, mlEligible: false },
   });
-  assert.equal(assertSignalBoardEligible(a, 'bogus.metric').ok, false);
+  assert.equal(extensionConsumerApproved('bogus.metric', a, 'board').approved, false);
 });
 
 test('resolveDraftPreviewForAsset is valid when enabled and boardEligible', () => {

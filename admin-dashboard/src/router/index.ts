@@ -392,6 +392,10 @@ const router = createRouter({
           redirect: '/uns/spy-inbox',
         },
         {
+          path: 'admin/uns-governance',
+          redirect: '/uns/governance',
+        },
+        {
           path: 'uns',
           component: () => import('@/views/uns/UnsHubView.vue'),
           redirect: { name: 'uns-tree' },
@@ -436,6 +440,15 @@ const router = createRouter({
               component: () => import('@/views/UnsSpyInboxView.vue'),
               meta: {
                 titleKey: 'unsSpyInbox.title',
+                permission: { resource: 'integrations', action: 'read' },
+              },
+            },
+            {
+              path: 'governance',
+              name: 'uns-governance-console',
+              component: () => import('@/views/uns/UnsGovernanceConsoleView.vue'),
+              meta: {
+                titleKey: 'unsGovernance.title',
                 permission: { resource: 'integrations', action: 'read' },
               },
             },

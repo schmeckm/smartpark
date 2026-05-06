@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-05-06T20:05:57.754Z",
+  "generatedAt": "2026-05-06T21:09:20.710Z",
   "apiPrefix": "/api/v1",
-  "routeCount": 328,
+  "routeCount": 330,
   "routes": [
     {
       "method": "POST",
@@ -582,14 +582,14 @@
       "path": "/api/v1/assets/:assetId/oee/downtime-reason-pareto",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
       "path": "/api/v1/assets/:assetId/ride-master/enrich-template",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "PUT",
@@ -1625,49 +1625,49 @@
       "path": "/api/v1/parks/:parkSlug/geo/entities",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
       "path": "/api/v1/parks/:parkSlug/geo/flow/events/batch",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/parks/:parkSlug/geo/flow/simulation",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/parks/:parkSlug/geo/hotspots",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/parks/:parkSlug/geo/pressure/forecast",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/parks/:parkSlug/geo/pressure/live",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
       "path": "/api/v1/parks/:parkSlug/geo/pressure/simulate",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
@@ -1772,35 +1772,35 @@
       "path": "/api/v1/simulator/attraction-oee/candidates",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
       "path": "/api/v1/simulator/attraction-oee/scenario",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
       "path": "/api/v1/simulator/attraction-oee/start",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/simulator/attraction-oee/status",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
       "path": "/api/v1/simulator/attraction-oee/stop",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
@@ -1926,28 +1926,28 @@
       "path": "/api/v1/staff/export/xlsx",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/staff/export",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
       "path": "/api/v1/staff/import/xlsx",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
       "path": "/api/v1/staff/import",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
@@ -2050,6 +2050,20 @@
     {
       "method": "GET",
       "path": "/api/v1/uns-spy/events",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/uns-spy/proposals/:id/approve",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/uns-spy/proposals/:id/reject",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
       "inOpenApi": true
@@ -2301,8 +2315,8 @@
     }
   ],
   "stats": {
-    "missingFromOpenapiCount": 20,
-    "openapiOperationCount": 308,
+    "missingFromOpenapiCount": 2,
+    "openapiOperationCount": 328,
     "documentedNotLiveCount": 0
   }
 }

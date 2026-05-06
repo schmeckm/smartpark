@@ -1,8 +1,11 @@
-import { computed, onMounted, onUnmounted, ref, shallowRef } from 'vue'
+import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { io, type Socket } from 'socket.io-client'
 import type { CanonicalInboundMessage, CrowdEvent, Recommendation, Ride, Staff, Zone } from '@/types/api'
-import { getRecommendations, getRides, getStaff, getZones } from '@/api/client'
+import { getOperationsFactsRides, getRecommendations, getRides, getStaff, getZones } from '@/api/client'
+import { getApiParkContextId, setApiParkContextId } from '@/utils/apiParkContext'
+import { mergeRidesWithOperationsFacts } from '@/utils/operationsFactsDashboardRides'
 import { useAuthStore } from '@/stores/auth'
+import { useParkContextStore } from '@/stores/parkContext'
 import { useToast } from '@/composables/useToast'
 
 type ZoneSocketPayload = Zone & { deleted?: boolean }
@@ -29,6 +32,7 @@ export type UseDashboardSocketOptions = {
 
 export function useDashboardSocket(options?: UseDashboardSocketOptions) {
   const auth = useAuthStore()
+  const parkCtx = useParkContextStore()
   const { push: toast } = useToast()
   const zones = ref<Zone[]>([])
   const rides = ref<Ride[]>([])
@@ -43,12 +47,28 @@ export function useDashboardSocket(options?: UseDashboardSocketOptions) {
 
   const apiOrigin = import.meta.env.VITE_API_URL || undefined
 
+  async function loadRidesWithOperationsFactsPreferred(): Promise<Ride[]> {
+    const legacy = await getRides()
+    const fromHeader = getApiParkContextId()?.trim()
+    const fromStore = parkCtx.activeParkId?.trim()
+    const parkId = fromHeader || fromStore
+    if (!parkId) return legacy
+    /** `MainLayout` sets this in `hydrate()`, but dashboard may load before that completes. */
+    if (!fromHeader && fromStore) setApiParkContextId(fromStore)
+    try {
+      const facts = await getOperationsFactsRides({ parkId })
+      return mergeRidesWithOperationsFacts(legacy, facts)
+    } catch {
+      return legacy
+    }
+  }
+
   async function bootstrap() {
     loadError.value = null
     try {
       const [z, r, s, rec] = await Promise.all([
         getZones(),
-        getRides(),
+        loadRidesWithOperationsFactsPreferred(),
         getStaff(),
         getRecommendations(),
       ])
@@ -63,7 +83,7 @@ export function useDashboardSocket(options?: UseDashboardSocketOptions) {
 
   async function refreshRidesAndStaff() {
     try {
-      const [r, s] = await Promise.all([getRides(), getStaff()])
+      const [r, s] = await Promise.all([loadRidesWithOperationsFactsPreferred(), getStaff()])
       rides.value = r
       staff.value = s
     } catch {
@@ -172,6 +192,15 @@ export function useDashboardSocket(options?: UseDashboardSocketOptions) {
   onMounted(() => {
     void bootstrap().then(() => connectSocket())
   })
+
+  /** T.4: `X-Park-Id` is set in `parkContext.hydrate()` (async); reload rides when park context arrives or changes. */
+  watch(
+    () => parkCtx.activeParkId,
+    (pid, prev) => {
+      if (pid === prev) return
+      void refreshRidesAndStaff()
+    }
+  )
 
   onUnmounted(() => {
     socket.value?.disconnect()

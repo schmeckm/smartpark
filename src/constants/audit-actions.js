@@ -22,4 +22,6 @@ module.exports = {
   UNS_SPY_DISCOVERY_APPROVE: 'uns_spy.discovery.approve',
   UNS_SPY_DISCOVERY_REJECT: 'uns_spy.discovery.reject',
   UNS_SPY_DISCOVERY_IGNORE: 'uns_spy.discovery.ignore',
+  UNS_SPY_MQTT_PROPOSAL_APPROVE: 'uns_spy.mqtt_proposal.approve',
+  UNS_SPY_MQTT_PROPOSAL_REJECT: 'uns_spy.mqtt_proposal.reject',
 };

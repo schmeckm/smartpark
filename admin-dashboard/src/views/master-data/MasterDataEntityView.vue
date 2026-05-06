@@ -75,6 +75,9 @@ const entityType = computed(() => {
   return (allowed.has(normalized as MasterDataEntityType) ? normalized : 'parks') as MasterDataEntityType
 })
 
+const isAssetSection = computed(() => ['rides', 'shows', 'restaurants', 'shops'].includes(entityType.value))
+const isTemplatesTab = computed(() => entityType.value === 'templates')
+
 const rows = ref<MasterDataGridRow[]>([])
 const total = ref(0)
 const page = ref(0)
@@ -157,9 +160,6 @@ const unsTopicPreview = ref<UnsSuggestions | null>(null)
 const unsTopicPreviewLoading = ref(false)
 
 const selectedId = ref<string | null>(null)
-
-const isAssetSection = computed(() => ['rides', 'shows', 'restaurants', 'shops'].includes(entityType.value))
-const isTemplatesTab = computed(() => entityType.value === 'templates')
 
 /** Rows come from DB (`park_assets`); ThemeParks fills them via /integrations entity sync, not the Devices & Services adapter screen. */
 const showIntegrationsSyncHint = computed(

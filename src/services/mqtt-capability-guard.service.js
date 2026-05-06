@@ -46,6 +46,19 @@ function maxDecision(a, b) {
 }
 
 /**
+ * Phase T.2: When guard mode is `enforce`, only `ALLOW` may drive TPUNS/Sparkplug live
+ * side-effects in the MQTT connector (live buffers, canonical ingestion, UNS latest state,
+ * UNS socket events). Raw inbound rows are still recorded first via the topic observer.
+ * `warn_only` and `off` do not quarantine here (WARN/BLOCK/SKIP keep prior live behavior).
+ * @param {string} mode
+ * @param {string} decision
+ * @returns {boolean}
+ */
+function shouldQuarantineLiveMqttPersistence(mode, decision) {
+  return normalizeMode(mode) === 'enforce' && String(decision || '') !== 'ALLOW';
+}
+
+/**
  * @returns {Promise<{ parkId: string; assetId: string } | null>}
  */
 async function resolveRideByParkAndAssetSlug(parkSlug, assetSlug) {
@@ -391,4 +404,5 @@ module.exports = {
   recordCapabilityGuardBlockDiscovery,
   normalizeMode,
   parseAllowedRideIds,
+  shouldQuarantineLiveMqttPersistence,
 };

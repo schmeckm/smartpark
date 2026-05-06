@@ -104,7 +104,7 @@ class AiStudioFeatureDraftService {
     const { entityType, entityId, datasetScope } = body;
     const record = await loadEntityForPark(parkId, entityType, entityId);
     const keys = Array.isArray(body.selectedSignalKeys) ? body.selectedSignalKeys : [];
-    assertMlEligibleSelections(record, keys);
+    await assertMlEligibleSelections(record, keys, entityType);
 
     const normalizedKeys = keys.map((k) => String(k).trim()).filter(Boolean);
     const unique = [...new Set(normalizedKeys)];

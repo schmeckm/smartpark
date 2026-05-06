@@ -387,6 +387,12 @@
           "permission": { "resource": "integrations", "action": "read" }
         },
         {
+          "to": "/uns/governance",
+          "labelKey": "menu.unsGovernance",
+          "activePathPrefix": "/uns/governance",
+          "permission": { "resource": "integrations", "action": "read" }
+        },
+        {
           "to": "/uns/tree",
           "labelKey": "menu.uns",
           "activePathPrefix": "/uns",

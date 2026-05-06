@@ -6,7 +6,7 @@ info:
     (events `zones:updated`, `events:created`, `recommendations:created`, `recommendations:updated`,
     `ai:forecast:updated`, `ai:recommendation-scored`, `canonical:message:received`,
     `canonical:message:applied`, `canonical:message:failed`, `external:mapping:updated`, `external:parkdata:updated`).
-  version: 1.7.5
+  version: 1.7.6
 
 servers:
   - url: /api/v1
@@ -41,6 +41,10 @@ tags:
   - name: Admin
   - name: VisitPlanning
   - name: OperationsAdapters
+  - name: Geo
+    description: |
+      Park-level **geo pressure** (wait hotspots, forecasts) and **guest flow** simulation / journey event ingest.
+      `{parkSlug}` resolves like master-data (internal UUID, URL slug, or external entity id).
 
 paths:
   /health:
@@ -359,6 +363,77 @@ paths:
                 properties:
                   data:
                     $ref: '#/components/schemas/Staff'
+
+  /staff/export:
+    get:
+      tags: [Staff]
+      summary: Export staff roster (JSON bundle)
+      description: Same shape accepted by **POST** `/staff/import` (`schemaVersion`, `items`, …).
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeStaffExportBundle' }
+
+  /staff/export/xlsx:
+    get:
+      tags: [Staff]
+      summary: Download staff roster as XLSX
+      responses:
+        '200':
+          description: Spreadsheet attachment (`staff-roster.xlsx`)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+
+  /staff/import:
+    post:
+      tags: [Staff]
+      summary: Import staff from JSON bundle (upsert per row)
+      description: |
+        Per-item create needs `staff.create`; update by `id` needs `staff.update`. Failures are listed in `data.failed` without aborting the whole batch.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StaffImportBundle' }
+      responses:
+        '200':
+          description: OK — summary counts and per-row failures
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeStaffImportResult' }
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorBody' }
+
+  /staff/import/xlsx:
+    post:
+      tags: [Staff]
+      summary: Import staff from a single XLSX upload
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary, description: '.xlsx; field name `file`' }
+      responses:
+        '200':
+          description: OK — same envelope as JSON import
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeStaffImportResult' }
+        '400':
+          description: Missing file or invalid spreadsheet
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorBody' }
 
   /staff/{id}:
     parameters:
@@ -691,6 +766,91 @@ paths:
           application/json:
             schema: { type: object, required: [name], properties: { name: { type: string } } }
       responses: { '200': { description: OK } }
+
+  /simulator/attraction-oee/candidates:
+    get:
+      tags: [Wave2]
+      summary: List ride assets eligible for attraction OEE MQTT simulation
+      parameters:
+        - in: query
+          name: parkId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeAttractionOeeCandidates' }
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorBody' }
+
+  /simulator/attraction-oee/status:
+    get:
+      tags: [Wave2]
+      summary: Attraction OEE simulator status (Sparkplug-style MQTT loop)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+
+  /simulator/attraction-oee/start:
+    post:
+      tags: [Wave2]
+      summary: Start attraction OEE simulator publishes
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AttractionOeeStartBody' }
+      responses:
+        '200':
+          description: Started or already running
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeAttractionOeeStartResult' }
+        '400':
+          description: Start rejected (`success` false, details in `data`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeAttractionOeeStartResult' }
+
+  /simulator/attraction-oee/stop:
+    post:
+      tags: [Wave2]
+      summary: Stop attraction OEE simulator
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+
+  /simulator/attraction-oee/scenario:
+    post:
+      tags: [Wave2]
+      summary: Set named attraction OEE scenario (see `AttractionOeeScenarioName`)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AttractionOeeScenarioBody' }
+      responses:
+        '200':
+          description: Scenario applied
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+        '400':
+          description: Unknown scenario
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+
   /data-quality/issues:
     get:
       tags: [Wave2]
@@ -4456,6 +4616,73 @@ paths:
         '401': { description: Missing or invalid JWT }
         '403': { description: Missing integrations.read and rides.read }
 
+  /uns-spy/proposals/{id}/approve:
+    post:
+      tags: [UNS]
+      summary: Approve an MQTT-linked UNS topic proposal (Phase T.1)
+      description: >-
+        Requires **integrations.manage** OR **rides.update**. For proposals created from MQTT inbound discovery
+        (`uns_topic_proposals` linked to `uns_discovery_events` with `mqtt_inbound_message_id` set): validates ride +
+        signal catalog, merges `ride_signal_capabilities` (OPERATOR_CONFIGURED), prepares `uns_registry_topics`
+        (`PREPARED_OPERATOR`), optionally prepares Sparkplug metrics when **`signalSource` = `MQTT_EDGE`**, and
+        optionally activates prepared rows. Sets proposal **`status` = `approved`**. TPUNS proposals must match the
+        canonical topic path for the selected ride and catalog signal.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UnsSpyMqttProposalApproveRequest' }
+      responses:
+        '200':
+          description: Registry topic prepared/activated and proposal marked approved
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeUnsSpyMqttProposalApproveResult' }
+        '401': { description: Missing or invalid JWT }
+        '403': { description: Missing integrations.manage and rides.update }
+        '404': { description: Proposal not found }
+        '409': { description: Proposal not pending }
+        '422':
+          description: Validation error, not an MQTT-linked proposal, topic mismatch, or domain not supported
+
+  /uns-spy/proposals/{id}/reject:
+    post:
+      tags: [UNS]
+      summary: Reject an MQTT-linked UNS topic proposal (Phase T.1)
+      description: >-
+        Requires **integrations.manage** OR **rides.update**. Marks proposal **`status` = `rejected`**; does not
+        create registry topics or change live UNS state.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UnsSpyMqttProposalRejectRequest' }
+      responses:
+        '200':
+          description: Proposal rejected
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeUnsSpyMqttProposalRejectResult' }
+        '401': { description: Missing or invalid JWT }
+        '403': { description: Missing integrations.manage and rides.update }
+        '404': { description: Proposal not found }
+        '409': { description: Proposal not pending }
+        '422': { description: Not an MQTT-linked proposal }
+
   /uns-spy/events/{id}/approve:
     post:
       tags: [UNS]
@@ -4919,6 +5146,200 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/EnvelopePlatformParks' }
 
+  /parks/{parkSlug}/geo/pressure/live:
+    parameters:
+      - $ref: '#/components/parameters/ParkSlugPath'
+      - in: query
+        name: assetTypeCode
+        schema: { type: string, maxLength: 32, nullable: true }
+      - in: query
+        name: provider
+        schema: { type: string, maxLength: 32, description: Forecast provider hint for downstream engines }
+    get:
+      tags: [Geo]
+      summary: Live crowd / wait pressure snapshot for map layer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGeoPressurePayload' }
+        '400':
+          description: Park scope mismatch (`X-Park-Id` vs resolved park)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorBody' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /parks/{parkSlug}/geo/pressure/forecast:
+    parameters:
+      - $ref: '#/components/parameters/ParkSlugPath'
+      - in: query
+        name: assetTypeCode
+        schema: { type: string, maxLength: 32, nullable: true }
+      - in: query
+        name: provider
+        schema: { type: string, maxLength: 32 }
+    get:
+      tags: [Geo]
+      summary: Forecast pressure snapshot for map layer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGeoPressurePayload' }
+        '400':
+          description: Park scope mismatch
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorBody' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /parks/{parkSlug}/geo/entities:
+    parameters:
+      - $ref: '#/components/parameters/ParkSlugPath'
+      - in: query
+        name: assetTypeCode
+        schema: { type: string, maxLength: 32, nullable: true }
+    get:
+      tags: [Geo]
+      summary: Geo-annotated entities (assets/zones) for the park map
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGeoEntities' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /parks/{parkSlug}/geo/hotspots:
+    parameters:
+      - $ref: '#/components/parameters/ParkSlugPath'
+      - in: query
+        name: assetTypeCode
+        schema: { type: string, maxLength: 32, nullable: true }
+      - in: query
+        name: limit
+        schema: { type: integer, minimum: 1, maximum: 50, default: 10 }
+    get:
+      tags: [Geo]
+      summary: Top wait / pressure hotspots (trimmed live payload)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGeoHotspots' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /parks/{parkSlug}/geo/pressure/simulate:
+    parameters:
+      - $ref: '#/components/parameters/ParkSlugPath'
+    post:
+      tags: [Geo]
+      summary: Simulate pressure with optional per-key overrides (wait/downtime flags)
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GeoPressureSimulateBody' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGeoPressurePayload' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /parks/{parkSlug}/geo/flow/simulation:
+    parameters:
+      - $ref: '#/components/parameters/ParkSlugPath'
+      - in: query
+        name: mode
+        schema: { type: string, enum: [synthetic, from_log] }
+      - in: query
+        name: from
+        schema: { type: string, format: date-time }
+      - in: query
+        name: to
+        schema: { type: string, format: date-time }
+      - in: query
+        name: guestCount
+        schema: { type: integer, minimum: 50, maximum: 8000 }
+      - in: query
+        name: transitionCount
+        schema: { type: integer, minimum: 2, maximum: 25 }
+      - in: query
+        name: maxHopM
+        schema: { type: integer, minimum: 120, maximum: 1500 }
+      - in: query
+        name: seed
+        schema: { type: integer, minimum: 0, maximum: 2147483646 }
+      - in: query
+        name: assetTypeCode
+        schema: { type: string, maxLength: 32, nullable: true }
+      - in: query
+        name: topEdges
+        schema: { type: integer, minimum: 10, maximum: 80 }
+    get:
+      tags: [Geo]
+      summary: Guest journey flow graph (synthetic demo or from `visitor_journey_events` log)
+      description: |
+        `mode=from_log` requires migrated `visitor_journey_events`; otherwise API may respond **503** with `SCHEMA_MIGRATION_REQUIRED`.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGeoFlowSimulation' }
+        '400':
+          description: Invalid time range
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorBody' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          description: DB missing journey table (run migrations)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorBody' }
+
+  /parks/{parkSlug}/geo/flow/events/batch:
+    parameters:
+      - $ref: '#/components/parameters/ParkSlugPath'
+    post:
+      tags: [Geo]
+      summary: Ingest journey step events (batch, max 500)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GeoFlowEventsBatchBody' }
+      responses:
+        '200':
+          description: OK — append summary (`GeoFlowBatchAppendResult`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGeoFlowBatchAppend' }
+        '400':
+          description: Asset not in park or validation error
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorBody' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          description: DB missing journey table
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorBody' }
+
   /parks/{parkId}/operational-context:
     parameters:
       - in: path
@@ -5140,6 +5561,40 @@ paths:
         '200':
           description: OK
 
+  /assets/{assetId}/oee/downtime-reason-pareto:
+    parameters:
+      - in: path
+        name: assetId
+        required: true
+        schema: { type: string, format: uuid }
+      - in: query
+        name: from
+        required: true
+        schema: { type: string, description: ISO-8601 or parseable instant }
+      - in: query
+        name: to
+        required: true
+        schema: { type: string, description: ISO-8601 or parseable instant }
+      - in: query
+        name: plannedScope
+        schema: { type: string, enum: [all, planned, unplanned], default: all }
+    get:
+      tags: [Platform]
+      summary: Pareto of downtime duration by OEE reason code (with German labels)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeDowntimeReasonPareto' }
+        '400':
+          description: Invalid time range
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorBody' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /assets/{assetId}:
     parameters:
       - in: path
@@ -5221,6 +5676,28 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/EnvelopePlatformAssetOne' }
+
+  /assets/{assetId}/ride-master/enrich-template:
+    post:
+      tags: [Platform]
+      summary: Apply a ride master template to fill missing ride fields (transactional)
+      parameters:
+        - in: path
+          name: assetId
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RideEnrichTemplateBody' }
+      responses:
+        '200':
+          description: OK — full asset plus template merge metadata
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopePlatformAssetEnrich' }
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /assets/{assetId}/runtime-overrides:
     parameters:
@@ -5948,6 +6425,15 @@ components:
       schema:
         type: string
       description: Adapter package UUID or adapterKey (slug)
+    ParkSlugPath:
+      name: parkSlug
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+      description: Park internal UUID, URL slug, or external entity id (same resolution as platform master-data).
 
   responses:
     NotFound:
@@ -6055,6 +6541,262 @@ components:
           type: object
           additionalProperties: true
           description: e.g. nested `parkMapFreqThresholds`
+
+    StaffImportItem:
+      type: object
+      required: [firstName, lastName, role]
+      properties:
+        id: { type: string, format: uuid }
+        employeeNumber: { type: string, maxLength: 64, nullable: true }
+        firstName: { type: string, maxLength: 80 }
+        lastName: { type: string, maxLength: 80 }
+        role:
+          type: string
+          enum: [FOOD_SERVICE, RIDE_OPERATOR, CLEANING, SECURITY, GUEST_SERVICE]
+        currentZoneId: { type: string, format: uuid, nullable: true }
+        supervisorId: { type: string, format: uuid, nullable: true }
+        available: { type: boolean }
+        skillLevel: { type: integer, minimum: 1, maximum: 5 }
+      additionalProperties: true
+
+    StaffImportBundle:
+      type: object
+      required: [items]
+      properties:
+        schemaVersion: { type: integer }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/StaffImportItem' }
+
+    StaffExportBundle:
+      type: object
+      properties:
+        schemaVersion: { type: integer, example: 1 }
+        entityType: { type: string, example: staff }
+        generatedAt: { type: string, format: date-time }
+        totalExported: { type: integer }
+        items:
+          type: array
+          items: { type: object, additionalProperties: true }
+
+    EnvelopeStaffExportBundle:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: '#/components/schemas/StaffExportBundle' }
+
+    StaffImportFailedRow:
+      type: object
+      properties:
+        id: { type: string }
+        error: { type: string }
+        code: { type: string }
+
+    StaffImportResult:
+      type: object
+      properties:
+        entityType: { type: string, example: staff }
+        appliedCount: { type: integer }
+        appliedIds:
+          type: array
+          items: { type: string, format: uuid }
+        failedCount: { type: integer }
+        failed:
+          type: array
+          items: { $ref: '#/components/schemas/StaffImportFailedRow' }
+
+    EnvelopeStaffImportResult:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: '#/components/schemas/StaffImportResult' }
+
+    GeoPressureSimulateBody:
+      type: object
+      description: Optional map of asset key → `{ waitMin?, downtime? }` overrides.
+      properties:
+        overrides:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              waitMin: { type: number, minimum: 0, maximum: 400 }
+              downtime: { type: boolean }
+
+    GeoFlowEventItem:
+      type: object
+      required: [caseId, assetId, occurredAt]
+      properties:
+        caseId: { type: string, minLength: 1, maxLength: 160 }
+        assetId: { type: string, format: uuid }
+        occurredAt: { type: string, format: date-time }
+        eventType: { type: string, maxLength: 40 }
+        source: { type: string, maxLength: 64 }
+        payload: { type: object, additionalProperties: true }
+
+    GeoFlowEventsBatchBody:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items: { $ref: '#/components/schemas/GeoFlowEventItem' }
+
+    GeoFlowBatchAppendResult:
+      type: object
+      properties:
+        inserted: { type: integer, minimum: 0 }
+
+    EnvelopeGeoFlowBatchAppend:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: '#/components/schemas/GeoFlowBatchAppendResult' }
+
+    EnvelopeGeoPressurePayload:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { type: object, additionalProperties: true, description: Pressure engine payload (park, layers, metrics — shape varies by mode) }
+
+    EnvelopeGeoEntities:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { type: object, additionalProperties: true }
+
+    EnvelopeGeoHotspots:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          additionalProperties: true
+          description: Subset of live pressure including `hotspots` slice
+
+    EnvelopeGeoFlowSimulation:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { type: object, additionalProperties: true, description: Flow graph / simulation DTO from `GeoFlowSimulatorService` }
+
+    AttractionOeeCandidateRow:
+      type: object
+      properties:
+        assetId: { type: string, format: uuid }
+        slug: { type: string }
+        name: { type: string }
+        parkId: { type: string, format: uuid }
+        rideMaster: { type: object, additionalProperties: true }
+
+    EnvelopeAttractionOeeCandidates:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/AttractionOeeCandidateRow' }
+
+    AttractionOeeStartBody:
+      type: object
+      properties:
+        parkSlug: { type: string, maxLength: 128 }
+        parkId: { type: string, format: uuid }
+        edgeNodeId: { type: string, maxLength: 120, nullable: true }
+        publishMs: { type: integer, minimum: 500, maximum: 120000 }
+        scenario:
+          type: string
+          description: One of `AttractionOeeScenarioName`
+        randomSeed: { type: integer, minimum: 0, maximum: 4294967295 }
+        attractions:
+          oneOf:
+            - type: array
+              items: { type: string, maxLength: 160 }
+            - type: string
+              maxLength: 2000
+        assetIds:
+          type: array
+          maxItems: 32
+          items: { type: string, format: uuid }
+
+    AttractionOeeScenarioName:
+      type: string
+      enum:
+        - NORMAL_OPERATION
+        - HIGH_DEMAND
+        - LOW_STAFF
+        - TRAIN_REMOVED
+        - TECHNICAL_STOP
+        - WEATHER_DELAY
+        - SLOW_LOADING
+        - FAST_DISPATCH
+        - PARK_OPENING
+        - PARK_CLOSING
+        - NIGHT_MODE
+
+    AttractionOeeScenarioBody:
+      type: object
+      required: [name]
+      properties:
+        name: { $ref: '#/components/schemas/AttractionOeeScenarioName' }
+
+    EnvelopeAttractionOeeStartResult:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          additionalProperties: true
+          description: `{ ok, config?, error?, alreadyRunning? }` from simulator start
+
+    RideEnrichTemplateBody:
+      type: object
+      properties:
+        templateCode:
+          type: string
+          maxLength: 64
+          default: 'RIDE_DEFAULT'
+          description: When omitted, server defaults to `RIDE_DEFAULT` (see `enrichTemplateBody` validator).
+
+    DowntimeReasonParetoRow:
+      type: object
+      properties:
+        reasonCode: { type: string }
+        durationMs: { type: integer }
+        durationMinutes: { type: integer }
+        sharePct: { type: number }
+        cumulativeSharePct: { type: number }
+        labelDe: { type: string }
+
+    DowntimeReasonParetoData:
+      type: object
+      properties:
+        assetId: { type: string, format: uuid }
+        window:
+          type: object
+          properties:
+            from: { type: string, format: date-time }
+            to: { type: string, format: date-time }
+        plannedScope: { type: string, enum: [all, planned, unplanned] }
+        totalDowntimeMinutes: { type: integer }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/DowntimeReasonParetoRow' }
+
+    EnvelopeDowntimeReasonPareto:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: '#/components/schemas/DowntimeReasonParetoData' }
+
+    EnvelopePlatformAssetEnrich:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: '#/components/schemas/PlatformAsset' }
+        meta: { type: object, additionalProperties: true, description: Template merge diagnostics from `enrichRideFromTemplate` }
 
     LoginRequest:
       type: object
@@ -8102,6 +8844,64 @@ components:
           properties:
             eventId: { type: string, format: uuid }
             reviewStatus: { type: string, enum: [REJECTED, IGNORED] }
+
+    UnsSpyMqttProposalApproveRequest:
+      type: object
+      required: [rideAssetId, signalCatalogId, signalSource]
+      properties:
+        rideAssetId:
+          type: string
+          format: uuid
+          description: Target ride `park_assets.asset_id`
+        signalCatalogId:
+          type: string
+          format: uuid
+          description: `signal_catalog.id` for the metric (must match TPUNS metric segment when proposal is TPUNS)
+        signalSource:
+          type: string
+          enum: [NOT_AVAILABLE, MASTER_DATA, MANUAL, ADAPTER, MQTT_EDGE, SIMULATION, ML]
+          description: Stored on `ride_signal_capabilities.capability_json.signalSource`
+        valueType: { type: string, maxLength: 64, description: Optional value type hint (default number) }
+        activatePrepared:
+          type: boolean
+          default: true
+          description: When true, activates prepared UNS registry topics and Sparkplug metrics eligible for the capability sources
+
+    UnsSpyMqttProposalRejectRequest:
+      type: object
+      properties:
+        reason: { type: string, maxLength: 500, nullable: true, description: Optional operator note stored on proposal payload snapshot }
+
+    EnvelopeUnsSpyMqttProposalApproveResult:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            proposalId: { type: string, format: uuid }
+            discoveryEventId: { type: string, format: uuid }
+            rideAssetId: { type: string, format: uuid }
+            signalCatalogId: { type: string, format: uuid }
+            signalSource: { type: string }
+            canonicalTopicPath: { type: string }
+            registryTopicId: { type: string, format: uuid, nullable: true }
+            registryTopicActive: { type: boolean }
+            prepareUnsTopics: { type: object, additionalProperties: true }
+            prepareSparkplug: { type: object, additionalProperties: true }
+            activatedUns: { type: object, additionalProperties: true }
+            activatedSpark: { type: object, additionalProperties: true }
+
+    EnvelopeUnsSpyMqttProposalRejectResult:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            proposalId: { type: string, format: uuid }
+            discoveryEventId: { type: string, format: uuid }
+            reviewStatus: { type: string, enum: [REJECTED] }
 
     EnvelopeAdapterDiscoveryScanResult:
       type: object

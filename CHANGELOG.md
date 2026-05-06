@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### OpenAPI — Phase R.1 (UNS route contracts)
+
+- **`src/openapi/openapi.yaml`:** Document response envelopes and RBAC notes for **`GET/POST /uns/parks/{parkId}/tree|nodes`**, **`PUT/DELETE /uns/nodes/{id}`**, **`GET /uns/parks/{parkId}/latest-state`**, **`GET /uns/parks/{parkId}/topics`** (including **`sparkplugMessageType`** query), and **`POST /uns/test/publish`**. New reusable schemas (`EnvelopeUnsTree`, `UnsTreeNode`, `EnvelopeUnsNodeMutation`, `EnvelopeUnsLatestStateList`, `EnvelopeUnsTopicsList`, test publish request/response). **No** `/integrations/uns/*`, `/ai/*`, or other families in this pass; heuristic route gap count unchanged (templates were already present).
+
 ### Stabilization (Phase Q baseline)
 
 - **Validation:** Full backend `npm test` (unit tests + RBAC sync + Express route list harness), `admin-dashboard` `vue-tsc -b --noEmit`, `npm run audit:routes` (route inventory + OpenAPI gap report), and successful parse of `src/openapi/openapi.yaml`.  

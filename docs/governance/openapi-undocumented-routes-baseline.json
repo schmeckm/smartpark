@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "description": "Coarse template keys (METHOD + path with :param and {param} normalized to {p}) for live routes intentionally allowed to be missing from OpenAPI. CI fails if a NEW undocumented key appears outside this set. `maxAllowedMissingRouteCount` caps total missing routes; keep in sync with allowlist size when only root probes are undocumented.",
+  "maxAllowedMissingRouteCount": 2,
+  "allowedMissingTemplateKeys": [
+    "GET /",
+    "GET /health"
+  ]
+}

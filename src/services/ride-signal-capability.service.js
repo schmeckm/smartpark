@@ -204,6 +204,55 @@ async function getCapabilitiesForRide(rideAssetId) {
 }
 
 /**
+ * Merge a single OPERATOR_CONFIGURED capability row without removing other operator rows.
+ * Used by MQTT topic proposal approval (Phase T.1).
+ *
+ * @param {string} rideAssetId
+ * @param {{ signalCatalogId: string, signalSource: string, valueType?: string }} patch
+ */
+async function mergeOperatorCapabilityForRide(rideAssetId, patch) {
+  const ctx = await resolveRideContext(rideAssetId);
+  const cat = await SignalCatalog.findByPk(patch.signalCatalogId);
+  if (!cat) {
+    throw new AppError(`Unknown signal_catalog id ${patch.signalCatalogId}`, 422, { code: 'UNKNOWN_SIGNAL' });
+  }
+  const src = String(patch.signalSource || '').trim();
+  if (!SIGNAL_SOURCES.has(src)) {
+    throw new AppError(`Invalid signalSource: ${src}`, 422, { code: 'INVALID_SIGNAL_SOURCE' });
+  }
+  const now = new Date();
+  const [row, created] = await RideSignalCapability.findOrCreate({
+    where: {
+      parkId: ctx.parkId,
+      assetId: ctx.assetId,
+      signalCatalogId: cat.id,
+      registrySource: REGISTRY_SOURCE_OPERATOR,
+    },
+    defaults: {
+      capabilityJson: {
+        signalSource: src,
+        valueType: patch.valueType || 'number',
+        updatedBy: 'merge_operator_capability',
+      },
+      mirroredAt: now,
+    },
+  });
+  if (!created) {
+    const prev = row.get('capabilityJson') || {};
+    await row.update({
+      capabilityJson: {
+        ...prev,
+        signalSource: src,
+        valueType: patch.valueType != null ? String(patch.valueType) : prev.valueType || 'number',
+        updatedBy: 'merge_operator_capability',
+      },
+      mirroredAt: now,
+    });
+  }
+  return row;
+}
+
+/**
  * @param {string} rideAssetId
  * @param {{ capabilities: Array<{ signalCatalogId: string, signalSource: string, valueType?: string }> }} body
  */
@@ -673,6 +722,7 @@ function preparedSparkplugScopeWhere(ctx, signalCode) {
 
 module.exports = {
   getCapabilitiesForRide,
+  mergeOperatorCapabilityForRide,
   upsertCapabilitiesForRide,
   prepareUnsTopicsForRide,
   prepareSparkplugMetricsForRide,

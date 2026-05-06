@@ -68,12 +68,14 @@ function coerceSchemaVersion(v) {
 
 function normalizeSignalEntry(raw) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    return { enabled: false, mlEligible: false, boardEligible: false };
+    return { enabled: false, mlEligible: false, boardEligible: false, operationsEligible: true };
   }
   return {
     enabled: coerceBool(raw.enabled, false),
     mlEligible: coerceBool(raw.mlEligible, false),
     boardEligible: coerceBool(raw.boardEligible, false),
+    /** Default true when omitted (Phase T.3 — Operations Facts legacy compatibility). */
+    operationsEligible: raw.operationsEligible !== false,
   };
 }
 
@@ -118,7 +120,7 @@ function normalizeSignals(raw) {
 /**
  * Safe parse: never throws; invalid input yields empty Phase B document.
  * @param {unknown} raw
- * @returns {{ schemaVersion: number, domains: string[], signals: Record<string, { enabled: boolean, mlEligible: boolean, boardEligible: boolean }>, capabilities: Record<string, boolean> }}
+ * @returns {{ schemaVersion: number, domains: string[], signals: Record<string, { enabled: boolean, mlEligible: boolean, boardEligible: boolean, operationsEligible: boolean }>, capabilities: Record<string, boolean> }}
  */
 function normalizeExtensions(raw) {
   try {
@@ -208,7 +210,7 @@ function getSupportedDomains(rideOrAsset) {
 
 /**
  * @param {unknown} rideOrAsset
- * @returns {Record<string, { enabled: boolean, mlEligible: boolean, boardEligible: boolean }>}
+ * @returns {Record<string, { enabled: boolean, mlEligible: boolean, boardEligible: boolean, operationsEligible: boolean }>}
  */
 function getSignals(rideOrAsset) {
   const src = getExtensions(rideOrAsset).signals;
@@ -269,7 +271,7 @@ function withUnsExtensionsOnMasterProfile(masterProfile, extensionsDoc) {
  * @param {'ride'|'park_asset'} entityType
  * @param {string} entityId
  * @param {unknown} rideOrAsset
- * @returns {{ entityType: string, entityId: string, domains: string[], signals: Record<string, { enabled: boolean, mlEligible: boolean, boardEligible: boolean }>, capabilities: Record<string, boolean> }}
+ * @returns {{ entityType: string, entityId: string, domains: string[], signals: Record<string, { enabled: boolean, mlEligible: boolean, boardEligible: boolean, operationsEligible: boolean }>, capabilities: Record<string, boolean> }}
  */
 function toReadApiPayload(entityType, entityId, rideOrAsset) {
   const ext = getExtensions(rideOrAsset);
