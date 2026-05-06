@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-06T19:51:37.247Z",
+  "generatedAt": "2026-05-06T19:52:46.863Z",
   "apiPrefix": "/api/v1",
   "routeCount": 328,
   "routes": [
@@ -799,49 +799,49 @@
       "path": "/api/v1/integrations/:provider/destinations",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/integrations/:provider/entity/:entityId/children",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/integrations/:provider/entity/:entityId/live",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/integrations/:provider/entity/:entityId/schedule",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/integrations/:provider/entity/:entityId",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/integrations/:provider/parks",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
       "path": "/api/v1/integrations/:provider/sync/all-parks",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
@@ -2301,8 +2301,8 @@
     }
   ],
   "stats": {
-    "missingFromOpenapiCount": 107,
-    "openapiOperationCount": 221,
+    "missingFromOpenapiCount": 100,
+    "openapiOperationCount": 228,
     "documentedNotLiveCount": 0
   }
 }

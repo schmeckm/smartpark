@@ -1,6 +1,6 @@
 # Express route inventory (generated)
 
-- **Generated:** 2026-05-06T19:51:37.248Z
+- **Generated:** 2026-05-06T19:52:46.865Z
 - **Route count:** 328
 
 | Method | Path | Mount origin | In OpenAPI |
@@ -118,13 +118,13 @@
 | GET | `/api/v1/incidents` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/incidents` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/integration/logs` | src/routes/v1/index.js | yes |
-| GET | `/api/v1/integrations/:provider/destinations` | src/routes/v1/index.js | no |
-| GET | `/api/v1/integrations/:provider/entity/:entityId/children` | src/routes/v1/index.js | no |
-| GET | `/api/v1/integrations/:provider/entity/:entityId/live` | src/routes/v1/index.js | no |
-| GET | `/api/v1/integrations/:provider/entity/:entityId/schedule` | src/routes/v1/index.js | no |
-| GET | `/api/v1/integrations/:provider/entity/:entityId` | src/routes/v1/index.js | no |
-| GET | `/api/v1/integrations/:provider/parks` | src/routes/v1/index.js | no |
-| POST | `/api/v1/integrations/:provider/sync/all-parks` | src/routes/v1/index.js | no |
+| GET | `/api/v1/integrations/:provider/destinations` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/integrations/:provider/entity/:entityId/children` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/integrations/:provider/entity/:entityId/live` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/integrations/:provider/entity/:entityId/schedule` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/integrations/:provider/entity/:entityId` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/integrations/:provider/parks` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/integrations/:provider/sync/all-parks` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/integrations/:provider/sync/calendar` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/integrations/:provider/sync/destinations` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/integrations/:provider/sync/entities` | src/routes/v1/index.js | yes |
