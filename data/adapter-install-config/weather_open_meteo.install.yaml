@@ -1,0 +1,13 @@
+# Smart Park OS — adapter install config (YAML). Managed by PATCH/POST install-local only.
+schemaVersion: 1
+adapterKey: weather_open_meteo
+installedAt: '2026-04-26T17:54:10.830Z'
+updatedAt: '2026-04-26T18:26:42.372Z'
+configJson: {}
+contextJson:
+  parkSlug: europapark
+outputProfiles:
+  - UNS_JSON
+  - CANONICAL_HISTORIAN
+emitEnabled: false
+scheduleCron: null

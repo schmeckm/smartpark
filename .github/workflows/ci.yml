@@ -1,0 +1,63 @@
+# Backend: unit tests + DB smoke (migrate + seed + smoke:addon-board).
+name: CI
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: smartpark
+          POSTGRES_PASSWORD: smartpark
+          POSTGRES_DB: smartpark
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U smartpark -d smartpark"
+          --health-interval 4s
+          --health-timeout 5s
+          --health-retries 25
+
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_NAME: smartpark
+      DB_USER: smartpark
+      DB_PASSWORD: smartpark
+      NODE_ENV: test
+      JWT_SECRET: ci-test-jwt-secret-not-for-production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Wait for Postgres
+        run: npm run wait:db
+
+      - name: Migrate
+        run: npm run db:migrate
+
+      - name: Seed
+        run: npm run db:seed
+
+      - name: Unit tests + RBAC verify
+        run: npm test
+
+      - name: Smoke add-on board
+        run: npm run smoke:addon-board

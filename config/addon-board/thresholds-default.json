@@ -1,0 +1,7 @@
+{
+  "waitCriticalMinutes": 90,
+  "waitHighMinutes": 65,
+  "waitMediumMinutes": 45,
+  "crewGapHighThreshold": -2,
+  "forecastCriticalAtMinutes": 55
+}

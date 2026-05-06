@@ -1,0 +1,133 @@
+{
+  "rideForecastAll": {
+    "passed": true,
+    "checkedAt": "2026-05-01T19:04:20.689Z",
+    "summary": {
+      "totalRides": 86,
+      "passed": 0,
+      "warnings": 83,
+      "failed": 3,
+      "noSamples": 3,
+      "noSnapshots": 1,
+      "noForecast": 1,
+      "lowConfidence": 0,
+      "missingMlProfile": 0,
+      "missingWeather": 85,
+      "missingTraffic": 85,
+      "missingStaffing": 0,
+      "maxFailuresAllowed": 10
+    },
+    "topIssues": [
+      {
+        "issue": "missingWeather",
+        "count": 85
+      },
+      {
+        "issue": "missingTraffic",
+        "count": 85
+      },
+      {
+        "issue": "noSamples",
+        "count": 3
+      },
+      {
+        "issue": "noSnapshots",
+        "count": 1
+      },
+      {
+        "issue": "noForecast",
+        "count": 1
+      }
+    ]
+  },
+  "referenceRides": {
+    "euromir": {
+      "passed": true,
+      "checkedAt": "2026-05-01T19:04:20.691Z",
+      "label": "Euro-Mir",
+      "summary": {
+        "sampleCnt": 131,
+        "snapCnt": 12,
+        "hasForecast": true,
+        "mlOk": {
+          "id": "b0000001-0000-4000-8000-000000000001",
+          "profileCode": "OUTDOOR_COASTER_HIGH_CAPACITY",
+          "profileName": "Outdoor coaster (high cap)",
+          "entityType": "RIDE",
+          "category": "COASTER",
+          "activeFlag": true,
+          "weatherSensitive": true,
+          "rainSensitive": true,
+          "windSensitive": true,
+          "heatSensitive": true,
+          "weatherSensitivityScore": "0.8500",
+          "rainImpactScore": "0.9000",
+          "windImpactScore": "0.9500",
+          "heatImpactScore": "0.6000",
+          "queueElasticityScore": "0.5500",
+          "capacityElasticityScore": "0.4000",
+          "staffDependencyScore": "0.2500",
+          "downtimeRiskScore": "0.1500",
+          "maintenanceCriticality": "0.2000",
+          "targetThroughputFactor": "1.0500",
+          "maxQueueTargetMin": 90,
+          "availabilityTargetPercent": "92.00",
+          "modelType": "BASELINE",
+          "featureSetCode": "DEFAULT_V1",
+          "downtimeImpactLevel": null,
+          "notes": null,
+          "createdAt": "2026-05-01T14:12:04.850Z",
+          "updatedAt": "2026-05-01T14:12:04.850Z"
+        }
+      }
+    },
+    "wodan": {
+      "passed": true,
+      "checkedAt": "2026-05-01T19:04:24.702Z",
+      "label": "WODAN",
+      "summary": {
+        "sampleCnt": 155,
+        "snapCnt": 12,
+        "hasForecast": true,
+        "mlOk": {
+          "id": "b0000001-0000-4000-8000-000000000001",
+          "profileCode": "OUTDOOR_COASTER_HIGH_CAPACITY",
+          "profileName": "Outdoor coaster (high cap)",
+          "entityType": "RIDE",
+          "category": "COASTER",
+          "activeFlag": true,
+          "weatherSensitive": true,
+          "rainSensitive": true,
+          "windSensitive": true,
+          "heatSensitive": true,
+          "weatherSensitivityScore": "0.8500",
+          "rainImpactScore": "0.9000",
+          "windImpactScore": "0.9500",
+          "heatImpactScore": "0.6000",
+          "queueElasticityScore": "0.5500",
+          "capacityElasticityScore": "0.4000",
+          "staffDependencyScore": "0.2500",
+          "downtimeRiskScore": "0.1500",
+          "maintenanceCriticality": "0.2000",
+          "targetThroughputFactor": "1.0500",
+          "maxQueueTargetMin": 90,
+          "availabilityTargetPercent": "92.00",
+          "modelType": "BASELINE",
+          "featureSetCode": "DEFAULT_V1",
+          "downtimeImpactLevel": null,
+          "notes": null,
+          "createdAt": "2026-05-01T14:12:04.850Z",
+          "updatedAt": "2026-05-01T14:12:04.850Z"
+        }
+      }
+    }
+  },
+  "euromir": {
+    "passed": true,
+    "checkedAt": "2026-05-01T19:04:20.691Z"
+  },
+  "wodan": {
+    "passed": true,
+    "checkedAt": "2026-05-01T19:04:24.702Z"
+  }
+}

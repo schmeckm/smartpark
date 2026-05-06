@@ -1,0 +1,416 @@
+{
+  "roles": [
+    "SYSTEM_ADMIN",
+    "PARK_MANAGER",
+    "OPERATIONS_MANAGER",
+    "HR_MANAGER",
+    "ANALYST",
+    "VIEWER",
+    "ADMIN",
+    "SECURITY_MANAGER",
+    "OPERATOR"
+  ],
+  "permissions": [
+    "ai.read",
+    "ai.refresh",
+    "audit.read",
+    "dashboard.read",
+    "dataquality.read",
+    "dataquality.update",
+    "events.create",
+    "events.read",
+    "import.create",
+    "incidents.assign",
+    "incidents.create",
+    "incidents.delete",
+    "incidents.read",
+    "integration.read",
+    "integrations.manage",
+    "integrations.read",
+    "mqtt.read",
+    "ops.read",
+    "recommendations.read",
+    "recommendations.update",
+    "rides.create",
+    "rides.delete",
+    "rides.read",
+    "rides.update",
+    "simulator.run",
+    "staff.create",
+    "staff.delete",
+    "staff.read",
+    "staff.update",
+    "weather.create",
+    "weather.read",
+    "zones.create",
+    "zones.delete",
+    "zones.read",
+    "zones.update"
+  ],
+  "rolePermissions": {
+    "SYSTEM_ADMIN": "ALL",
+    "ADMIN": "ALL",
+    "OPERATIONS_MANAGER": [
+      "ops.read",
+      "incidents.read",
+      "incidents.create",
+      "incidents.assign",
+      "incidents.delete",
+      "zones.read",
+      "zones.create",
+      "zones.update",
+      "zones.delete",
+      "rides.read",
+      "rides.create",
+      "rides.update",
+      "rides.delete",
+      "staff.read",
+      "staff.create",
+      "staff.update",
+      "staff.delete",
+      "events.read",
+      "events.create",
+      "recommendations.read",
+      "recommendations.update",
+      "dashboard.read",
+      "audit.read",
+      "integration.read",
+      "import.create",
+      "weather.read",
+      "weather.create",
+      "simulator.run",
+      "dataquality.read",
+      "dataquality.update",
+      "mqtt.read",
+      "ai.read",
+      "ai.refresh",
+      "integrations.read",
+      "integrations.manage"
+    ],
+    "SECURITY_MANAGER": [
+      "ops.read",
+      "incidents.read",
+      "incidents.create",
+      "incidents.assign",
+      "incidents.delete",
+      "events.read",
+      "events.create",
+      "recommendations.read",
+      "recommendations.update",
+      "dashboard.read",
+      "audit.read",
+      "integration.read",
+      "import.create",
+      "weather.read",
+      "weather.create",
+      "dataquality.read",
+      "dataquality.update",
+      "mqtt.read",
+      "ai.read",
+      "integrations.read"
+    ],
+    "PARK_MANAGER": [
+      "ops.read",
+      "incidents.read",
+      "incidents.create",
+      "incidents.assign",
+      "incidents.delete",
+      "events.read",
+      "events.create",
+      "recommendations.read",
+      "recommendations.update",
+      "dashboard.read",
+      "audit.read",
+      "integration.read",
+      "import.create",
+      "weather.read",
+      "weather.create",
+      "dataquality.read",
+      "dataquality.update",
+      "mqtt.read",
+      "ai.read",
+      "integrations.read",
+      "integrations.manage",
+      "zones.read",
+      "rides.read",
+      "rides.update",
+      "staff.read"
+    ],
+    "HR_MANAGER": [
+      "ops.read",
+      "incidents.read",
+      "dashboard.read",
+      "staff.read",
+      "staff.create",
+      "staff.update",
+      "staff.delete",
+      "events.read",
+      "recommendations.read",
+      "audit.read",
+      "rides.read",
+      "zones.read"
+    ],
+    "OPERATOR": [
+      "ops.read",
+      "incidents.read",
+      "incidents.create",
+      "incidents.delete",
+      "events.read",
+      "events.create",
+      "recommendations.read",
+      "recommendations.update",
+      "dashboard.read",
+      "integration.read",
+      "import.create",
+      "weather.read",
+      "simulator.run",
+      "dataquality.read",
+      "ai.read",
+      "ai.refresh",
+      "integrations.read",
+      "integrations.manage",
+      "rides.read"
+    ],
+    "ANALYST": [
+      "ops.read",
+      "incidents.read",
+      "incidents.create",
+      "incidents.delete",
+      "events.read",
+      "events.create",
+      "recommendations.read",
+      "recommendations.update",
+      "dashboard.read",
+      "integration.read",
+      "import.create",
+      "weather.read",
+      "simulator.run",
+      "dataquality.read",
+      "ai.read",
+      "ai.refresh",
+      "integrations.read",
+      "integrations.manage",
+      "rides.read"
+    ],
+    "VIEWER": [
+      "ops.read",
+      "incidents.read",
+      "dashboard.read",
+      "zones.read",
+      "rides.read",
+      "staff.read",
+      "recommendations.read",
+      "events.read",
+      "integration.read",
+      "weather.read",
+      "dataquality.read",
+      "ai.read",
+      "integrations.read"
+    ]
+  },
+  "navigationGroups": [
+    {
+      "id": "park",
+      "titleKey": "nav.section.park",
+      "items": [
+        {
+          "to": "/admin/master-data/parks",
+          "labelKey": "menu.masterData",
+          "activePathPrefix": "/admin/master-data",
+          "permission": { "resource": "rides", "action": "read" }
+        },
+        {
+          "to": "/platform/assets",
+          "labelKey": "menu.assetList",
+          "activePathPrefix": "/platform/assets",
+          "altActivePrefixes": ["/platform/rides"],
+          "permission": { "resource": "rides", "action": "read" }
+        },
+        {
+          "to": "/platform/parks",
+          "labelKey": "menu.parkExplorer",
+          "activePathPrefix": "/platform/parks",
+          "permission": { "resource": "rides", "action": "read" }
+        },
+        {
+          "to": "/platform/live-queue",
+          "labelKey": "menu.liveQueue",
+          "activePathPrefix": "/platform/live-queue",
+          "permission": { "resource": "rides", "action": "read" }
+        },
+        {
+          "to": "/platform/map",
+          "labelKey": "menu.assetMap",
+          "activePathPrefix": "/platform/map",
+          "permission": { "resource": "rides", "action": "read" }
+        },
+        {
+          "to": "/platform/visitor-flow",
+          "labelKey": "menu.visitorFlow",
+          "activePathPrefix": "/platform/visitor-flow",
+          "permission": { "resource": "rides", "action": "read" }
+        },
+        {
+          "to": "/platform/templates",
+          "labelKey": "menu.templates",
+          "activePathPrefix": "/platform/templates",
+          "permission": { "resource": "rides", "action": "read" }
+        },
+        {
+          "to": "/import",
+          "labelKey": "menu.importExport",
+          "permission": { "resource": "import", "action": "create" }
+        },
+        {
+          "to": "/data-quality",
+          "labelKey": "menu.dataQuality",
+          "permission": { "resource": "dataquality", "action": "read" }
+        }
+      ]
+    },
+    {
+      "id": "operations",
+      "titleKey": "nav.section.operations",
+      "items": [
+        {
+          "to": "/",
+          "labelKey": "menu.liveOps",
+          "exact": true,
+          "permission": { "resource": "dashboard", "action": "read" }
+        },
+        {
+          "to": "/incidents",
+          "labelKey": "menu.incidents",
+          "activePathPrefix": "/incidents",
+          "permission": { "resource": "incidents", "action": "read" }
+        },
+        {
+          "to": "/live",
+          "labelKey": "menu.liveOps",
+          "labelKeyIfPermission": {
+            "resource": "dashboard",
+            "action": "read",
+            "labelKey": "menu.liveConnectivity"
+          },
+          "permission": { "resource": "integration", "action": "read" }
+        },
+        {
+          "to": "/staff-allocation",
+          "labelKey": "menu.staffAllocation",
+          "permission": { "resource": "staff", "action": "read" }
+        },
+        {
+          "to": "/planning/hotel-guests",
+          "labelKey": "menu.hotelGuestPlanning",
+          "activePathPrefix": "/planning/hotel-guests",
+          "permission": { "resource": "rides", "action": "read" }
+        },
+        {
+          "to": "/operations/addon-board",
+          "labelKey": "menu.addonBoard",
+          "activePathPrefix": "/operations/addon-board",
+          "permission": { "resource": "rides", "action": "read" }
+        },
+        {
+          "to": "/platform/oee",
+          "labelKey": "menu.oeeDowntime",
+          "activePathPrefix": "/platform/oee",
+          "permission": { "resource": "rides", "action": "read" }
+        },
+        {
+          "to": "/platform/shift-handover",
+          "labelKey": "menu.shiftHandover",
+          "activePathPrefix": "/platform/shift-handover",
+          "permission": { "resource": "rides", "action": "read" }
+        }
+      ]
+    },
+    {
+      "id": "visualManagement",
+      "titleKey": "nav.section.visualManagement",
+      "items": [
+        {
+          "to": "/analytics/sqdc",
+          "labelKey": "menu.sqdcBoard",
+          "activePathPrefix": "/analytics/sqdc",
+          "permission": { "resource": "rides", "action": "read" }
+        },
+        {
+          "to": "/sqdc",
+          "labelKey": "menu.sqdcHierarchical",
+          "activePathPrefix": "/sqdc",
+          "permission": { "resource": "rides", "action": "read" }
+        }
+      ]
+    },
+    {
+      "id": "analytics",
+      "titleKey": "nav.section.analyticsReporting",
+      "items": [
+        {
+          "to": "/ai-insights",
+          "labelKey": "menu.aiInsights",
+          "activePathPrefix": "/ai-insights",
+          "activeExcludePrefixes": ["/ai-insights/studio"],
+          "permission": { "resource": "ai", "action": "read" }
+        },
+        {
+          "to": "/ai-insights/studio",
+          "labelKey": "menu.aiStudio",
+          "activePathPrefix": "/ai-insights/studio",
+          "permission": { "resource": "ai", "action": "read" }
+        }
+      ]
+    },
+    {
+      "id": "integrations",
+      "titleKey": "nav.section.integrations",
+      "items": [
+        {
+          "to": "/integrations",
+          "labelKey": "menu.integrations",
+          "permission": { "resource": "integrations", "action": "read" }
+        },
+        {
+          "to": "/simulator",
+          "labelKey": "menu.simulator",
+          "permission": { "resource": "simulator", "action": "run" }
+        },
+        {
+          "to": "/settings/devices-services",
+          "labelKey": "menu.devicesServices",
+          "permission": { "resource": "integrations", "action": "read" }
+        },
+        {
+          "to": "/settings/adapter-pipeline-log",
+          "labelKey": "menu.adapterOperations",
+          "permission": { "resource": "integrations", "action": "read" }
+        },
+        {
+          "to": "/uns/tree",
+          "labelKey": "menu.uns",
+          "activePathPrefix": "/uns",
+          "permission": { "resource": "integrations", "action": "read" }
+        }
+      ]
+    },
+    {
+      "id": "governance",
+      "titleKey": "nav.section.governance",
+      "items": [
+        {
+          "to": "/audit",
+          "labelKey": "menu.auditLog",
+          "permission": { "resource": "audit", "action": "read" }
+        },
+        {
+          "to": "/admin/platform-settings",
+          "labelKey": "menu.platformSettings",
+          "activePathPrefix": "/admin/platform-settings",
+          "permission": { "resource": "audit", "action": "read" },
+          "requiredRoles": ["SYSTEM_ADMIN"]
+        }
+      ]
+    }
+  ]
+}

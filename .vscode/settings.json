@@ -1,0 +1,7 @@
+{
+  "sonarlint.analysisExcludesStandalone": "**/node_modules/**,**/dist/**,**/build/**,**/.vite/**,**/coverage/**,**/.output/**",
+  "vetur.validation.template": false,
+  "vetur.validation.script": false,
+  "vetur.validation.style": false,
+  "vetur.ignoreProjectWarning": true
+}

@@ -1,0 +1,74 @@
+{
+  "adapterKey": "opcua_edge",
+  "name": "OPC-UA Edge (PLC)",
+  "description": "Reads OPC-UA node values from a park edge endpoint (live) or emits configured mock values (simulate). Maps tags to normalized observations for UNS, Sparkplug JSON MVP, and canonical historian.",
+  "version": "0.1.0",
+  "runtime": "NODE",
+  "entrypoint": "index.js",
+  "adapterType": "INDUSTRIAL_EDGE",
+  "iotClass": "local_polling",
+  "capabilities": ["DISCOVERY", "POLLING", "UNS_OUTPUT", "CANONICAL_OUTPUT"],
+  "providedDomains": ["rides", "controls", "safety"],
+  "providedMetrics": ["queue_time", "status", "plc_value", "fault_code"],
+  "category": "Industrial & controls",
+  "qualityTier": "CUSTOM",
+  "tags": ["opcua", "plc", "edge", "mqtt"],
+  "documentationUrl": "https://reference.opcfoundation.org/",
+  "logoPath": "assets/logo.svg",
+  "bannerPath": "assets/banner.svg",
+  "readmePath": "README.md",
+  "defaultContextJson": {
+    "parkSlug": "europa_park",
+    "sparkplugGroupId": "europa_park",
+    "sparkplugEdgeNode": "opcua_edge_gateway"
+  },
+  "defaultScheduleCron": "*/5 * * * *",
+  "configSchema": {
+    "type": "object",
+    "required": ["endpointUrl", "subscriptionTags"],
+    "properties": {
+      "endpointUrl": {
+        "type": "string",
+        "description": "OPC UA endpoint, e.g. opc.tcp://edge-host:4840/UA/SmartPark"
+      },
+      "live": {
+        "type": "boolean",
+        "default": false,
+        "description": "If true, read nodes via node-opcua (npm install node-opcua). If false, use mockValues / per-tag mockValue."
+      },
+      "securityMode": {
+        "type": "string",
+        "enum": ["None", "Sign", "SignAndEncrypt"],
+        "default": "None",
+        "description": "Live mode: only None is fully supported without extra certificate setup."
+      },
+      "subscriptionTags": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "object",
+          "required": ["nodeId", "domain", "assetSlug", "metric"],
+          "properties": {
+            "nodeId": { "type": "string" },
+            "domain": { "type": "string" },
+            "assetSlug": { "type": "string" },
+            "metric": { "type": "string" },
+            "unit": { "type": "string" },
+            "eventType": { "type": "string" },
+            "mockValue": { "description": "Used when live is false" }
+          }
+        }
+      },
+      "mockValues": {
+        "type": "object",
+        "additionalProperties": true,
+        "description": "Map nodeId string → value for simulate mode"
+      }
+    }
+  },
+  "permissions": {
+    "network": true,
+    "mqttPublish": false,
+    "databaseWrite": false
+  }
+}

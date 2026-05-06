@@ -1,0 +1,37 @@
+{
+  "adapterKey": "themeparks_wiki",
+  "name": "ThemeParks.wiki",
+  "description": "Public ThemeParks.wiki API: destinations, parks, attractions/shows/restaurants, live wait times and status, and schedules. Normalized to UNS observations and the canonical integration pipeline (same data as Integration settings / park entities).",
+  "logoPath": "assets/logo.svg",
+  "bannerPath": "assets/banner.svg",
+  "readmePath": "README.md",
+  "category": "Leisure & attractions",
+  "website": "https://themeparks.wiki",
+  "documentationUrl": "https://api.themeparks.wiki/v1",
+  "author": "ThemeParks.wiki community",
+  "qualityTier": "VERIFIED",
+  "tags": ["queue_times", "parks", "public_api"],
+  "version": "1.0.0",
+  "runtime": "NODE",
+  "entrypoint": "index.js",
+  "adapterType": "PUBLIC_API",
+  "iotClass": "cloud_polling",
+  "capabilities": ["DISCOVERY", "POLLING", "UNS_OUTPUT", "CANONICAL_OUTPUT"],
+  "providedDomains": ["rides"],
+  "providedMetrics": ["queue_time", "status"],
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "parkId": {
+        "type": "string",
+        "default": "639738d3-9574-4f60-ab5b-4c392901320b",
+        "description": "Optional override: ThemeParks.wiki park entity UUID. If omitted, the park from Integration settings (Destination / park selection, same provider) is used."
+      }
+    }
+  },
+  "permissions": {
+    "network": true,
+    "mqttPublish": false,
+    "databaseWrite": false
+  }
+}

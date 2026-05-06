@@ -1,0 +1,49 @@
+{
+  "adapterKey": "calendar_school_holidays",
+  "name": "School Holiday Demand Calendar",
+  "description": "Publishes daily holiday demand factors for DE-BW, FR-Grand Est, and CH-BS. Preferred outputProfiles: [\"SPARKPLUG_JSON\", \"CANONICAL_HISTORIAN\"].",
+  "version": "1.0.0",
+  "runtime": "NODE",
+  "entrypoint": "index.js",
+  "adapterType": "CALENDAR",
+  "iotClass": "cloud_polling",
+  "capabilities": ["DISCOVERY", "POLLING", "UNS_OUTPUT", "FEATURE_OUTPUT"],
+  "providedDomains": ["calendar"],
+  "providedMetrics": [
+    "is_holiday_de_bw",
+    "is_holiday_fr_grandest",
+    "is_holiday_ch_bs",
+    "is_weekend",
+    "bridge_day",
+    "holiday_score"
+  ],
+  "defaultContextJson": {
+    "parkSlug": "europapark",
+    "sparkplugGroupId": "europa_park",
+    "sparkplugEdgeNode": "calendar_gateway"
+  },
+  "defaultScheduleCron": "0 3 * * *",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "parkSlug": {
+        "type": "string",
+        "default": "europapark"
+      },
+      "timezone": {
+        "type": "string",
+        "default": "Europe/Berlin"
+      },
+      "dateOverride": {
+        "type": "string",
+        "description": "Optional YYYY-MM-DD for deterministic tests/backfills."
+      }
+    },
+    "required": ["parkSlug"]
+  },
+  "permissions": {
+    "network": false,
+    "mqttPublish": false,
+    "databaseWrite": false
+  }
+}

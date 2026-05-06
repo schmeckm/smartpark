@@ -1,0 +1,40 @@
+name: smart-park-os
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: smartpark
+      POSTGRES_PASSWORD: smartpark
+      POSTGRES_DB: smartpark
+    ports:
+      - '5433:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U smartpark -d smartpark']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      LOG_LEVEL: info
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: smartpark
+      DB_USER: smartpark
+      DB_PASSWORD: smartpark
+      CORS_ORIGIN: '*'
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:

@@ -1,0 +1,82 @@
+openapi: 3.0.3
+info:
+  title: TP-UNS MVP API
+  version: 1.0.0
+servers:
+  - url: http://localhost:3000
+paths:
+  /api/v1/parks:
+    post:
+      summary: Create park
+      responses:
+        '201':
+          description: Created
+    get:
+      summary: List parks
+      responses:
+        '200':
+          description: OK
+  /api/v1/parks/{id}:
+    get:
+      summary: Get park by id
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+  /api/v1/parks/{parkId}/uns/nodes:
+    post:
+      summary: Create UNS node
+      responses:
+        '201':
+          description: Created
+  /api/v1/parks/{parkId}/uns/tree:
+    get:
+      summary: Get UNS tree
+      responses:
+        '200':
+          description: OK
+  /api/v1/parks/{parkId}/uns/latest-state:
+    get:
+      summary: Get latest state entries
+      responses:
+        '200':
+          description: OK
+  /api/v1/parks/{parkId}/uns/topics:
+    get:
+      summary: List topic paths
+      responses:
+        '200':
+          description: OK
+  /api/v1/parks/{parkId}/devices:
+    post:
+      summary: Create device
+      responses:
+        '201':
+          description: Created
+    get:
+      summary: List devices
+      responses:
+        '200':
+          description: OK
+  /api/v1/mqtt/publish:
+    post:
+      summary: Publish test MQTT message
+      responses:
+        '200':
+          description: OK
+  /api/v1/parks/{parkId}/dashboard/latest:
+    get:
+      summary: Dashboard latest KPIs
+      responses:
+        '200':
+          description: OK
+  /api/v1/parks/{parkId}/dashboard/forecast/latest:
+    get:
+      summary: Latest forecast snapshot
+      responses:
+        '200':
+          description: OK

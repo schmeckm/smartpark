@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" fill="none">
+  <rect width="800" height="200" fill="#0f172a"/>
+  <text x="40" y="110" fill="#e2e8f0" font-family="system-ui,sans-serif" font-size="42" font-weight="600">OPC-UA Edge</text>
+  <text x="40" y="155" fill="#94a3b8" font-family="system-ui,sans-serif" font-size="22">Smart Park OS · PLC / industrial tags ’ observations</text>
+</svg>

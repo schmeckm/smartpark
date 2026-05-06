@@ -1,0 +1,18 @@
+# Smart Park OS — adapter install config (YAML). Managed by PATCH/POST install-local only.
+schemaVersion: 1
+adapterKey: opcua_edge
+installedAt: '2026-05-03T17:46:25.958Z'
+updatedAt: '2026-05-03T17:46:25.961Z'
+configJson:
+  live: false
+  securityMode: None
+contextJson:
+  parkSlug: europapark
+  sparkplugGroupId: europa_park
+  sparkplugEdgeNode: opcua_edge_gateway
+outputProfiles:
+  - SPARKPLUG_JSON
+  - CANONICAL_HISTORIAN
+emitEnabled: true
+ingestCanonicalEnabled: true
+scheduleCron: '*/5 * * * *'

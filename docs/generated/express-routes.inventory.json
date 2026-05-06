@@ -1,0 +1,2308 @@
+{
+  "generatedAt": "2026-05-06T19:47:07.366Z",
+  "apiPrefix": "/api/v1",
+  "routeCount": 328,
+  "routes": [
+    {
+      "method": "POST",
+      "path": "/api/v1/adapters/:adapterKey/activate",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/adapters/:adapterKey/disable",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/adapters/:adapterKey/pause",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/adapters/:adapterKey/run-now",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/adapters/:adapterKey/status",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/adapters/dashboard",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/adapters/health",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/adapters/runs",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/addon-board/critical-rides",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/addon-board/heatmap",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/addon-board/layout",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/addon-board/rides/:rideId/custom-widgets/:widgetId",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/addon-board/rides/:rideId/custom-widgets/:widgetId",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/addon-board/rides/:rideId/custom-widgets",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/addon-board/rides/:rideId/detail",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/addon-board/rides/:rideId/widget-source-draft",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/addon-board/rides/:rideId/widget-source-draft",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/addon-board/rides/:rideId/widgets/from-source-draft",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/addon-board/rides",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/addon-board/summary",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/addon-board/templates/:boardId",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/addon-board/templates",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/addon-board/zones/:zoneId/summary",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/addon-board/zones",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/admin/platform-settings/:settingKey",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/platform-settings",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/assets/:assetId/effective-ml-config",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/ai/assets/:assetId/ml-overrides",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/ai/assets/:assetId/ml-profile",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/entities/:externalEntityId/forecast/summary",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/factors/config",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/feature-data-quality",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/feature-store/monitor",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/ai/feature-store/park-snapshots/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai/feature-store/park-snapshots/bulk-delete",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai/feature-store/park-snapshots/purge",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/forecast-accuracy/zone-crowd",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai/forecasts/refresh",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/forecasts",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/ai/global-factors/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/ai/global-factors/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/global-factors",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai/global-factors",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/health",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/insights/summary",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/ai/ml-profiles/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/ai/ml-profiles/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/ml-profiles",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai/ml-profiles",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/parks/:externalParkId/entities/forecast/summary",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/parks/:externalParkId/forecast/explanation",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/parks/:externalParkId/forecast/series",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/parks/:externalParkId/forecast/summary",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/parks/:parkId/factors",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/ai/parks/:parkId/factors",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/pipeline-health",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/pipeline-runs",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/recommendations/:id/explanation",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai/recommendations/:id/score",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/recommendations/scored",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai/recommendations/score",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/recommendations/scoring-summary",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/studio/catalog",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/studio/dataset-stats",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/studio/feature-drafts",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/ai/studio/feature-drafts",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/ai/studio/models/:id/activate",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/studio/models/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai/studio/models/train",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/studio/models",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai/studio/predict",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai/timeseries/calendar",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/timeseries/rides-current",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/timeseries/rides/:assetId",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/training-dataset",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/assets/:assetId/downtime-events/:eventId",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/assets/:assetId/downtime-events/:eventId",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/:assetId/downtime-events",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/assets/:assetId/downtime-events",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/:assetId/extensions",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/assets/:assetId/extensions",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/:assetId/oee/availability-summary",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/:assetId/oee/downtime-reason-pareto",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/assets/:assetId/ride-master/enrich-template",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/assets/:assetId/ride-master",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/assets/:assetId/runtime-overrides/:overrideId",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/:assetId/runtime-overrides",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/assets/:assetId/runtime-overrides",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/:assetId",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/oee/reason-codes",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/audit-logs",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/login",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/logout",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/me",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/refresh",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/dashboard/summary",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/data-quality/issues/:id/resolve",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/data-quality/issues",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/events",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/events",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/db",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/ready",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/import/rides",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/import/staff",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/import/zones",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/incidents/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/incidents/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/incidents/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/incidents",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/incidents",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/integration/logs",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/integrations/:provider/destinations",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/integrations/:provider/entity/:entityId/children",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/integrations/:provider/entity/:entityId/live",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/integrations/:provider/entity/:entityId/schedule",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/integrations/:provider/entity/:entityId",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/integrations/:provider/parks",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/integrations/:provider/sync/all-parks",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/integrations/:provider/sync/calendar",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/integrations/:provider/sync/destinations",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/integrations/:provider/sync/entities",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/integrations/:provider/sync/live",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/integrations/:provider/sync/parks",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/integrations/adapters/:adapterKey/inventory",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/integrations/adapters/demo/run",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/integrations/adapters/discover-local",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/integrations/adapters/health-local",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/integrations/adapters/install-local",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/integrations/adapters/packages/:adapterKey/asset",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/integrations/adapters/packages/:adapterKey/health",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/integrations/adapters/packages/reload",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/integrations/adapters/packages",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/integrations/adapters/pipeline-log",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/integrations/adapters/run-local",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/integrations/canonical/messages/:id/reprocess",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/integrations/canonical/messages/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/integrations/canonical/messages",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/integrations/feature-flags",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/integrations/installed-adapters/:id",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/integrations/installed-adapters/:id",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/integrations/installed-adapters/:id",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/integrations/installed-adapters/install-local",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/integrations/installed-adapters",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/integrations/mappings/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/integrations/mappings",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/integrations/output/emit",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/integrations/output/encode",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/integrations/providers/:provider/config",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/integrations/providers/:provider/config",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/integrations/providers",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/integrations/settings",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/integrations/settings",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/integrations/uns/manual/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/integrations/uns/manual",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/integrations/uns/manual",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/integrations/uns/materialize-nodes",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/integrations/uns/sparkplug-schema",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/integrations/uns/sparkplug-schema",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/integrations/uns/sparkplug-schema",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/integrations/uns/suggestions",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/master-data/:entityType/:id/apply-template",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/master-data/:entityType/:id",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/master-data/:entityType/:id",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/master-data/:entityType/:id",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/master-data/:entityType/export/xlsx",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/master-data/:entityType/export",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/master-data/:entityType/import/xlsx",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/master-data/:entityType/import",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/master-data/:entityType",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/master-data/:entityType",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/master-data/assets/:assetId/enrichment",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/master-data/assets/:assetId/enrichment",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/master-data/assets/:assetId",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/master-data/rides/:id/activate-prepared-sparkplug-metrics",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/master-data/rides/:id/activate-prepared-uns-topics",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/master-data/rides/:id/compare-registry-vs-legacy",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/master-data/rides/:id/deactivate-prepared-sparkplug-metrics",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/master-data/rides/:id/deactivate-prepared-uns-topics",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/master-data/rides/:id/prepare-sparkplug-metrics",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/master-data/rides/:id/prepare-uns-topics",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/master-data/rides/:id/preview-registry-output",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/master-data/rides/:id/registry-signal-deprecations/deprecate",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/master-data/rides/:id/registry-signal-deprecations/health",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/master-data/rides/:id/registry-signal-deprecations/reactivate",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/master-data/rides/:id/registry-signal-deprecations",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/master-data/rides/:id/signal-capabilities",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/master-data/rides/:id/signal-capabilities",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/master-data/rides/:id/topic-activation-status",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/master-data/templates/:id",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/master-data/templates",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/mdm/parks/:parkId/zones",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/mdm/parks/:parkId/zones",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/mdm/parks",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/mdm/parks",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/mdm/ride-templates/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/mdm/ride-templates/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/mdm/ride-templates/:templateId/clone-ride",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/mdm/ride-templates",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/mdm/ride-templates",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/mdm/ride-types",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/mdm/rides/:id/active",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/mdm/rides/:id/capacity-model",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/mdm/rides/:id/extensions",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/mdm/rides/:id/extensions",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/mdm/rides/:id/staffing-model",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/mdm/rides/:id/zone",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/mdm/rides/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/mdm/rides/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/mdm/rides",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/mdm/rides",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ml/dataset/rides",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ml/predict/park-summary",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ml/predict/rides/:rideId",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ml/train/wait-time/global",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ml/train/wait-time/rides/:rideId",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/mqtt/capability-guard/status",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/mqtt/inbound/unknown",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/mqtt/inbound",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/mqtt/status",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/observations/live",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/operations-facts/parks/:parkId/rides/:rideId",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/operations-facts/parks/:parkId/zones/:zoneId",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/operations-facts/parks/:parkId",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/operations-facts/rides/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/operations-facts/rides",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/park-rides",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/parks/:parkId/operational-context",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/parks/:parkId/shift-handovers",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/parks/:parkId/shift-handovers",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/parks/:parkSlug/geo/entities",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/parks/:parkSlug/geo/flow/events/batch",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/parks/:parkSlug/geo/flow/simulation",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/parks/:parkSlug/geo/hotspots",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/parks/:parkSlug/geo/pressure/forecast",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/parks/:parkSlug/geo/pressure/live",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/parks/:parkSlug/geo/pressure/simulate",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/parks",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/recommendations/:id/status",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/recommendations",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/registry-publisher/events",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/registry-publisher/health",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/registry-publisher/rides/:id/disable-pilot",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/registry-publisher/rides/:id/dry-run",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/registry-publisher/rides/:id/publish-once",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/registry-publisher/status",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/rides/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/rides/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/rides/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/rides",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/rides",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/simulator/attraction-oee/candidates",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/simulator/attraction-oee/scenario",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/simulator/attraction-oee/start",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/simulator/attraction-oee/status",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/simulator/attraction-oee/stop",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/simulator/scenario",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/simulator/start",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/simulator/status",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/simulator/stop",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/sqdc/board",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/sqdc/daily-snapshots",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/sqdc/events",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/sqdc/history",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/sqdc/mood-feedback",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/sqdc/mood",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/sqdc/parks/:parkId/assets/:assetId/board",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/sqdc/parks/:parkId/board",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/sqdc/safety-events",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/sqdc/snapshots",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/staff/:id",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/staff/:id",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/staff/:id",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/staff/export/xlsx",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/staff/export",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/staff/import/xlsx",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/staff/import",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/staff",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/staff",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/sync/themeparks/:parkId",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/sync/themeparks/discovery/from-settings",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/sync/themeparks/from-settings",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/templates/maintenance",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/templates/ride",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/templates/staffing",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/uns-registry/entities",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/uns-registry/mirror/summary",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/uns-registry/topics",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/uns-spy/events/:id/approve",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/uns-spy/events/:id/ignore",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/uns-spy/events/:id/reject",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/uns-spy/events",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/uns-spy/proposals",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/uns/nodes/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/uns/nodes/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/uns/parks/:parkId/hierarchy-schema/preview",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/uns/parks/:parkId/hierarchy-schema",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/uns/parks/:parkId/hierarchy-schema",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/uns/parks/:parkId/latest-state",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/uns/parks/:parkId/mqtt-live/events",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/uns/parks/:parkId/mqtt-live/status",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/uns/parks/:parkId/mqtt-live/test-event",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/uns/parks/:parkId/nodes",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/uns/parks/:parkId/topics",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/uns/parks/:parkId/tree",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/uns/test/publish",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/users/me/settings",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/users/me/settings",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/visit-actuals/:actualYear",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/visit-actuals/:actualYear",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/visit-plans/:id/export/xlsx",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/visit-plans/:id/forecast",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/visit-plans/:id/import/xlsx",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/visit-plans/:id",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/visit-plans/:id",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/visit-plans/:id",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/visit-plans",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/visit-plans",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/weather/current",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/weather/observations",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/zones/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/zones/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/zones/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/zones",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/zones",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    }
+  ],
+  "stats": {
+    "missingFromOpenapiCount": 107,
+    "openapiOperationCount": 221,
+    "documentedNotLiveCount": 0
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "boardId": "zone-management-default",
+  "label": "Zone management (L1)",
+  "widgets": [
+    { "id": "zone-list", "title": "Zones + ride counts" },
+    { "id": "zone-kpis", "title": "Zone health KPIs" },
+    {
+      "id": "geo-heatmap",
+      "title": "Zone pressure context",
+      "roles": ["SYSTEM_ADMIN", "OPERATIONS_MANAGER", "PARK_MANAGER", "ANALYST"]
+    }
+  ]
+}

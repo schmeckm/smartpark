@@ -1,0 +1,5806 @@
+openapi: 3.0.3
+info:
+  title: Smart Park OS API
+  description: |
+    AI-enabled operations backend for large venues. Realtime updates are broadcast via Socket.IO
+    (events `zones:updated`, `events:created`, `recommendations:created`, `recommendations:updated`,
+    `ai:forecast:updated`, `ai:recommendation-scored`, `canonical:message:received`,
+    `canonical:message:applied`, `canonical:message:failed`, `external:mapping:updated`, `external:parkdata:updated`).
+  version: 1.7.2
+
+servers:
+  - url: /api/v1
+    description: Version 1
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Auth
+  - name: Health
+  - name: Audit
+  - name: Zones
+  - name: Rides
+  - name: Staff
+  - name: Events
+  - name: Recommendations
+  - name: Dashboard
+  - name: Wave2
+  - name: AI
+  - name: Integrations
+  - name: UNS
+  - name: MDM
+  - name: Platform
+  - name: Operations
+    description: |
+      Shared **Operations Facts** layer — normalized KPI envelopes (`value`, `status`, `quality`, `source`, `updatedAt`)
+      for Add-on Board and SQDCP/SWDEC. See `docs/architecture/operations-facts-layer.md` and `docs/architecture/source-of-truth.md`.
+  - name: SQDC
+  - name: Incidents
+  - name: Admin
+  - name: VisitPlanning
+  - name: OperationsAdapters
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Liveness probe
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /health/db:
+    get:
+      tags: [Health]
+      summary: Database connectivity
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthDbResponse'
+  /health/ready:
+    get:
+      tags: [Health]
+      summary: Readiness probe (database)
+      description: Returns 200 when PostgreSQL accepts a connection; 503 when authentication fails. No JWT.
+      security: []
+      responses:
+        '200':
+          description: Ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthReadyResponse'
+        '503':
+          description: Not ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthReadyFailureResponse'
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokensResponse'
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokensResponse'
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout (revoke refresh token)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogoutRequest'
+      responses:
+        '200':
+          description: OK
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Current user profile
+      responses:
+        '200':
+          description: OK
+  /audit-logs:
+    get:
+      tags: [Audit]
+      summary: List audit logs (OPERATIONS_MANAGER, SECURITY_MANAGER, ADMIN)
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, default: 50 }
+        - in: query
+          name: offset
+          schema: { type: integer, default: 0 }
+      responses:
+        '200':
+          description: OK
+
+  /zones:
+    get:
+      tags: [Zones]
+      summary: List zones
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Zone'
+    post:
+      tags: [Zones]
+      summary: Create zone
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ZoneCreate'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Zone'
+
+  /zones/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    get:
+      tags: [Zones]
+      summary: Get zone by id
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Zone'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Zones]
+      summary: Update zone
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ZoneUpdate'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Zone'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Zones]
+      summary: Delete zone
+      responses:
+        '204':
+          description: No content
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /rides:
+    get:
+      tags: [Rides]
+      summary: List rides
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Ride'
+    post:
+      tags: [Rides]
+      summary: Create ride
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RideCreate'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Ride'
+
+  /rides/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    get:
+      tags: [Rides]
+      summary: Get ride by id
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Ride'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Rides]
+      summary: Update ride
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RideUpdate'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Ride'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Rides]
+      summary: Delete ride
+      responses:
+        '204':
+          description: No content
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /staff:
+    get:
+      tags: [Staff]
+      summary: List staff
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Staff'
+    post:
+      tags: [Staff]
+      summary: Create staff member
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffCreate'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Staff'
+
+  /staff/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    get:
+      tags: [Staff]
+      summary: Get staff by id
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Staff'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Staff]
+      summary: Update staff member
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffUpdate'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Staff'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Staff]
+      summary: Delete staff member
+      responses:
+        '204':
+          description: No content
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /events:
+    get:
+      tags: [Events]
+      summary: List crowd events
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CrowdEvent'
+    post:
+      tags: [Events]
+      summary: Create crowd event
+      description: |
+        When `eventType` is `CROWD_SPIKE` and crowd exceeds 75% of the zone `maxCapacity`, the service
+        evaluates staffing, security posture, and ride wait times to create recommendations.
+        By default the zone `currentCrowdLevel` is synced from `crowdLevel` (`syncZone: false` opts out).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CrowdEventCreate'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/CrowdEvent'
+                  recommendations:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Recommendation'
+
+  /recommendations:
+    get:
+      tags: [Recommendations]
+      summary: List recommendations
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Recommendation'
+
+  /recommendations/{id}/status:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    patch:
+      tags: [Recommendations]
+      summary: Update recommendation workflow status
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [OPEN, ACCEPTED, REJECTED, COMPLETED]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Recommendation'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /dashboard/summary:
+    get:
+      tags: [Dashboard]
+      summary: Operational dashboard summary
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/DashboardSummary'
+
+  /mqtt/status:
+    get:
+      tags: [Wave2]
+      summary: MQTT connector status
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: '#/components/schemas/MqttStatus' }
+
+  /mqtt/capability-guard/status:
+    get:
+      tags: [Wave2]
+      summary: MQTT capability guard status (Phase 13)
+      description: Requires **integrations.read** OR **rides.read**. Returns mode, pilot allow-list size, and inbound decision counts (24h).
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      mode: { type: string, enum: [off, warn_only, enforce] }
+                      allowedRideCount: { type: integer }
+                      lastBlockedAt: { type: string, format: date-time, nullable: true }
+                      blockedLast24h: { type: integer }
+                      warnedLast24h: { type: integer }
+                      allowedLast24h: { type: integer }
+        '401': { description: Unauthorized }
+        '403': { description: Forbidden }
+
+  /mqtt/inbound:
+    get:
+      tags: [Wave2]
+      summary: List raw inbound MQTT rows
+      description: Requires **integrations.read** OR **rides.read**.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - in: query
+          name: offset
+          schema: { type: integer, minimum: 0, default: 0 }
+        - in: query
+          name: topicPrefix
+          schema: { type: string, maxLength: 500 }
+        - in: query
+          name: spyClassification
+          schema: { type: string, maxLength: 40 }
+        - in: query
+          name: capabilityDecision
+          schema: { type: string, enum: [ALLOW, WARN, BLOCK, SKIP] }
+      responses:
+        '200': { description: OK }
+        '401': { description: Unauthorized }
+        '403': { description: Forbidden }
+
+  /mqtt/inbound/unknown:
+    get:
+      tags: [UNS]
+      summary: List UNS Spy discovery rows for unknown / conflict classifications
+      description: >-
+        Requires **integrations.read** OR **rides.read**. Returns paged `uns_discovery_events` where
+        `classification` is unknown-topic, unknown-signal, or conflict (same store as UNS Spy), optionally
+        including linked `mqtt_inbound_message` rows.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - in: query
+          name: offset
+          schema: { type: integer, minimum: 0, default: 0 }
+        - in: query
+          name: topicPrefix
+          schema: { type: string, maxLength: 500 }
+      responses:
+        '200':
+          description: Paged discovery events (UNS Spy store)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeUnsPagedObjects' }
+        '401': { description: Unauthorized }
+        '403': { description: Forbidden }
+
+  /integration/logs:
+    get:
+      tags: [Wave2]
+      summary: Integration / ingestion log
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, default: 100 }
+        - in: query
+          name: offset
+          schema: { type: integer, default: 0 }
+      responses:
+        '200': { description: OK }
+  /weather/current:
+    get:
+      tags: [Wave2]
+      summary: Latest weather observation
+      responses:
+        '200': { description: OK }
+  /weather/observations:
+    post:
+      tags: [Wave2]
+      summary: Ingest a weather observation (API)
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WeatherCreate' }
+      responses:
+        '201': { description: Created }
+  /import/staff:
+    post:
+      tags: [Wave2]
+      summary: Import staff CSV/XLSX (multipart)
+      requestBody:
+        content:
+          multipart/form-data: { schema: { type: object, properties: { file: { type: string, format: binary } } } }
+      responses: { '200': { description: OK } }
+  /import/rides:
+    post:
+      tags: [Wave2]
+      summary: Import rides
+      requestBody:
+        content:
+          multipart/form-data: { schema: { type: object, properties: { file: { type: string, format: binary } } } }
+      responses: { '200': { description: OK } }
+  /import/zones:
+    post:
+      tags: [Wave2]
+      summary: Import zones
+      requestBody:
+        content:
+          multipart/form-data: { schema: { type: object, properties: { file: { type: string, format: binary } } } }
+      responses: { '200': { description: OK } }
+  /simulator/status:
+    get:
+      tags: [Wave2]
+      summary: Simulator status
+      responses: { '200': { description: OK } }
+  /simulator/start:
+    post:
+      tags: [Wave2]
+      summary: Start simulator background loop
+      responses: { '200': { description: OK } }
+  /simulator/stop:
+    post:
+      tags: [Wave2]
+      summary: Stop simulator
+      responses: { '200': { description: OK } }
+  /simulator/scenario:
+    post:
+      tags: [Wave2]
+      summary: Run one named scenario
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, required: [name], properties: { name: { type: string } } }
+      responses: { '200': { description: OK } }
+  /data-quality/issues:
+    get:
+      tags: [Wave2]
+      summary: List data quality issues
+      responses: { '200': { description: OK } }
+  /data-quality/issues/{id}/resolve:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string, format: uuid }
+    patch:
+      tags: [Wave2]
+      summary: Mark issue resolved
+      responses: { '200': { description: OK } }
+
+  /ai/health:
+    get:
+      tags: [AI]
+      summary: AI module health
+      description: Liveness and sampling config (unauthenticated, no RBAC)
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeAiHealth' }
+
+  /ai/pipeline-health:
+    get:
+      tags: [AI]
+      summary: Last AI full-pipeline run and scheduler config
+      description: Needs `ai.read`. Optional smoke hints from `data/ai-smoke-status.json` when present.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    additionalProperties: true
+
+  /ai/forecasts/refresh:
+    post:
+      tags: [AI]
+      summary: Sample zones and regenerate baseline crowd forecasts
+      description: Needs permission `ai.refresh`
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeAiRefresh' }
+
+  /ai/forecasts:
+    get:
+      tags: [AI]
+      summary: List current forecasts
+      description: Optional filters; needs `ai.read`
+      parameters:
+        - in: query
+          name: horizonMinutes
+          schema: { type: integer, minimum: 1 }
+        - in: query
+          name: subjectType
+          schema: { type: string, enum: [PARK, ZONE, RIDE] }
+        - in: query
+          name: targetMetric
+          schema: { type: string, enum: [CROWD_LEVEL, WAIT_TIME, STAFF_DEMAND] }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 100, minimum: 1, maximum: 200 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeForecasts' }
+
+  /ai/insights/summary:
+    get:
+      tags: [AI]
+      summary: Top hotspot summary (60 min baseline)
+      description: Needs `ai.read`
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeAiInsights' }
+
+  /ai/studio/feature-drafts:
+    get:
+      tags: [AI]
+      summary: Get ML Studio dataset feature draft (Phase P)
+      description: Needs `ai.read` and active park context (`X-Park-Id`). Returns persisted draft or `data: null`.
+      parameters:
+        - in: query
+          name: entityType
+          required: true
+          schema: { type: string, enum: [ride, park_asset] }
+        - in: query
+          name: entityId
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: datasetScope
+          schema: { type: string, enum: [single_asset], default: single_asset }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeAiStudioFeatureDraftNullable' }
+    put:
+      tags: [AI]
+      summary: Save ML Studio dataset feature draft (Phase P)
+      description: |
+        Needs `ai.refresh` and active park. Each `selectedSignalKey` must exist on ride/asset extensions with `enabled` and `mlEligible`
+        (validated via the same **`signal-preview.service`** module as Add-on Board preview gates — **no** `signalPreview` or latest-value fields in this API).
+        Stored in `app_settings` key `aiStudio.featureDrafts` (JSON), scoped by park.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AiStudioFeatureDraftPut' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeAiStudioFeatureDraft' }
+
+  /ai/parks/{externalParkId}/forecast/summary:
+    get:
+      tags: [AI]
+      summary: Park wait forecast summary (baseline + X + ML enterprise)
+      description: Needs `ai.read`. Response `data` includes `mlFactorCurrents` (object, possibly empty).
+      parameters:
+        - in: path
+          name: externalParkId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: provider
+          schema: { type: string, example: themeparks_wiki }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeParkForecastSummary' }
+
+  /ai/parks/{externalParkId}/forecast/series:
+    get:
+      tags: [AI]
+      summary: Interpolated wait forecast points from latest summary
+      description: Needs `ai.read`. Does not return `mlFactorCurrents` (series only).
+      parameters:
+        - in: path
+          name: externalParkId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: provider
+          schema: { type: string }
+        - in: query
+          name: horizon
+          schema: { type: integer, default: 60 }
+        - in: query
+          name: step
+          schema: { type: integer, default: 5 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items: { type: object, additionalProperties: true }
+
+  /ai/parks/{externalParkId}/forecast/explanation:
+    get:
+      tags: [AI]
+      summary: Short textual explanation of park forecast delta
+      description: Needs `ai.read`. Does not return `mlFactorCurrents`.
+      parameters:
+        - in: path
+          name: externalParkId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: provider
+          schema: { type: string }
+        - in: query
+          name: horizon
+          schema: { type: integer, default: 60 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { type: object, additionalProperties: true }
+
+  /ai/entities/{externalEntityId}/forecast/summary:
+    get:
+      tags: [AI]
+      summary: Entity (ride) wait forecast summary
+      description: Needs `ai.read`. Query `externalParkId` required. `data` includes `mlFactorCurrents` when merge ran.
+      parameters:
+        - in: path
+          name: externalEntityId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: externalParkId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: provider
+          schema: { type: string }
+        - in: query
+          name: entityType
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeParkForecastSummary' }
+
+  /ai/parks/{externalParkId}/entities/forecast/summary:
+    get:
+      tags: [AI]
+      summary: Batch entity forecast summaries for a park
+      description: Needs `ai.read`. Each item includes `mlFactorCurrents` when merge ran.
+      parameters:
+        - in: path
+          name: externalParkId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: provider
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 150 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeParkForecastSummaryList' }
+
+  /ai/feature-store/park-snapshots/{id}:
+    delete:
+      tags: [AI]
+      summary: Delete one park feature snapshot row
+      description: Needs `ai.refresh` and X-Park-Id; row must belong to that park.
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      deleted: { type: integer }
+
+  /ai/feature-store/park-snapshots/purge:
+    post:
+      tags: [AI]
+      summary: Bulk-delete park snapshots in a time window
+      description: Needs `ai.refresh` and X-Park-Id; range max 35 days.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [from, to]
+              properties:
+                from: { type: string, description: ISO8601 }
+                to: { type: string, description: ISO8601 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      deleted: { type: integer }
+
+  /ai/feature-store/park-snapshots/bulk-delete:
+    post:
+      tags: [AI]
+      summary: Delete park snapshots by id list
+      description: Needs `ai.refresh` and X-Park-Id; max 200 UUIDs; only rows for that park are deleted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids:
+                  type: array
+                  maxItems: 200
+                  items: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      deleted: { type: integer }
+                      requested: { type: integer }
+
+  /ai/recommendations/scored:
+    get:
+      tags: [AI]
+      summary: List OPEN recommendations with AI scores (sorted by score)
+      description: Needs `ai.read`
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeRecommendationsScored' }
+
+  /ai/recommendations/scoring-summary:
+    get:
+      tags: [AI]
+      summary: Top risky recommendations and aggregate scoring stats
+      description: Needs `ai.read`
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeRecommendationScoringSummary' }
+
+  /ai/recommendations/score:
+    post:
+      tags: [AI]
+      summary: Score all OPEN recommendations
+      description: Needs `ai.refresh` or `recommendations.update`
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeScoreAllResult' }
+
+  /ai/recommendations/{id}/score:
+    post:
+      tags: [AI]
+      summary: Score one OPEN recommendation
+      description: Needs `ai.refresh` or `recommendations.update`
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeScoreOneResult' }
+
+  /ai/recommendations/{id}/explanation:
+    get:
+      tags: [AI]
+      summary: Explanation and factors for a scored recommendation
+      description: Needs `ai.read`
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeRecommendationExplanation' }
+
+  /ml/predict/rides/{rideId}:
+    get:
+      tags: [AI]
+      summary: Predict ride wait times (15/30/60 min) from feature store + optional ridge models
+      description: Needs `ai.read` and `X-Park-Id`. Falls back to baseline when no model is trained.
+      parameters:
+        - in: path
+          name: rideId
+          required: true
+          schema: { type: string, format: uuid }
+          description: Platform ride asset_id (park_assets.asset_id)
+        - in: query
+          name: horizon
+          schema: { type: string, example: '15,30,60' }
+          description: Comma-separated horizons in minutes
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeMlRidePredict' }
+
+  /ml/predict/park-summary:
+    get:
+      tags: [AI]
+      summary: Add-on Board L0/L1 — aggregate 60m wait forecasts across ride assets
+      description: |
+        Needs `ai.read` and `X-Park-Id`. Loads RIDE-type `park_assets`, calls the same prediction path as L3 per ride (batched), then rolls up
+        `parkDemandForecastIndex`, `averageForecastWaitTime60`, `forecastCriticalRides`, and per-zone stats for L1 drill-down.
+        Optional `zoneId` scopes the asset list to one zone (L1 board). Does not throw if individual ride predictions fail.
+        Responses are cached about **45 seconds** per `(park, zone, threshold, limit, offset)` key.
+      parameters:
+        - in: query
+          name: zoneId
+          schema: { type: string, format: uuid }
+          description: When set, only rides in this zone are included (L1 scope).
+        - in: query
+          name: criticalAtMinutes
+          schema: { type: number, minimum: 15, maximum: 180, default: 55 }
+          description: Count rides at or above this forecasted wait (60 min horizon) as critical.
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200, default: 80 }
+          description: Max ride assets to evaluate (caps load).
+        - in: query
+          name: offset
+          schema: { type: integer, minimum: 0, maximum: 500, default: 0 }
+          description: Skip this many ride assets (stable name order) for paging large parks.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeMlParkForecastSummary' }
+
+  /ml/dataset/rides:
+    get:
+      tags: [AI]
+      summary: ML dataset stats from ride_feature_snapshots_5m (join coverage)
+      description: Needs `ai.read` and park context
+      parameters:
+        - in: query
+          name: rideId
+          schema: { type: string, format: uuid }
+        - in: query
+          name: from
+          schema: { type: string, format: date-time }
+        - in: query
+          name: to
+          schema: { type: string, format: date-time }
+        - in: query
+          name: rowLimit
+          schema: { type: integer, minimum: 100, maximum: 50000 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeMlRideDataset' }
+
+  /ml/train/wait-time/global:
+    post:
+      tags: [AI]
+      summary: Train global ridge wait-time models (15/30/60) for current park
+      description: Needs `ai.refresh` and `X-Park-Id`
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                rowLimit: { type: integer, minimum: 200, maximum: 50000 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeMlTrainResult' }
+
+  /ml/train/wait-time/rides/{rideId}:
+    post:
+      tags: [AI]
+      summary: Train ride-specific models when data criteria are met
+      description: Needs `ai.refresh` and `X-Park-Id`
+      parameters:
+        - in: path
+          name: rideId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeMlTrainRideResult' }
+
+  /addon-board/summary:
+    get:
+      tags: [AI]
+      summary: Add-on Board park summary (L0)
+      description: Needs `ops.read` or `rides.read` and `X-Park-Id`
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeAddonBoardParkSummary' }
+
+  /addon-board/rides:
+    get:
+      tags: [AI]
+      summary: Add-on Board ride cards with SWDEC + ML forecasts
+      description: Needs `ops.read` or `rides.read` and `X-Park-Id`
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeAddonBoardRides' }
+
+  /addon-board/critical-rides:
+    get:
+      tags: [AI]
+      summary: Critical / watch-list rides for the board
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeAddonBoardRides' }
+
+  /addon-board/zones:
+    get:
+      tags: [AI]
+      summary: List park zones with active ride counts
+      description: Needs `ops.read` or `rides.read` and `X-Park-Id`
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeAddonBoardZoneList' }
+
+  /addon-board/heatmap:
+    get:
+      tags: [AI]
+      summary: Live geo pressure payload for rides (L0/L1 heatmap context)
+      description: Needs `ops.read` or `rides.read` and `X-Park-Id`
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeAddonBoardHeatmap' }
+
+  /addon-board/templates:
+    get:
+      tags: [AI]
+      summary: List add-on board template ids
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeAddonBoardTemplatesIndex' }
+
+  /addon-board/templates/{boardId}:
+    get:
+      tags: [AI]
+      summary: Get one add-on board template JSON
+      parameters:
+        - in: path
+          name: boardId
+          required: true
+          schema: { type: string, maxLength: 120 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeAddonBoardTemplateDoc' }
+        '404':
+          description: Not found
+
+  /addon-board/layout:
+    get:
+      tags: [AI]
+      summary: Effective board layout for the caller roles (widgets filtered)
+      description: Returns `{ boardId, label, widgets }` only (no full template document). Use `GET /addon-board/templates/{boardId}` for the raw JSON.
+      parameters:
+        - in: query
+          name: boardId
+          schema: { type: string, maxLength: 120 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeAddonBoardLayout' }
+        '404':
+          description: Not found
+
+  /addon-board/zones/{zoneId}/summary:
+    get:
+      tags: [AI]
+      summary: Zone-level Add-on Board summary (L1)
+      parameters:
+        - in: path
+          name: zoneId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeAddonBoardZone' }
+
+  /addon-board/rides/{rideId}/detail:
+    get:
+      tags: [AI]
+      summary: Ride-level Add-on Board detail (L3)
+      parameters:
+        - in: path
+          name: rideId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeAddonBoardRideDetail' }
+
+  /addon-board/rides/{rideId}/widget-source-draft:
+    get:
+      tags: [AI]
+      summary: Get persisted widget source draft with resolved preview (Phases G–I)
+      description: |
+        Reads `park_assets.master_profile.addonBoardWidgetSourceDraft` for the ride asset (`rideId` = `asset_id`).
+        `data` is `null` when no draft exists. When present, `resolved` compares the draft `signalKey` to current
+        extensions (`enabled` / `boardEligible`) for a read-only preview.
+        **Phase I:** when `resolved.valid` is true, `latestValue` is the latest persisted scalar for that signal
+        (UNS `uns_latest_states`, then canonical inbound, then ride feature snapshot). Read-only; does not drive
+        Add-on Board KPI runtime. Omitted or `null` when invalid, unavailable, or lookup fails (HTTP 200 preserved).
+        **Signal preview layer:** when a draft exists, responses may also include optional additive **`signalPreview`**
+        (`status`, `eligibility`, normalized key echo) — same lookup order as `latestValue`; clients may ignore it.
+      parameters:
+        - in: path
+          name: rideId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK — `data` may be null
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeAddonBoardWidgetSourceDraftNullable' }
+        '404':
+          description: Asset not in park context
+    put:
+      tags: [AI]
+      summary: Save widget signal source draft (Phase G)
+      description: |
+        Persists metadata only under `park_assets.master_profile.addonBoardWidgetSourceDraft`.
+        `signalKey` must exist on the asset extensions with `enabled` and `boardEligible` true.
+      parameters:
+        - in: path
+          name: rideId
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AddonBoardWidgetSourceDraft' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeAddonBoardWidgetSourceDraft' }
+        '400':
+          description: Invalid body or signal not eligible
+        '404':
+          description: Asset not in park context
+
+  /addon-board/rides/{rideId}/custom-widgets:
+    get:
+      tags: [AI]
+      summary: List persisted L3 custom widgets for a ride (Phase J + K + M)
+      description: |
+        Reads `park_assets.master_profile.addonBoardCustomWidgets` — metadata-only widget configs promoted from
+        the widget source draft flow. **Phase K:** each enabled `SIGNAL_METADATA` + `latest_value` row includes
+        **`resolved`** and **`latestValue`** using the same read-only path as `GET .../widget-source-draft` (Phase I);
+        **`sourceEntityMismatch`** when stored `source.entityId` does not match path `rideId`. **Phase M:** each row
+        includes derived **`health`** (`ok`, `invalid_source`, `disabled`, `no_live_value`, `entity_mismatch`) from those
+        fields only — no extra storage or lookups. Optional additive **`signalPreview`** may be present on each row.
+        Does not alter template board JSON or standard KPI widgets.
+      parameters:
+        - in: path
+          name: rideId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK — may be an empty array
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeAddonBoardCustomWidgets' }
+        '404':
+          description: Asset not in park context
+
+  /addon-board/rides/{rideId}/custom-widgets/{widgetId}:
+    patch:
+      tags: [AI]
+      summary: Update persisted L3 custom widget (Phase L)
+      description: |
+        Lifecycle only: **`title`** and/or **`enabled`**. **`source`** and **`display`** are not editable in this phase.
+        Response **`widget`** matches **`GET .../custom-widgets`** rows (Phase K **`resolved`** / **`latestValue`**, Phase M **`health`**, and optional additive **`signalPreview`** from the shared signal preview resolver when applicable).
+      parameters:
+        - in: path
+          name: rideId
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: widgetId
+          required: true
+          schema: { type: string, maxLength: 200 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AddonBoardCustomWidgetPatch' }
+      responses:
+        '200':
+          description: OK — updated widget (enriched list shape)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeAddonBoardPromotedWidget' }
+        '400':
+          description: Invalid body (no fields, bad title or enabled type)
+        '404':
+          description: Asset or widget not found
+    delete:
+      tags: [AI]
+      summary: Remove persisted L3 custom widget (Phase L)
+      description: Removes one entry from `park_assets.master_profile.addonBoardCustomWidgets`. No KPI or ML changes.
+      parameters:
+        - in: path
+          name: rideId
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: widgetId
+          required: true
+          schema: { type: string, maxLength: 200 }
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Asset or widget not found
+
+  /addon-board/rides/{rideId}/widgets/from-source-draft:
+    post:
+      tags: [AI]
+      summary: Promote saved widget source draft to a persisted custom widget (Phase J)
+      description: |
+        Requires a well-formed `addonBoardWidgetSourceDraft` and `resolved.valid` against current extensions.
+        Upserts one entry under `park_assets.master_profile.addonBoardCustomWidgets` (same `widgetId` replaces).
+        No KPI engine, ML Studio, or MQTT subscription changes.
+        **Response shape:** `data.widget` is the **persisted base** row (`widgetId`, `title`, `source`, `display`, `enabled` only).
+        It does **not** include Phase K/M enrichment (`resolved`, `latestValue`, `health`, or optional **`signalPreview`**).
+        Call **`GET .../custom-widgets`** for the read model that includes preview fields.
+      parameters:
+        - in: path
+          name: rideId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '201':
+          description: Created or updated custom widget config
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeAddonBoardPromotedWidget' }
+        '400':
+          description: No draft, draft invalid, or entity mismatch
+        '404':
+          description: Asset not in park context
+
+  /operations-facts/parks/{parkId}:
+    get:
+      tags: [Operations]
+      summary: Operations facts for all rides in the park (debug / transparency)
+      description: |
+        Returns one facts envelope per active ride. Each KPI includes `source` and `quality` so UI boards can explain
+        differences vs stored SQDC daily snapshots. Requires `X-Park-Id` matching `{parkId}`.
+        Missing inputs yield `quality: MISSING` and `value: null` — never a hard error for absent signals.
+      parameters:
+        - in: path
+          name: parkId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeOperationsFactsPark' }
+        '403':
+          description: Park id does not match authenticated park context
+
+  /operations-facts/parks/{parkId}/zones/{zoneId}:
+    get:
+      tags: [Operations]
+      summary: Operations facts for rides in one zone
+      description: Same envelope as park-wide; filtered by `zoneId`. `X-Park-Id` must match `{parkId}`.
+      parameters:
+        - in: path
+          name: parkId
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: zoneId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeOperationsFactsZone' }
+        '403':
+          description: Park id does not match authenticated park context
+
+  /operations-facts/parks/{parkId}/rides/{rideId}:
+    get:
+      tags: [Operations]
+      summary: Operations facts for one ride asset
+      description: |
+        Single-ride envelope used internally by Add-on Board and SQDC asset boards. Same KPI definitions as
+        `swdec` ride cards; this route exposes raw facts with source transparency.
+      parameters:
+        - in: path
+          name: parkId
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: rideId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeOperationsFactsRide' }
+        '403':
+          description: Park id does not match authenticated park context
+        '404':
+          description: Ride asset not found
+
+  /integrations/feature-flags:
+    get:
+      tags: [Integrations]
+      summary: Read-only integration feature flags (server env)
+      description: >-
+        Exposes non-secret booleans for admin UI (e.g. adapter discovery inbox, future MQTT capability gate).
+        Requires **integrations.read** (same permission family as other Integration settings reads).
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeIntegrationFeatureFlags' }
+              examples:
+                sample:
+                  value:
+                    success: true
+                    data:
+                      adapterDiscoverySpyEnabled: true
+                      mqttEnforceCapabilities: false
+        '401':
+          description: Missing or invalid JWT
+        '403':
+          description: Missing integrations.read
+          content:
+            application/json:
+              examples:
+                forbidden:
+                  value:
+                    success: false
+                    message: Insufficient permissions
+                    code: FORBIDDEN
+
+  /integrations/providers:
+    get:
+      tags: [Integrations]
+      summary: List registered provider adapters
+      responses: { '200': { description: OK } }
+  /integrations/providers/{provider}/config:
+    get:
+      tags: [Integrations]
+      summary: Get provider adapter config
+      parameters:
+        - in: path
+          name: provider
+          required: true
+          schema: { type: string }
+      responses: { '200': { description: OK } }
+    patch:
+      tags: [Integrations]
+      summary: Patch provider adapter config
+      parameters:
+        - in: path
+          name: provider
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object }
+      responses: { '200': { description: OK } }
+
+  /integrations/{provider}/sync/destinations:
+    post:
+      tags: [Integrations]
+      summary: Fetch and ingest destination canonical messages
+      parameters:
+        - in: path
+          name: provider
+          required: true
+          schema: { type: string }
+      responses: { '200': { description: OK } }
+  /integrations/{provider}/sync/parks:
+    post:
+      tags: [Integrations]
+      summary: Fetch and ingest park canonical messages
+      parameters:
+        - in: path
+          name: provider
+          required: true
+          schema: { type: string }
+      responses: { '200': { description: OK } }
+  /integrations/{provider}/sync/entities:
+    post:
+      tags: [Integrations]
+      summary: Fetch and ingest entity canonical messages
+      parameters:
+        - in: path
+          name: provider
+          required: true
+          schema: { type: string }
+      responses: { '200': { description: OK } }
+  /integrations/{provider}/sync/live:
+    post:
+      tags: [Integrations]
+      summary: Fetch and ingest live wait/status canonical messages
+      parameters:
+        - in: path
+          name: provider
+          required: true
+          schema: { type: string }
+      responses: { '200': { description: OK } }
+  /integrations/{provider}/sync/calendar:
+    post:
+      tags: [Integrations]
+      summary: Fetch and ingest operating-hours/crowd canonical messages
+      parameters:
+        - in: path
+          name: provider
+          required: true
+          schema: { type: string }
+      responses: { '200': { description: OK } }
+
+  /integrations/canonical/messages:
+    get:
+      tags: [Integrations]
+      summary: List canonical inbound messages
+      responses: { '200': { description: OK } }
+  /integrations/canonical/messages/{id}:
+    get:
+      tags: [Integrations]
+      summary: Get one canonical inbound message
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses: { '200': { description: OK } }
+  /integrations/canonical/messages/{id}/reprocess:
+    post:
+      tags: [Integrations]
+      summary: Reprocess a failed canonical message
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses: { '200': { description: OK } }
+
+  /integrations/mappings:
+    get:
+      tags: [Integrations]
+      summary: List external entity mappings
+      responses: { '200': { description: OK } }
+  /integrations/mappings/{id}:
+    patch:
+      tags: [Integrations]
+      summary: Update one mapping
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object }
+      responses: { '200': { description: OK } }
+
+  /integrations/settings:
+    get:
+      tags: [Integrations]
+      summary: Get integration runtime settings
+      responses: { '200': { description: OK } }
+    patch:
+      tags: [Integrations]
+      summary: Patch integration runtime settings
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object }
+      responses: { '200': { description: OK } }
+  /integrations/adapters/packages:
+    get:
+      tags: [Integrations]
+      summary: List DB-registered adapter packages plus filesystem scan of src/integrations/adapter-packages
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    description: Rows from adapter_packages (Sequelize)
+                  meta:
+                    type: object
+                    properties:
+                      localIntegrationPackages:
+                        type: array
+                        description: Scan of manifest.json + entrypoint under integrations/adapter-packages
+  /integrations/adapters/pipeline-log:
+    get:
+      tags: [Integrations]
+      summary: Read recent adapter pipeline log (NDJSON tail on server; optional adapterKey filter)
+      parameters:
+        - in: query
+          name: adapterKey
+          schema: { type: string }
+          description: Filter to one adapter key (omit for all adapters in tail window)
+        - in: query
+          name: limit
+          schema: { type: integer, default: 200, minimum: 1, maximum: 500 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    additionalProperties: true
+  /integrations/adapters/packages/reload:
+    post:
+      tags: [Integrations]
+      summary: Reload local adapter packages from filesystem
+      responses: { '200': { description: OK } }
+  /integrations/adapters/packages/{adapterKey}/health:
+    post:
+      tags: [Integrations]
+      summary: Run adapter runtime health check
+      parameters:
+        - in: path
+          name: adapterKey
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object }
+      responses: { '200': { description: OK } }
+
+  /integrations/output/encode:
+    post:
+      tags: [Integrations]
+      summary: Encode adapter observation for UNS JSON, Sparkplug JSON MVP, and/or canonical historian (no side effects)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [observation, context]
+              properties:
+                observation: { type: object, description: Normalized observation (domain, assetSlug, metric, value, …) }
+                context:
+                  type: object
+                  description: Non-empty parkSlug and/or sparkplugGroupId (UNS_JSON uses sparkplugGroupId first when set).
+                  properties:
+                    parkSlug: { type: string }
+                    sparkplugGroupId: { type: string }
+                profiles:
+                  type: array
+                  items: { type: string, enum: [uns_json, sparkplug_json, canonical_historian] }
+      responses: { '200': { description: OK } }
+
+  /integrations/output/emit:
+    post:
+      tags: [Integrations]
+      summary: Encode and optionally publish MQTT and/or ingest canonical messages (integrations manage)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [observation, context]
+              properties:
+                observation: { type: object }
+                context: { type: object }
+                profiles:
+                  type: array
+                  items: { type: string, enum: [uns_json, sparkplug_json, canonical_historian] }
+                emitMqtt: { type: boolean, default: false }
+                ingestCanonical: { type: boolean, default: false }
+                autoApply: { type: boolean, default: true }
+      responses: { '200': { description: OK } }
+
+  /integrations/adapters/demo/run:
+    post:
+      tags: [Integrations]
+      summary: Run the demo static adapter (poll, validate, encode, optional emit, adapter run log)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                config: { type: object }
+                context: { type: object, description: Merged with default parkSlug for encoders }
+                profiles:
+                  type: array
+                  items: { type: string, enum: [uns_json, sparkplug_json, canonical_historian] }
+                emitMqtt: { type: boolean, default: false }
+                ingestCanonical: { type: boolean, default: false }
+                autoApply: { type: boolean, default: true }
+      responses: { '200': { description: OK } }
+
+  /integrations/adapters/run-local:
+    post:
+      tags: [Integrations]
+      summary: Run any local adapter package poll() pipeline (validate, encode, optional emit, run log)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [adapterKey, context]
+              properties:
+                adapterKey: { type: string, example: demo_static_adapter }
+                mode: { type: string, enum: [poll], default: poll }
+                config: { type: object }
+                context:
+                  type: object
+                  description: >-
+                    At least one of parkSlug or sparkplugGroupId (non-empty). For UNS_JSON topics, sparkplugGroupId
+                    wins when set so TPUNS paths match Sparkplug group / UNS Live filter.
+                  properties:
+                    parkSlug: { type: string, example: europa_park }
+                    sparkplugGroupId: { type: string, example: europa_park }
+                    sparkplugEdgeNode: { type: string, example: weather_gateway }
+                profiles:
+                  type: array
+                  description: UNS_JSON / uns_json aliases accepted
+                  items:
+                    type: string
+                    enum:
+                      [
+                        uns_json,
+                        sparkplug_json,
+                        canonical_historian,
+                        UNS_JSON,
+                        SPARKPLUG_JSON,
+                        CANONICAL_HISTORIAN,
+                      ]
+                emit: { type: boolean, default: false, description: If true, MQTT publish + canonical ingest }
+                emitMqtt:
+                  type: boolean
+                  description: >-
+                    When sent together with optional ingestCanonical, overrides `emit` for MQTT only (e.g. weather UNS without canonical).
+                ingestCanonical:
+                  type: boolean
+                  description: When sent with emitMqtt (or alone), overrides `emit` for canonical ingest only.
+                autoApply: { type: boolean, default: true }
+      responses: { '200': { description: OK } }
+
+  /integrations/adapters/discover-local:
+    post:
+      tags: [Integrations]
+      summary: Run local adapter discover() (no observation encode/emit)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [adapterKey]
+              properties:
+                adapterKey: { type: string, example: demo_static_adapter }
+                config: { type: object }
+                context: { type: object }
+      responses: { '200': { description: OK } }
+
+  /integrations/adapters/health-local:
+    post:
+      tags: [Integrations]
+      summary: Run local adapter health() (read; no encode/emit/run log)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [adapterKey]
+              properties:
+                adapterKey: { type: string, example: demo_static_adapter }
+                config: { type: object }
+                context: { type: object }
+      responses: { '200': { description: OK } }
+
+  /integrations/installed-adapters:
+    get:
+      tags: [Integrations]
+      summary: List installed adapter packages (DB + scan); install config is hydrated from YAML per adapterKey
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeInstalledAdapterList'
+
+  /integrations/installed-adapters/install-local:
+    post:
+      tags: [Integrations]
+      summary: Install or upsert a local adapter package; writes install config to YAML (data/adapter-install-config)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InstallLocalAdapterRequest'
+      responses:
+        '201':
+          description: Created or updated (enriched adapter row)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeAdapterPackageOne'
+
+  /integrations/installed-adapters/{id}:
+    parameters:
+      - $ref: '#/components/parameters/InstalledAdapterIdPath'
+    get:
+      tags: [Integrations]
+      summary: Get one installed adapter (hydrated install from YAML or legacy DB)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeAdapterPackageOne'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Integrations]
+      summary: >-
+        Update install configuration YAML for this adapter (configJson, contextJson, outputProfiles, emitEnabled,
+        ingestCanonicalEnabled, scheduleCron). At least one body field required. Does not store install blob in DB.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchInstalledAdapterRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeAdapterPackageOne'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+    delete:
+      tags: [Integrations]
+      summary: Uninstall adapter — removes DB row and deletes YAML file data/adapter-install-config/{adapterKey}.install.yaml
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeAdapterUninstall'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /uns/parks/{parkId}/tree:
+    get:
+      tags: [UNS]
+      summary: Get UNS tree by park
+      parameters:
+        - in: path
+          name: parkId
+          required: true
+          schema: { type: string }
+      responses: { '200': { description: OK } }
+  /uns/parks/{parkId}/nodes:
+    post:
+      tags: [UNS]
+      summary: Create UNS node
+      parameters:
+        - in: path
+          name: parkId
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UnsNodeCreate' }
+      responses: { '201': { description: Created } }
+  /uns/nodes/{id}:
+    put:
+      tags: [UNS]
+      summary: Update UNS node
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UnsNodeUpdate' }
+      responses: { '200': { description: OK } }
+    delete:
+      tags: [UNS]
+      summary: Delete UNS node
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses: { '204': { description: No content } }
+  /uns/parks/{parkId}/latest-state:
+    get:
+      tags: [UNS]
+      summary: Get latest UNS topic values for park
+      parameters:
+        - in: path
+          name: parkId
+          required: true
+          schema: { type: string }
+      responses: { '200': { description: OK } }
+  /uns/parks/{parkId}/topics:
+    get:
+      tags: [UNS]
+      summary: List generated active UNS topics
+      parameters:
+        - in: path
+          name: parkId
+          required: true
+          schema: { type: string }
+      responses: { '200': { description: OK } }
+
+  /uns/parks/{parkId}/hierarchy-schema:
+    get:
+      tags: [UNS]
+      summary: Export UNS hierarchy schema JSON for a park
+      description: >-
+        Requires **integrations.read**. Returns a JSON document (not the usual `{ success, data }` envelope)
+        with `Content-Disposition: attachment` for download. Shape matches import body (`schemaVersion`, `kind`,
+        `roots`, etc.).
+      parameters:
+        - in: path
+          name: parkId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Hierarchy export JSON body
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UnsHierarchyExportDocument' }
+    put:
+      tags: [UNS]
+      summary: Import UNS hierarchy schema (merge or replace)
+      description: >-
+        Requires **integrations.manage**. Query **`mode`**: `merge` (default) or `replace` (destructive).
+        Body is a `smartpark.uns.hierarchy` document (`schemaVersion: 1`). Response uses the standard envelope
+        with a summary object (`created`, `updated`, `skippedLocked`, etc.).
+      parameters:
+        - in: path
+          name: parkId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: mode
+          schema: { type: string, enum: [merge, replace], default: merge }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UnsHierarchyImportBody' }
+      responses:
+        '200':
+          description: Import summary
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeUnsHierarchyImportSummary' }
+        '422':
+          description: Validation / document mismatch
+
+  /uns/parks/{parkId}/hierarchy-schema/preview:
+    post:
+      tags: [UNS]
+      summary: Dry-run hierarchy schema import
+      description: >-
+        Requires **integrations.read**. Same body and **`mode`** query as **PUT** `/uns/parks/{parkId}/hierarchy-schema`,
+        but simulates the import and returns preview data without persisting (except validation paths that fail early).
+      parameters:
+        - in: path
+          name: parkId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: mode
+          schema: { type: string, enum: [merge, replace], default: merge }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UnsHierarchyImportBody' }
+      responses:
+        '200':
+          description: Dry-run result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeUnsHierarchyImportSummary' }
+        '422':
+          description: Validation error
+
+  /uns/parks/{parkId}/mqtt-live/events:
+    get:
+      tags: [UNS]
+      summary: Sparkplug MQTT live buffer snapshot for UNS Live
+      description: >-
+        Requires **integrations.read**. In-memory broker-fed buffer only (not a DB query). Optional **`limit`**
+        query (1–2000, default 500). `parkId` path param is slugified for Sparkplug group id matching.
+      parameters:
+        - in: path
+          name: parkId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 2000, default: 500 }
+      responses:
+        '200':
+          description: Flattened Sparkplug rows
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeUnsMqttLiveEvents' }
+
+  /uns/parks/{parkId}/mqtt-live/status:
+    get:
+      tags: [UNS]
+      summary: MQTT connector state and live-buffer stats for admin
+      description: Requires **integrations.read**. Returns MQTT client state, buffer counters, and adapter simulation flag.
+      parameters:
+        - in: path
+          name: parkId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Status bundle
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeUnsMqttLiveStatus' }
+
+  /uns/parks/{parkId}/mqtt-live/test-event:
+    post:
+      tags: [UNS]
+      summary: Publish a synthetic canonical-derived Sparkplug test event
+      description: >-
+        Requires **integrations.manage**. Uses `canonicalToSparkplug` publisher; **503** `MQTT_UNAVAILABLE` when
+        publish fails or MQTT disabled.
+      parameters:
+        - in: path
+          name: parkId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Publish result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeUnsMqttLiveTestPublish' }
+        '503':
+          description: MQTT publish failed or disabled
+
+  /uns/test/publish:
+    post:
+      tags: [UNS]
+      summary: Publish UNS test message to MQTT
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [topic, payload]
+              properties:
+                topic: { type: string }
+                payload: { type: object }
+      responses: { '200': { description: OK } }
+
+  /uns-registry/mirror/summary:
+    get:
+      tags: [UNS]
+      summary: UNS registry mirror — aggregate counts (mirrored legacy projection)
+      description: >-
+        Requires **integrations.read**. Triggers stale sync from legacy platform tables when needed; returns
+        counts for mirrored registry entities, mappings, topics, metadata, signal catalog, ride capabilities, and
+        Sparkplug metric definitions.
+      responses:
+        '200':
+          description: Summary counts
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeUnsRegistryMirrorSummary' }
+
+  /uns-registry/entities:
+    get:
+      tags: [UNS]
+      summary: List mirrored UNS registry entities
+      description: Requires **integrations.read**. Optional filters **`parkId`**, **`entityKind`**, pagination.
+      parameters:
+        - in: query
+          name: parkId
+          schema: { type: string, format: uuid, nullable: true }
+        - in: query
+          name: entityKind
+          schema: { type: string, maxLength: 64 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - in: query
+          name: offset
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        '200':
+          description: Paged registry entity rows
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeUnsPagedObjects' }
+
+  /uns-registry/topics:
+    get:
+      tags: [UNS]
+      summary: List mirrored UNS registry topics
+      description: Requires **integrations.read**. Optional **`parkId`** filter and pagination.
+      parameters:
+        - in: query
+          name: parkId
+          schema: { type: string, format: uuid, nullable: true }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - in: query
+          name: offset
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        '200':
+          description: Paged topic rows
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeUnsPagedObjects' }
+
+  /uns-spy/events:
+    get:
+      tags: [UNS]
+      summary: List UNS Spy discovery events (MQTT observe + adapter discovery)
+      description: >-
+        Requires **integrations.read** OR **rides.read**. Optional `eventSource` filters rows:
+        `adapter` = `details.source=adapter` (ThemeParks discovery inbox); `mqtt` = other rows; `all` = default (no filter).
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - in: query
+          name: offset
+          schema: { type: integer, minimum: 0, default: 0 }
+        - in: query
+          name: classification
+          schema: { type: string, maxLength: 40 }
+        - in: query
+          name: topicPrefix
+          schema: { type: string, maxLength: 500 }
+        - in: query
+          name: eventSource
+          schema:
+            type: string
+            enum: [mqtt, adapter, all]
+            default: all
+      responses:
+        '200':
+          description: Paged discovery events
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeUnsSpyDiscoveryEvents' }
+              examples:
+                adapterFilter:
+                  summary: eventSource=adapter
+                  value:
+                    success: true
+                    data:
+                      total: 1
+                      limit: 50
+                      offset: 0
+                      items:
+                        - id: 00000000-0000-4000-8000-000000000001
+                          classification: NEW
+                          topicPath: smartpark/{parkId}/rides/ext-123/state
+                          details:
+                            source: adapter
+                            reviewStatus: PENDING
+                            externalEntityId: ext-123
+                          createdAt: '2026-05-01T12:00:00.000Z'
+                          updatedAt: '2026-05-01T12:00:00.000Z'
+        '401':
+          description: Missing or invalid JWT
+        '403':
+          description: Missing integrations.read and rides.read
+          content:
+            application/json:
+              examples:
+                forbidden:
+                  value:
+                    success: false
+                    message: Insufficient permissions
+                    code: FORBIDDEN
+
+  /uns-spy/proposals:
+    get:
+      tags: [UNS]
+      summary: List UNS topic proposals (UNS Spy observe pipeline)
+      description: >-
+        Requires **integrations.read** OR **rides.read**. Paged rows from `uns_topic_proposals`; optional **`status`**
+        filter.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - in: query
+          name: offset
+          schema: { type: integer, minimum: 0, default: 0 }
+        - in: query
+          name: status
+          schema: { type: string, maxLength: 40 }
+      responses:
+        '200':
+          description: Paged proposals
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeUnsPagedObjects' }
+        '401': { description: Missing or invalid JWT }
+        '403': { description: Missing integrations.read and rides.read }
+
+  /uns-spy/events/{id}/approve:
+    post:
+      tags: [UNS]
+      summary: Approve an adapter-sourced discovery event (map to existing ride asset)
+      description: >-
+        Requires **integrations.manage** OR **rides.update**. Phase 12: maps external entity to an existing
+        `park_assets` ride row via `external_entity_mappings`, updates event `details.reviewStatus=APPROVED`,
+        optionally applies ride template and prepares UNS registry topics (prepared/inactive only). Does **not**
+        create `uns_nodes` and does **not** publish MQTT from this handler.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UnsSpyDiscoveryApproveRequest' }
+      responses:
+        '200':
+          description: Approval result (mapped entity, optional template/prepare summary)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeUnsSpyDiscoveryApproveResult' }
+              examples:
+                approved:
+                  value:
+                    success: true
+                    data:
+                      eventId: 00000000-0000-4000-8000-000000000010
+                      mappedEntityId: 00000000-0000-4000-8000-000000000020
+                      templateApplied: false
+                      preparedUnsTopics:
+                        created: 0
+                        updated: 0
+        '401':
+          description: Missing or invalid JWT
+        '403':
+          description: Missing integrations.manage and rides.update
+        '404':
+          description: Discovery event or target ride asset not found
+        '409':
+          description: Event already approved (code `ALREADY_APPROVED`)
+          content:
+            application/json:
+              examples:
+                alreadyApproved:
+                  value:
+                    success: false
+                    message: Event already approved
+                    code: ALREADY_APPROVED
+        '422':
+          description: Validation error, not an adapter event (`NOT_ADAPTER_EVENT`), or unsupported body (`createEntity` not supported)
+          content:
+            application/json:
+              examples:
+                notAdapter:
+                  value:
+                    success: false
+                    message: Discovery event is not adapter-sourced
+                    code: NOT_ADAPTER_EVENT
+                joiMissingMap:
+                  value:
+                    success: false
+                    message: Validation failed
+                    code: VALIDATION_ERROR
+
+  /uns-spy/events/{id}/reject:
+    post:
+      tags: [UNS]
+      summary: Reject an adapter-sourced discovery event
+      description: Requires **integrations.manage** OR **rides.update**. Sets `details.reviewStatus=REJECTED`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeUnsSpyDiscoveryActionResult' }
+              examples:
+                rejected:
+                  value:
+                    success: true
+                    data:
+                      eventId: 00000000-0000-4000-8000-000000000002
+                      reviewStatus: REJECTED
+        '401': { description: Missing or invalid JWT }
+        '403': { description: Missing permission }
+        '404':
+          description: Event not found
+          content:
+            application/json:
+              examples:
+                notFound:
+                  value: { success: false, message: Discovery event not found, code: NOT_FOUND }
+        '422': { description: Not an adapter-sourced event }
+
+  /uns-spy/events/{id}/ignore:
+    post:
+      tags: [UNS]
+      summary: Ignore an adapter-sourced discovery event
+      description: Requires **integrations.manage** OR **rides.update**. Sets classification IGNORED and reviewStatus IGNORED.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeUnsSpyDiscoveryActionResult' }
+              examples:
+                ignored:
+                  value:
+                    success: true
+                    data:
+                      eventId: 00000000-0000-4000-8000-000000000003
+                      reviewStatus: IGNORED
+        '401': { description: Missing or invalid JWT }
+        '403': { description: Missing permission }
+        '404': { description: Event not found }
+        '422': { description: Not an adapter-sourced event }
+
+  /mdm/parks:
+    get:
+      tags: [MDM]
+      summary: List master-data parks
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeMdmParks' }
+    post:
+      tags: [MDM]
+      summary: Create park
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MdmParkCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeMdmParkOne' }
+
+  /mdm/parks/{parkId}/zones:
+    parameters:
+      - in: path
+        name: parkId
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [MDM]
+      summary: List zones in park
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeMdmZones' }
+    post:
+      tags: [MDM]
+      summary: Create zone
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MdmZoneCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeMdmZoneOne' }
+
+  /mdm/ride-types:
+    get:
+      tags: [MDM]
+      summary: List ride type catalog
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeMdmRideTypes' }
+
+  /mdm/ride-templates:
+    get:
+      tags: [MDM]
+      summary: List ride templates
+      parameters:
+        - in: query
+          name: rideTypeId
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeMdmRideTemplates' }
+    post:
+      tags: [MDM]
+      summary: Create ride template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MdmRideTemplateCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeMdmRideTemplateOne' }
+
+  /mdm/ride-templates/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    get:
+      tags: [MDM]
+      summary: Get template by id
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeMdmRideTemplateOne' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [MDM]
+      summary: Update template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MdmRideTemplateUpdate' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeMdmRideTemplateOne' }
+
+  /mdm/ride-templates/{templateId}/clone-ride:
+    post:
+      tags: [MDM]
+      summary: Create MDM ride from template (applies default profile)
+      parameters:
+        - in: path
+          name: templateId
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MdmCloneFromTemplateBody' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeMdmRideDetail' }
+
+  /mdm/rides:
+    get:
+      tags: [MDM]
+      summary: List MDM rides
+      parameters:
+        - in: query
+          name: parkId
+          schema: { type: string, format: uuid }
+        - in: query
+          name: parkZoneId
+          schema: { type: string, format: uuid }
+        - in: query
+          name: activeFlag
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeMdmRideList' }
+    post:
+      tags: [MDM]
+      summary: Create MDM ride
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MdmRideCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeMdmRideDetail' }
+
+  /mdm/rides/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    get:
+      tags: [MDM]
+      summary: Get MDM ride with extensions
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeMdmRideDetail' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [MDM]
+      summary: Update MDM ride
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MdmRideUpdate' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeMdmRideDetail' }
+
+  /mdm/rides/{id}/extensions:
+    get:
+      tags: [MDM]
+      summary: Read UNS signal extension metadata (read-only, Phase C)
+      description: Normalized domains, per-signal hints, and coarse capabilities from `mdm_rides.extensions`. Missing data returns empty structures.
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeRideMasterExtensionsRead' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [MDM]
+      summary: Patch UNS ride extensions metadata (Phase E)
+      description: Merged with `mergeExtensions`; persists `mdm_rides.extensions`. Requires `rides` update permission. Signal keys must be `domain.metric` with a supported domain; `replaceSignals` + `signals` replaces the whole signal map.
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RideMasterExtensionsPatch' }
+      responses:
+        '200':
+          description: OK — normalized read DTO
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeRideMasterExtensionsRead' }
+        '400':
+          description: Invalid body (unknown domains, invalid signal keys, or replaceSignals without signals)
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /mdm/rides/{id}/active:
+    patch:
+      tags: [MDM]
+      summary: Activate or deactivate ride
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [activeFlag]
+              properties:
+                activeFlag: { type: boolean }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeMdmRideDetail' }
+
+  /mdm/rides/{id}/capacity-model:
+    get:
+      tags: [MDM]
+      summary: Capacity model snapshot
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeMdmCapacityModel' }
+
+  /mdm/rides/{id}/staffing-model:
+    get:
+      tags: [MDM]
+      summary: Staffing model snapshot
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeMdmStaffingModel' }
+
+  /mdm/rides/{id}/zone:
+    patch:
+      tags: [MDM]
+      summary: Assign ride to park zone
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [parkZoneId]
+              properties:
+                parkZoneId: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeMdmRideDetail' }
+
+  /parks:
+    get:
+      tags: [Platform]
+      summary: Canonical parks (internal master data)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopePlatformParks' }
+
+  /parks/{parkId}/operational-context:
+    parameters:
+      - in: path
+        name: parkId
+        required: true
+        schema: { type: string, format: uuid }
+      - in: query
+        name: at
+        required: false
+        description: ISO-8601 instant for evaluation (defaults to now)
+        schema: { type: string, format: date-time }
+    get:
+      tags: [Platform]
+      summary: Park operational view (calendar, scheduled opening hours, latest feature snapshot)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    additionalProperties: true
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /parks/{parkId}/shift-handovers:
+    parameters:
+      - in: path
+        name: parkId
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Platform]
+      summary: List shift handover entries for a park
+      parameters:
+        - in: query
+          name: from
+          schema: { type: string, format: date-time }
+          description: Optional — filter entries overlapping this window (use with `to`)
+        - in: query
+          name: to
+          schema: { type: string, format: date-time }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 50 }
+      responses:
+        '200':
+          description: OK
+    post:
+      tags: [Platform]
+      summary: Create shift handover (optional downtime snapshot for window)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [windowFrom, windowTo]
+              properties:
+                windowFrom: { type: string, format: date-time }
+                windowTo: { type: string, format: date-time }
+                shiftLabel: { type: string, maxLength: 64 }
+                notes: { type: string }
+                includeDowntimeSnapshot: { type: boolean, default: true }
+                includeIncidentSnapshot: { type: boolean, default: true }
+      responses:
+        '201':
+          description: Created
+
+  /assets:
+    get:
+      tags: [Platform]
+      summary: List park assets (generic model)
+      parameters:
+        - in: query
+          name: parkId
+          schema: { type: string, format: uuid }
+        - in: query
+          name: assetTypeCode
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 500 }
+        - in: query
+          name: offset
+          schema: { type: integer, default: 0 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopePlatformAssets' }
+
+  /assets/oee/reason-codes:
+    get:
+      tags: [Platform]
+      summary: OEE MVP — downtime reason codes (planned vs unplanned via event flag)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        code: { type: string }
+                        labelDe: { type: string }
+
+  /assets/{assetId}/downtime-events:
+    parameters:
+      - in: path
+        name: assetId
+        required: true
+        schema: { type: string, format: uuid }
+      - in: query
+        name: from
+        required: true
+        schema: { type: string, format: date-time }
+      - in: query
+        name: to
+        required: true
+        schema: { type: string, format: date-time }
+      - in: query
+        name: limit
+        schema: { type: integer }
+    get:
+      tags: [Platform]
+      summary: List downtime events for an asset (OEE MVP)
+      responses:
+        '200':
+          description: OK
+    post:
+      tags: [Platform]
+      summary: Record a planned or unplanned downtime interval
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [startedAt, planned, reasonCode]
+              properties:
+                startedAt: { type: string, format: date-time }
+                endedAt: { type: string, format: date-time, nullable: true }
+                planned: { type: boolean }
+                reasonCode: { type: string }
+                notes: { type: string }
+      responses:
+        '201':
+          description: Created
+        '409':
+          description: Overlapping downtime
+
+  /assets/{assetId}/downtime-events/{eventId}:
+    parameters:
+      - in: path
+        name: assetId
+        required: true
+        schema: { type: string, format: uuid }
+      - in: path
+        name: eventId
+        required: true
+        schema: { type: string, format: uuid }
+    patch:
+      tags: [Platform]
+      summary: Update downtime event (times, planned, reason, notes; overlap-checked)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              properties:
+                startedAt: { type: string, format: date-time }
+                endedAt: { type: string, format: date-time, nullable: true }
+                planned: { type: boolean }
+                reasonCode: { type: string }
+                notes: { type: string, nullable: true }
+      responses:
+        '200':
+          description: OK
+        '409':
+          description: Overlapping downtime
+    delete:
+      tags: [Platform]
+      summary: Delete a downtime event
+      responses:
+        '204':
+          description: No content
+
+  /assets/{assetId}/oee/availability-summary:
+    parameters:
+      - in: path
+        name: assetId
+        required: true
+        schema: { type: string, format: uuid }
+      - in: query
+        name: from
+        required: true
+        schema: { type: string, format: date-time }
+      - in: query
+        name: to
+        required: true
+        schema: { type: string, format: date-time }
+    get:
+      tags: [Platform]
+      summary: MVP availability % vs window (excludes planned downtime from numerator penalty)
+      responses:
+        '200':
+          description: OK
+
+  /assets/{assetId}:
+    parameters:
+      - in: path
+        name: assetId
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Platform]
+      summary: Get asset with specializations
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopePlatformAssetOne' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /assets/{assetId}/extensions:
+    get:
+      tags: [Platform]
+      summary: Read UNS signal extension metadata for a platform asset (read-only, Phase C)
+      description: Data is read from `park_assets.master_profile.unsAssetExtensions`. Missing data returns empty structures.
+      parameters:
+        - in: path
+          name: assetId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeRideMasterExtensionsRead' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Platform]
+      summary: Patch UNS asset extensions metadata (Phase E)
+      description: Merged with `mergeExtensions`; persists under `master_profile.unsAssetExtensions`. Requires `rides` update permission.
+      parameters:
+        - in: path
+          name: assetId
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RideMasterExtensionsPatch' }
+      responses:
+        '200':
+          description: OK — normalized read DTO
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeRideMasterExtensionsRead' }
+        '400':
+          description: Invalid body
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /assets/{assetId}/ride-master:
+    parameters:
+      - in: path
+        name: assetId
+        required: true
+        schema: { type: string, format: uuid }
+    put:
+      tags: [Platform]
+      summary: Update ride master data row
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RideMasterDataPatch' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopePlatformAssetOne' }
+
+  /assets/{assetId}/runtime-overrides:
+    parameters:
+      - in: path
+        name: assetId
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Platform]
+      summary: List temporary runtime overrides for an asset
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeAssetRuntimeOverrides' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Platform]
+      summary: Create a runtime override (e.g. reduced trains, cancelled show)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AssetRuntimeOverrideCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeAssetRuntimeOverrideOne' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /assets/{assetId}/runtime-overrides/{overrideId}:
+    parameters:
+      - in: path
+        name: assetId
+        required: true
+        schema: { type: string, format: uuid }
+      - in: path
+        name: overrideId
+        required: true
+        schema: { type: string, format: uuid }
+    patch:
+      tags: [Platform]
+      summary: Update or deactivate a runtime override
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AssetRuntimeOverridePatch' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeAssetRuntimeOverrideOne' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /park-rides:
+    get:
+      tags: [Platform]
+      summary: Ride assets with ride_master_data (enterprise catalog)
+      parameters:
+        - in: query
+          name: parkId
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopePlatformAssets' }
+
+  /observations/live:
+    get:
+      tags: [Platform]
+      summary: Recent live observations (queue, status, …)
+      parameters:
+        - in: query
+          name: parkId
+          schema: { type: string, format: uuid }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 200 }
+        - in: query
+          name: metricCode
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopePlatformObservations' }
+
+  /sync/themeparks/from-settings:
+    post:
+      tags: [Platform]
+      summary: Sync platform master data from Integration settings
+      description: >-
+        Uses the ThemeParks.wiki park saved under Integration settings (`externalParkData.selectedPark`).
+        No park UUID in the request body or path — same source as "Save selection" / Sync entities in the admin UI.
+      responses:
+        '200':
+          description: Sync summary (includes externalParkId used)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeThemeParksSyncResult' }
+        '422':
+          description: No ThemeParks park selected in settings
+
+  /sync/themeparks/discovery/from-settings:
+    post:
+      tags: [Platform]
+      summary: Re-scan ThemeParks-linked park_assets into UNS Spy adapter discovery inbox
+      description: >-
+        Idempotent discovery scan: creates/updates `uns_discovery_events` rows with `details.source=adapter` for
+        assets linked to THEMEPARKS_WIKI. Does **not** run a ThemeParks API sync, does **not** write `uns_nodes`,
+        does **not** publish MQTT. Gated by env `ADAPTER_DISCOVERY_SPY_ENABLED=true`.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Scan summary (`created`, `updated`, `items`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeAdapterDiscoveryScanResult' }
+              examples:
+                scanOk:
+                  value:
+                    success: true
+                    data:
+                      created: 2
+                      updated: 1
+                      skipped: false
+                      items: []
+        '401':
+          description: Missing or invalid JWT
+        '403':
+          description: Missing integrations.manage **or** ADAPTER_DISCOVERY_SPY_ENABLED=false (feature disabled)
+          content:
+            application/json:
+              examples:
+                featureOff:
+                  value:
+                    success: false
+                    message: Adapter discovery is disabled (ADAPTER_DISCOVERY_SPY_ENABLED=false)
+                    code: FEATURE_DISABLED
+        '404':
+          description: Internal park not found for selected ThemeParks park (run full sync first)
+        '422':
+          description: No ThemeParks park selected in Integration settings
+
+  /sync/themeparks/{parkId}:
+    post:
+      tags: [Platform]
+      summary: Sync ThemeParks.wiki entities + live queue into canonical platform (explicit UUID)
+      description: parkId is the ThemeParks.wiki park entity UUID (external), not the internal parks.id.
+      parameters:
+        - in: path
+          name: parkId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Sync summary
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeThemeParksSyncResult' }
+
+  /templates/ride:
+    get:
+      tags: [Platform]
+      summary: List ride templates
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeRideTemplates' }
+
+  /templates/staffing:
+    get:
+      tags: [Platform]
+      summary: List staffing templates
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeStaffingTemplates' }
+
+  /templates/maintenance:
+    get:
+      tags: [Platform]
+      summary: List maintenance templates
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeMaintenanceTemplates' }
+
+  /operations-facts/parks/{parkId}:
+    parameters:
+      - in: path
+        name: parkId
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Operations]
+      summary: Operations facts for all ride assets in the park
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+
+  /operations-facts/parks/{parkId}/zones/{zoneId}:
+    parameters:
+      - in: path
+        name: parkId
+        required: true
+        schema: { type: string, format: uuid }
+      - in: path
+        name: zoneId
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Operations]
+      summary: Operations facts for ride assets in a zone
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+
+  /operations-facts/parks/{parkId}/rides/{rideId}:
+    parameters:
+      - in: path
+        name: parkId
+        required: true
+        schema: { type: string, format: uuid }
+      - in: path
+        name: rideId
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Operations]
+      summary: Operations facts for one ride asset
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /sqdc/parks/{parkId}/board:
+    parameters:
+      - in: path
+        name: parkId
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [SQDC]
+      summary: Hierarchical SQDC board (park)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+
+  /sqdc/parks/{parkId}/assets/{assetId}/board:
+    parameters:
+      - in: path
+        name: parkId
+        required: true
+        schema: { type: string, format: uuid }
+      - in: path
+        name: assetId
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [SQDC]
+      summary: Hierarchical SQDC board (asset)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+
+  /sqdc/board:
+    get:
+      tags: [SQDC]
+      summary: SQDC board
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+
+  /sqdc/history:
+    get:
+      tags: [SQDC]
+      summary: SQDC history
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+
+  /sqdc/mood:
+    post:
+      tags: [SQDC]
+      summary: Submit SQDC mood
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+
+  /sqdc/safety-events:
+    post:
+      tags: [SQDC]
+      summary: Submit SQDC safety event
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+
+  /sqdc/snapshots:
+    post:
+      tags: [SQDC]
+      summary: Submit SQDC snapshot
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+
+  /sqdc/events:
+    post:
+      tags: [SQDC]
+      summary: Submit SQDC event
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+
+  /sqdc/mood-feedback:
+    post:
+      tags: [SQDC]
+      summary: Submit SQDC mood feedback
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+
+  /sqdc/daily-snapshots:
+    post:
+      tags: [SQDC]
+      summary: Submit SQDC daily snapshot
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+
+  /incidents:
+    get:
+      tags: [Incidents]
+      summary: List incidents
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+    post:
+      tags: [Incidents]
+      summary: Create incident
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+
+  /incidents/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Incidents]
+      summary: Get incident
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+    patch:
+      tags: [Incidents]
+      summary: Patch incident
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+    delete:
+      tags: [Incidents]
+      summary: Delete incident
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+
+  /admin/platform-settings:
+    get:
+      tags: [Admin]
+      summary: List platform settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+
+  /admin/platform-settings/{settingKey}:
+    parameters:
+      - in: path
+        name: settingKey
+        required: true
+        schema: { type: string }
+    patch:
+      tags: [Admin]
+      summary: Patch platform setting
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+
+  /visit-plans:
+    get:
+      tags: [VisitPlanning]
+      summary: List visit plans
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+    post:
+      tags: [VisitPlanning]
+      summary: Create visit plan
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+
+  /visit-plans/{id}/export/xlsx:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [VisitPlanning]
+      summary: Export visit plan XLSX
+      responses:
+        '200':
+          description: OK
+
+  /visit-plans/{id}/import/xlsx:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [VisitPlanning]
+      summary: Import visit plan XLSX
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+
+  /visit-plans/{id}/forecast:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [VisitPlanning]
+      summary: Forecast visit plan
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+
+  /visit-plans/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [VisitPlanning]
+      summary: Get visit plan
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+    patch:
+      tags: [VisitPlanning]
+      summary: Patch visit plan
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+    delete:
+      tags: [VisitPlanning]
+      summary: Delete visit plan
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+
+  /visit-actuals/{actualYear}:
+    parameters:
+      - in: path
+        name: actualYear
+        required: true
+        schema: { type: integer }
+    get:
+      tags: [VisitPlanning]
+      summary: Get visit actuals
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+    put:
+      tags: [VisitPlanning]
+      summary: Put visit actuals
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+
+  /adapters/health:
+    get:
+      tags: [OperationsAdapters]
+      summary: Adapter ops health
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+
+  /adapters/dashboard:
+    get:
+      tags: [OperationsAdapters]
+      summary: Adapter ops dashboard
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+
+  /adapters/runs:
+    get:
+      tags: [OperationsAdapters]
+      summary: Adapter runs
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+
+  /adapters/{adapterKey}/status:
+    parameters:
+      - in: path
+        name: adapterKey
+        required: true
+        schema: { type: string }
+    get:
+      tags: [OperationsAdapters]
+      summary: Adapter status
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+
+  /adapters/{adapterKey}/run-now:
+    parameters:
+      - in: path
+        name: adapterKey
+        required: true
+        schema: { type: string }
+    post:
+      tags: [OperationsAdapters]
+      summary: Run adapter now
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+
+  /adapters/{adapterKey}/pause:
+    parameters:
+      - in: path
+        name: adapterKey
+        required: true
+        schema: { type: string }
+    post:
+      tags: [OperationsAdapters]
+      summary: Pause adapter
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+
+  /adapters/{adapterKey}/activate:
+    parameters:
+      - in: path
+        name: adapterKey
+        required: true
+        schema: { type: string }
+    post:
+      tags: [OperationsAdapters]
+      summary: Activate adapter
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+
+  /adapters/{adapterKey}/disable:
+    parameters:
+      - in: path
+        name: adapterKey
+        required: true
+        schema: { type: string }
+    post:
+      tags: [OperationsAdapters]
+      summary: Disable adapter
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvelopeGenericData' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    IdPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    InstalledAdapterIdPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Adapter package UUID or adapterKey (slug)
+
+  responses:
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorBody'
+
+  schemas:
+    MqttStatus:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        connected: { type: boolean }
+        lastError: { type: string, nullable: true }
+        broker: { type: string, nullable: true }
+        clientId: { type: string }
+        topics: { type: array, items: { type: string } }
+    WeatherCreate:
+      type: object
+      required: [condition]
+      properties:
+        condition: { type: string }
+        temperatureC: { type: number, nullable: true }
+        rainMm: { type: number, nullable: true }
+        windKmh: { type: number, nullable: true }
+        source: { type: string }
+        parkId: { type: string }
+        observedAt: { type: string, format: date-time }
+        timestamp: { type: string, format: date-time }
+    ErrorBody:
+      type: object
+      properties:
+        success: { type: boolean, example: false }
+        message: { type: string }
+        code: { type: string }
+        requestId: { type: string }
+        details: {}
+    HealthResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            status: { type: string }
+            service: { type: string }
+            timestamp: { type: string, format: date-time }
+            version: { type: string, description: Semver from root package.json }
+            apiVersion: { type: string, example: v1, description: URL-mounted API generation }
+            gitCommit:
+              { type: string, nullable: true, description: Present when GIT_COMMIT or SOURCE_COMMIT is set at runtime }
+    HealthDbResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            status: { type: string }
+            database: { type: string }
+            latencyMs: { type: integer }
+    HealthReadyResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            status: { type: string, example: ready }
+            database: { type: string, example: connected }
+            latencyMs: { type: integer }
+            version: { type: string }
+            apiVersion: { type: string }
+    HealthReadyFailureResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: false }
+        data:
+          type: object
+          properties:
+            status: { type: string, example: not_ready }
+            database: { type: string, example: unavailable }
+            version: { type: string }
+            apiVersion: { type: string }
+    EnvelopeGenericData:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { type: object, additionalProperties: true }
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8 }
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string }
+    LogoutRequest:
+      type: object
+      properties:
+        refreshToken: { type: string }
+    AuthTokensResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            accessToken: { type: string }
+            refreshToken: { type: string }
+            expiresIn: { type: string }
+            user:
+              $ref: '#/components/schemas/UserPublic'
+    UserPublic:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string }
+        firstName: { type: string }
+        lastName: { type: string }
+        role:
+          type: string
+          enum: [ADMIN, OPERATIONS_MANAGER, SECURITY_MANAGER, OPERATOR, VIEWER]
+        active: { type: boolean }
+        lastLoginAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    Zone:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        type: { type: string }
+        currentCrowdLevel: { type: integer }
+        forecastCrowdLevel: { type: integer }
+        maxCapacity: { type: integer }
+        status:
+          type: string
+          enum: [ACTIVE, LIMITED, CLOSED, EVACUATION]
+        adjacentZoneIds:
+          type: array
+          items: { type: string, format: uuid }
+        rides:
+          type: array
+          items:
+            $ref: '#/components/schemas/Ride'
+        staffMembers:
+          type: array
+          items:
+            $ref: '#/components/schemas/Staff'
+
+    ZoneCreate:
+      type: object
+      required: [name, type, maxCapacity]
+      properties:
+        name: { type: string }
+        type: { type: string }
+        currentCrowdLevel: { type: integer }
+        forecastCrowdLevel: { type: integer }
+        maxCapacity: { type: integer }
+        status:
+          type: string
+          enum: [ACTIVE, LIMITED, CLOSED, EVACUATION]
+        adjacentZoneIds:
+          type: array
+          items: { type: string, format: uuid }
+
+    ZoneUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        type: { type: string }
+        currentCrowdLevel: { type: integer }
+        forecastCrowdLevel: { type: integer }
+        maxCapacity: { type: integer }
+        status:
+          type: string
+          enum: [ACTIVE, LIMITED, CLOSED, EVACUATION]
+        adjacentZoneIds:
+          type: array
+          items: { type: string, format: uuid }
+
+    Ride:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        zoneId: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [OPEN, CLOSED, MAINTENANCE]
+        waitTime: { type: integer }
+        capacityPerHour: { type: integer }
+        criticality: { type: integer }
+
+    RideCreate:
+      type: object
+      required: [name, zoneId]
+      properties:
+        name: { type: string }
+        zoneId: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [OPEN, CLOSED, MAINTENANCE]
+        waitTime: { type: integer }
+        capacityPerHour: { type: integer }
+        criticality: { type: integer }
+
+    RideUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        zoneId: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [OPEN, CLOSED, MAINTENANCE]
+        waitTime: { type: integer }
+        capacityPerHour: { type: integer }
+        criticality: { type: integer }
+
+    Staff:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        firstName: { type: string }
+        lastName: { type: string }
+        role:
+          type: string
+          enum: [FOOD_SERVICE, RIDE_OPERATOR, CLEANING, SECURITY, GUEST_SERVICE]
+        currentZoneId: { type: string, format: uuid, nullable: true }
+        available: { type: boolean }
+        skillLevel: { type: integer }
+
+    StaffCreate:
+      type: object
+      required: [firstName, lastName, role]
+      properties:
+        firstName: { type: string }
+        lastName: { type: string }
+        role:
+          type: string
+          enum: [FOOD_SERVICE, RIDE_OPERATOR, CLEANING, SECURITY, GUEST_SERVICE]
+        currentZoneId: { type: string, format: uuid }
+        available: { type: boolean }
+        skillLevel: { type: integer }
+
+    StaffUpdate:
+      type: object
+      properties:
+        firstName: { type: string }
+        lastName: { type: string }
+        role:
+          type: string
+          enum: [FOOD_SERVICE, RIDE_OPERATOR, CLEANING, SECURITY, GUEST_SERVICE]
+        currentZoneId: { type: string, format: uuid, nullable: true }
+        available: { type: boolean }
+        skillLevel: { type: integer }
+
+    CrowdEvent:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        zoneId: { type: string, format: uuid }
+        eventType:
+          type: string
+          enum: [CROWD_SPIKE, CROWD_DROP, RIDE_CLOSURE, WEATHER_IMPACT]
+        crowdLevel: { type: integer }
+        severity: { type: integer }
+        source: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    CrowdEventCreate:
+      type: object
+      required: [zoneId, eventType, crowdLevel]
+      properties:
+        zoneId: { type: string, format: uuid }
+        eventType:
+          type: string
+          enum: [CROWD_SPIKE, CROWD_DROP, RIDE_CLOSURE, WEATHER_IMPACT]
+        crowdLevel: { type: integer }
+        severity: { type: integer }
+        source: { type: string }
+        syncZone: { type: boolean, default: true }
+        weatherCondition: { type: string, description: 'For WEATHER_IMPACT' }
+
+    Recommendation:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        eventId: { type: string, format: uuid }
+        recommendationType:
+          type: string
+          enum:
+            - REALLOCATE_STAFF
+            - OPEN_SERVICE_POINT
+            - SEND_SECURITY
+            - CLEANING_SUPPORT
+            - GUEST_ROUTING
+        priority:
+          type: string
+          enum: [LOW, MEDIUM, HIGH, CRITICAL]
+        message: { type: string }
+        status:
+          type: string
+          enum: [OPEN, ACCEPTED, REJECTED, COMPLETED]
+
+    DashboardSummary:
+      type: object
+      properties:
+        generatedAt: { type: string, format: date-time }
+        zones:
+          type: object
+          properties:
+            total: { type: integer }
+            nearCapacityCount: { type: integer }
+        rides:
+          type: object
+          properties:
+            total: { type: integer }
+            open: { type: integer }
+        staff:
+          type: object
+          properties:
+            total: { type: integer }
+            available: { type: integer }
+        recommendations:
+          type: object
+          properties:
+            open: { type: integer }
+            openByPriority:
+              type: object
+              additionalProperties: { type: integer }
+        events:
+          type: object
+          properties:
+            last24Hours: { type: integer }
+            recentSample:
+              type: array
+              items:
+                $ref: '#/components/schemas/CrowdEvent'
+
+    EnvelopeAiHealth:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            status: { type: string, example: ok }
+            sampling:
+              type: object
+              properties:
+                enabled: { type: boolean }
+                intervalSeconds: { type: integer }
+            modelName: { type: string }
+
+    EnvelopeAiRefresh:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            sampledZones: { type: integer }
+            forecastsCreated: { type: integer }
+            recommendationsScored: { type: integer, description: OPEN recommendations rescored after forecast }
+            generatedAt: { type: string, format: date-time }
+
+    EnvelopeForecasts:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Forecast' }
+
+    Forecast:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        subjectType: { type: string, enum: [PARK, ZONE, RIDE] }
+        subjectId: { type: string, format: uuid, nullable: true }
+        targetMetric: { type: string, enum: [CROWD_LEVEL, WAIT_TIME, STAFF_DEMAND] }
+        horizonMinutes: { type: integer }
+        predictedValue: { type: number }
+        confidence: { type: number, nullable: true }
+        predictionBand: { type: object, nullable: true }
+        modelVersionId: { type: string, format: uuid, nullable: true }
+        features: { type: object, nullable: true }
+        producedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        zoneName: { type: string, nullable: true }
+
+    EnvelopeAiInsights:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            topHotspotZones:
+              type: array
+              items:
+                type: object
+                properties:
+                  zoneId: { type: string, format: uuid }
+                  zoneName: { type: string }
+                  maxCapacity: { type: integer }
+                  predictedCrowdLevel: { type: number }
+                  crowdRatio: { type: number }
+                  confidence: { type: number, nullable: true }
+            highestPredictedCrowdRatio: { type: number }
+            forecastHorizonMinutes: { type: integer, example: 60 }
+            averageConfidence: { type: number, nullable: true }
+            confidence: { type: number, nullable: true, description: "Alias of averageConfidence for top hotspot rows" }
+            generatedAt: { type: string, format: date-time }
+
+    MlFactorCurrentResolution:
+      type: object
+      description: >
+        One dynamic L1 factor after mergeMlEnterpriseLayer. JSON responses strip internal `meta`
+        (e.g. rain mm used for bump magnitude); clients must not expect `meta`.
+      properties:
+        current: { type: number, description: Effective multiplier [0, 1.5] after priority chain }
+        currentSource:
+          type: string
+          description: API, CALCULATED, L1_CURRENT, L1_DEFAULT, or L2_* (park row override)
+        calculatedCurrent: { type: number, nullable: true }
+        manualCurrentOverride: { type: number, nullable: true }
+        l1ApiCurrent: { type: number, nullable: true }
+
+    ParkForecastSummary:
+      type: object
+      additionalProperties: true
+      description: AI park/entity forecast summary (`data` in envelope). Fields are additive across versions.
+      properties:
+        externalParkId: { type: string }
+        externalEntityId: { type: string, nullable: true }
+        provider: { type: string }
+        asOf: { type: string, nullable: true, format: date-time }
+        crowdLevelPercent: { type: number, nullable: true }
+        currentAvgWaitMinutes: { type: number, nullable: true }
+        forecast15Minutes: { type: number, nullable: true }
+        forecast60Minutes: { type: number, nullable: true }
+        trend: { type: string }
+        confidence: { type: number }
+        forecastSource: { type: string, nullable: true }
+        topInfluencingFactors:
+          type: array
+          items: { type: object, additionalProperties: true }
+        mlFactorCurrents:
+          type: object
+          description: Map factor_code → resolution; always present (may be empty object)
+          additionalProperties:
+            $ref: '#/components/schemas/MlFactorCurrentResolution'
+        factors:
+          type: array
+          items: { type: object, additionalProperties: true }
+        model:
+          type: object
+          additionalProperties: true
+        degraded: { type: boolean }
+        basis: { type: string }
+
+    EnvelopeParkForecastSummary:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          $ref: '#/components/schemas/ParkForecastSummary'
+
+    EnvelopeParkForecastSummaryList:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ParkForecastSummary'
+
+    RecommendationScore:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        recommendationId: { type: string, format: uuid }
+        score: { type: number }
+        urgency: { type: string, enum: [LOW, MEDIUM, HIGH, CRITICAL] }
+        impact: { type: string, enum: [LOW, MEDIUM, HIGH, CRITICAL] }
+        confidence: { type: number }
+        expectedBenefit: { type: object, nullable: true }
+        explanation:
+          type: object
+          properties:
+            summary: { type: string }
+            reasons:
+              type: array
+              items: { type: string }
+        factors: { type: object }
+        modelVersionId: { type: string, format: uuid, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    EnvelopeRecommendationsScored:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: array
+          items:
+            allOf:
+              - $ref: '#/components/schemas/Recommendation'
+              - type: object
+                properties:
+                  score:
+                    $ref: '#/components/schemas/RecommendationScore'
+
+    EnvelopeRecommendationScoringSummary:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            topRiskyRecommendations:
+              type: array
+              items:
+                type: object
+                properties:
+                  recommendation: { $ref: '#/components/schemas/Recommendation' }
+                  score: { $ref: '#/components/schemas/RecommendationScore' }
+            criticalRecommendationsCount: { type: integer }
+            averageConfidence: { type: number, nullable: true }
+            generatedAt: { type: string, format: date-time }
+
+    EnvelopeScoreAllResult:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            scored: { type: integer }
+
+    EnvelopeScoreOneResult:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            recommendation: { $ref: '#/components/schemas/Recommendation' }
+            score: { $ref: '#/components/schemas/RecommendationScore' }
+
+    EnvelopeRecommendationExplanation:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            recommendationId: { type: string, format: uuid }
+            explanation: { type: object }
+            factors: { type: object }
+            score: { type: number }
+            urgency: { type: string }
+            impact: { type: string }
+            confidence: { type: number }
+            expectedBenefit: { type: object, nullable: true }
+
+    EnvelopeMlRidePredict:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          additionalProperties: true
+
+    EnvelopeMlParkForecastSummary:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          additionalProperties: true
+
+    EnvelopeMlRideDataset:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          additionalProperties: true
+
+    EnvelopeMlTrainResult:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          additionalProperties: true
+
+    EnvelopeMlTrainRideResult:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          additionalProperties: true
+
+    AiStudioFeatureDraft:
+      type: object
+      required: [entityType, entityId, datasetScope, selectedSignalKeys]
+      properties:
+        entityType: { type: string, enum: [ride, park_asset] }
+        entityId: { type: string, format: uuid }
+        datasetScope: { type: string, enum: [single_asset] }
+        selectedSignalKeys:
+          type: array
+          items: { type: string }
+        updatedAt: { type: string, format: date-time, nullable: true }
+    AiStudioFeatureDraftPut:
+      type: object
+      required: [entityType, entityId]
+      properties:
+        entityType: { type: string, enum: [ride, park_asset] }
+        entityId: { type: string, format: uuid }
+        datasetScope: { type: string, enum: [single_asset], default: single_asset }
+        selectedSignalKeys:
+          type: array
+          items: { type: string }
+          default: []
+    EnvelopeAiStudioFeatureDraft:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          $ref: '#/components/schemas/AiStudioFeatureDraft'
+    EnvelopeAiStudioFeatureDraftNullable:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          description: Persisted draft or null when none saved
+          nullable: true
+          type: object
+          additionalProperties: true
+
+    EnvelopeAddonBoardParkSummary:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          additionalProperties: true
+
+    EnvelopeAddonBoardRides:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          additionalProperties: true
+
+    EnvelopeAddonBoardZone:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          additionalProperties: true
+
+    EnvelopeAddonBoardRideDetail:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          additionalProperties: true
+
+    EnvelopeAddonBoardZoneList:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          additionalProperties: true
+
+    EnvelopeAddonBoardHeatmap:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          additionalProperties: true
+
+    EnvelopeAddonBoardTemplatesIndex:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          additionalProperties: true
+
+    EnvelopeAddonBoardTemplateDoc:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          additionalProperties: true
+
+    EnvelopeAddonBoardLayout:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          additionalProperties: true
+
+    AddonBoardWidgetSourceDraft:
+      type: object
+      required: [sourceType, entityType, entityId, signalKey]
+      properties:
+        sourceType:
+          type: string
+          enum: [SIGNAL_METADATA]
+        entityType:
+          type: string
+          enum: [park_asset]
+        entityId: { type: string, format: uuid }
+        signalKey:
+          type: string
+          description: 'Must match `domain.metric` with a supported domain; must be enabled and board-eligible on the asset.'
+
+    AddonBoardWidgetSourceResolved:
+      type: object
+      required: [valid, domain, metric, enabled, boardEligible]
+      properties:
+        valid:
+          type: boolean
+          description: True when current extensions still mark the signal enabled and board-eligible.
+        domain: { type: string }
+        metric: { type: string }
+        enabled: { type: boolean }
+        boardEligible: { type: boolean }
+
+    SignalRuntimePreview:
+      type: object
+      description: |
+        Unified read-only signal preview (consolidation phase). Normalized metadata + eligibility + `status` + optional
+        `latestValue` from the same persistence layers as Phase I (`uns_latest_states`, canonical inbound, ride feature snapshot).
+        Additive on Add-on Board APIs; not a KPI engine, not ML training routing, not browser MQTT.
+      required: [signalKey, domain, metric, eligibility, status, latestValue]
+      properties:
+        signalKey: { type: string }
+        domain: { type: string }
+        metric: { type: string }
+        entityType: { type: string, description: Resolver input echo (e.g. `park_asset`). }
+        entityId: { type: string, format: uuid }
+        eligibility:
+          type: object
+          required: [enabled, boardEligible, mlEligible]
+          properties:
+            enabled: { type: boolean }
+            boardEligible: { type: boolean }
+            mlEligible: { type: boolean }
+        status:
+          type: string
+          enum:
+            - valid
+            - disabled
+            - missing_signal
+            - not_board_eligible
+            - not_ml_eligible
+            - entity_mismatch
+            - no_live_value
+        latestValue:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/AddonBoardWidgetSourceLatestValue'
+
+    AddonBoardWidgetSourceLatestValue:
+      type: object
+      required: [value, unit, ts, quality, source]
+      description: |
+        Read-only live scalar preview for a valid widget source draft (Phase I). Not used for Add-on Board KPI computation.
+      properties:
+        value:
+          nullable: true
+          description: Latest known value (number, string, boolean, or JSON-serializable object).
+        unit:
+          type: string
+          nullable: true
+        ts:
+          type: string
+          format: date-time
+          description: Event or observation time for the chosen source layer.
+        quality:
+          type: string
+          description: Data quality hint (e.g. GOOD, ESTIMATED).
+        source:
+          type: string
+          description: |
+            Resolution layer, e.g. `uns_live_state` (from `uns_latest_states`), `canonical_inbound`, `ride_feature_snapshot`.
+
+    AddonBoardWidgetSourcePreview:
+      type: object
+      required: [draft, resolved, latestValue]
+      properties:
+        draft:
+          $ref: '#/components/schemas/AddonBoardWidgetSourceDraft'
+        resolved:
+          $ref: '#/components/schemas/AddonBoardWidgetSourceResolved'
+        latestValue:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/AddonBoardWidgetSourceLatestValue'
+          description: |
+            Present only when `resolved.valid` is true; `null` when no matching persisted value. When `resolved.valid`
+            is false, the field is `null` and no live lookup is performed.
+        signalPreview:
+          allOf:
+            - $ref: '#/components/schemas/SignalRuntimePreview'
+          description: |
+            Optional normalized preview (`status`, `eligibility`, echo fields). Same latest-value chain as `latestValue`;
+            clients may ignore this field; `resolved` / `latestValue` remain the stable contract.
+
+    EnvelopeAddonBoardWidgetSourceDraft:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          $ref: '#/components/schemas/AddonBoardWidgetSourceDraft'
+
+    EnvelopeAddonBoardWidgetSourceDraftNullable:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          nullable: true
+          description: Null when no draft; otherwise draft plus resolved preview for L3 UI.
+          allOf:
+            - $ref: '#/components/schemas/AddonBoardWidgetSourcePreview'
+
+    AddonBoardRideCustomWidgetSource:
+      type: object
+      required: [sourceType, entityType, entityId, signalKey]
+      properties:
+        sourceType:
+          type: string
+          enum: [SIGNAL_METADATA]
+        entityType:
+          type: string
+          enum: [park_asset]
+        entityId: { type: string, format: uuid }
+        signalKey: { type: string }
+
+    AddonBoardRideCustomWidgetDisplay:
+      type: object
+      required: [type, unitMode, refreshMode]
+      properties:
+        type:
+          type: string
+          enum: [latest_value]
+        unitMode:
+          type: string
+          enum: [fromSource]
+        refreshMode:
+          type: string
+          enum: [manual_or_existing_board_refresh]
+
+    AddonBoardCustomWidgetPatch:
+      type: object
+      description: At least one property required. `source` / `display` are not accepted in this phase.
+      minProperties: 1
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        enabled:
+          type: boolean
+
+    AddonBoardRideCustomWidget:
+      type: object
+      required: [widgetId, title, source, display, enabled]
+      properties:
+        widgetId:
+          type: string
+          description: Stable id derived from signal key (e.g. `signal_queue_wait_time_min`).
+        title: { type: string }
+        source:
+          $ref: '#/components/schemas/AddonBoardRideCustomWidgetSource'
+        display:
+          $ref: '#/components/schemas/AddonBoardRideCustomWidgetDisplay'
+        enabled: { type: boolean }
+        resolved:
+          nullable: true
+          description: |
+            Phase K — set when the widget is enabled, `SIGNAL_METADATA`, and `display.type` is `latest_value`;
+            otherwise `null`. Reflects **current** extensions vs `source.signalKey` (same as draft preview).
+          allOf:
+            - $ref: '#/components/schemas/AddonBoardWidgetSourceResolved'
+        latestValue:
+          nullable: true
+          description: |
+            Phase K — read-only scalar when `resolved.valid` is true; `null` when invalid, no row, or lookup failure.
+          allOf:
+            - $ref: '#/components/schemas/AddonBoardWidgetSourceLatestValue'
+        sourceEntityMismatch:
+          type: boolean
+          description: True when persisted `source.entityId` ≠ path `rideId` (no live lookup).
+        health:
+          type: string
+          enum: [ok, invalid_source, disabled, no_live_value, entity_mismatch]
+          description: |
+            Phase M — derived from `enabled`, `sourceEntityMismatch`, `resolved.valid`, and `latestValue` presence;
+            no additional persistence or KPI logic.
+        signalPreview:
+          allOf:
+            - $ref: '#/components/schemas/SignalRuntimePreview'
+          description: Optional normalized preview for the widget source signal (additive; UI may ignore).
+
+    EnvelopeAddonBoardCustomWidgets:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          required: [widgets]
+          properties:
+            widgets:
+              type: array
+              items:
+                $ref: '#/components/schemas/AddonBoardRideCustomWidget'
+
+    EnvelopeAddonBoardPromotedWidget:
+      type: object
+      description: |
+        Used for **POST** `.../widgets/from-source-draft` (**201**) and **PATCH** `.../custom-widgets/:widgetId` (**200**).
+        **POST** returns a **base** widget only (required fields of `AddonBoardRideCustomWidget`). **PATCH** returns the same
+        schema with optional preview fields populated like **GET** `.../custom-widgets` (including optional **`signalPreview`**).
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          required: [widget]
+          properties:
+            widget:
+              allOf:
+                - $ref: '#/components/schemas/AddonBoardRideCustomWidget'
+              description: |
+                **POST promote:** base persisted widget (`widgetId`, `title`, `source`, `display`, `enabled`) — omit `resolved`, `latestValue`, `health`, `signalPreview`.
+                **PATCH:** enriched row; optional `signalPreview` when preview applies.
+
+    OperationsFactMetric:
+      type: object
+      description: |
+        Normalized KPI cell. `status` is a traffic-light style hint (GREEN/YELLOW/RED/UNKNOWN) for UI rings;
+        `quality` describes data confidence (GOOD, ESTIMATED, MISSING). `source` identifies the winning input
+        after priority rules (see architecture doc).
+      properties:
+        value: { nullable: true, description: 'Resolved KPI value or null when unavailable' }
+        unit: { type: string, nullable: true }
+        status:
+          type: string
+          enum: ['GREEN', 'YELLOW', 'RED', 'UNKNOWN']
+          description: Traffic-light hint; may vary by KPI type.
+        quality:
+          type: string
+          enum: ['GOOD', 'ESTIMATED', 'MISSING']
+        source: { type: string, description: 'e.g. MQTT_LIVE_STATE, RIDE_FEATURE_SNAPSHOT, CANONICAL_WAIT_TIME_UPDATED' }
+        updatedAt: { type: string, format: date-time, nullable: true }
+
+    OperationsRideFactsFacts:
+      type: object
+      properties:
+        currentWaitTimeMinutes: { $ref: '#/components/schemas/OperationsFactMetric' }
+        rideOperationalStatus: { $ref: '#/components/schemas/OperationsFactMetric' }
+        safetyStatus: { $ref: '#/components/schemas/OperationsFactMetric' }
+        openIncidentCount: { $ref: '#/components/schemas/OperationsFactMetric' }
+        actualThroughputPph: { $ref: '#/components/schemas/OperationsFactMetric' }
+        theoreticalCapacityPph: { $ref: '#/components/schemas/OperationsFactMetric' }
+        throughputGapPercent: { $ref: '#/components/schemas/OperationsFactMetric' }
+        availabilityPercent: { $ref: '#/components/schemas/OperationsFactMetric' }
+        performancePercent: { $ref: '#/components/schemas/OperationsFactMetric' }
+        rideOeePercent: { $ref: '#/components/schemas/OperationsFactMetric' }
+        plannedCrew: { $ref: '#/components/schemas/OperationsFactMetric' }
+        actualCrew: { $ref: '#/components/schemas/OperationsFactMetric' }
+        crewGap: { $ref: '#/components/schemas/OperationsFactMetric' }
+        forecastWaitTime15: { $ref: '#/components/schemas/OperationsFactMetric' }
+        forecastWaitTime30: { $ref: '#/components/schemas/OperationsFactMetric' }
+        forecastWaitTime60: { $ref: '#/components/schemas/OperationsFactMetric' }
+
+    OperationsRideFactsPublic:
+      type: object
+      properties:
+        parkId: { type: string, format: uuid }
+        rideId: { type: string, format: uuid }
+        timestamp: { type: string, format: date-time }
+        facts: { $ref: '#/components/schemas/OperationsRideFactsFacts' }
+
+    EnvelopeOperationsFactsRide:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: '#/components/schemas/OperationsRideFactsPublic' }
+
+    EnvelopeOperationsFactsPark:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            parkId: { type: string, format: uuid }
+            timestamp: { type: string, format: date-time }
+            rides:
+              type: array
+              items: { $ref: '#/components/schemas/OperationsRideFactsPublic' }
+
+    EnvelopeOperationsFactsZone:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            parkId: { type: string, format: uuid }
+            zoneId: { type: string, format: uuid }
+            timestamp: { type: string, format: date-time }
+            rides:
+              type: array
+              items: { $ref: '#/components/schemas/OperationsRideFactsPublic' }
+
+    UnsNodeCreate:
+      type: object
+      required: [name]
+      properties:
+        parentId: { type: string, format: uuid, nullable: true }
+        name: { type: string }
+        slug: { type: string, nullable: true }
+        nodeType: { type: string, nullable: true }
+        domain: { type: string, nullable: true }
+        metric: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        isLeaf: { type: boolean }
+        isActive: { type: boolean }
+        parkSlug: { type: string, nullable: true }
+        assetSlug: { type: string, nullable: true }
+    UnsNodeUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        slug: { type: string }
+        nodeType: { type: string }
+        domain: { type: string }
+        metric: { type: string }
+        description: { type: string, nullable: true }
+        isLeaf: { type: boolean }
+        isActive: { type: boolean }
+
+    AdapterInstallMetadata:
+      type: object
+      description: Hydrated install block under metadata.install (YAML file, legacy DB row, or defaults)
+      properties:
+        storage:
+          type: string
+          enum: [yaml, legacy_db, none]
+        configFile:
+          type: string
+          nullable: true
+          description: Basename of YAML when storage is yaml
+        configJson:
+          type: object
+          additionalProperties: true
+        contextJson:
+          type: object
+          additionalProperties: true
+        outputProfiles:
+          type: array
+          items: { type: string }
+        emitEnabled: { type: boolean }
+        ingestCanonicalEnabled: { type: boolean }
+        scheduleCron: { type: string, nullable: true }
+        installedAt: { type: string, format: date-time, nullable: true }
+        updatedAt: { type: string, format: date-time, nullable: true }
+      additionalProperties: true
+
+    AdapterPackageDto:
+      type: object
+      description: Enriched adapter package (DB row + filesystem scan + asset URLs)
+      properties:
+        id: { type: string, format: uuid }
+        adapterKey: { type: string }
+        name: { type: string }
+        version: { type: string }
+        runtime: { type: string }
+        adapterType: { type: string }
+        iotClass: { type: string, nullable: true }
+        status: { type: string, nullable: true }
+        sourceType: { type: string, nullable: true }
+        sourcePath: { type: string, nullable: true }
+        capabilities:
+          type: array
+          items: { type: string }
+        configSchema:
+          type: object
+          additionalProperties: true
+        permissions:
+          type: object
+          additionalProperties: true
+        metadata:
+          type: object
+          additionalProperties: true
+          properties:
+            install:
+              $ref: '#/components/schemas/AdapterInstallMetadata'
+        ui:
+          type: object
+          additionalProperties: true
+        logoAssetUrl: { type: string, nullable: true }
+        readmeAssetUrl: { type: string, nullable: true }
+        bannerAssetUrl: { type: string, nullable: true }
+      additionalProperties: true
+
+    InstallLocalAdapterRequest:
+      type: object
+      required: [adapterKey]
+      properties:
+        adapterKey: { type: string, example: weather_open_meteo }
+        name: { type: string }
+        configJson:
+          type: object
+          additionalProperties: true
+        contextJson:
+          type: object
+          additionalProperties: true
+        outputProfiles:
+          type: array
+          items: { type: string }
+          example: [SPARKPLUG_JSON, CANONICAL_HISTORIAN]
+          description: When omitted, server defaults to SPARKPLUG_JSON + CANONICAL_HISTORIAN (Sparkplug MQTT + historian).
+        emitEnabled: { type: boolean, default: false }
+        ingestCanonicalEnabled: { type: boolean, default: false }
+        scheduleCron: { type: string, nullable: true }
+
+    PatchInstalledAdapterRequest:
+      type: object
+      description: >-
+        API requires at least one of configJson, contextJson, outputProfiles, emitEnabled, ingestCanonicalEnabled, or
+        scheduleCron (Joi .or).
+      properties:
+        configJson:
+          type: object
+          additionalProperties: true
+        contextJson:
+          type: object
+          additionalProperties: true
+        outputProfiles:
+          type: array
+          items: { type: string }
+        emitEnabled: { type: boolean }
+        ingestCanonicalEnabled: { type: boolean }
+        scheduleCron: { type: string, nullable: true }
+      minProperties: 1
+
+    AdapterUninstallResult:
+      type: object
+      properties:
+        adapterKey: { type: string }
+        removed: { type: boolean }
+
+    EnvelopeAdapterPackageOne:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          $ref: '#/components/schemas/AdapterPackageDto'
+
+    EnvelopeInstalledAdapterList:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdapterPackageDto'
+        meta:
+          type: object
+          properties:
+            localIntegrationPackages:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+          additionalProperties: true
+
+    EnvelopeAdapterUninstall:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          $ref: '#/components/schemas/AdapterUninstallResult'
+
+    MdmJsonObject:
+      type: object
+      additionalProperties: true
+
+    MdmPark:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+        timezone: { type: string, nullable: true }
+        activeFlag: { type: boolean }
+        futureHints: { $ref: '#/components/schemas/MdmJsonObject' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    MdmParkZone:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        parkId: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+        sortOrder: { type: integer }
+        legacyZoneId: { type: string, format: uuid, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    MdmRideType:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+        description: { type: string, nullable: true }
+
+    MdmRideTemplate:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        rideTypeId: { type: string, format: uuid }
+        code: { type: string }
+        displayName: { type: string }
+        defaultProfile: { $ref: '#/components/schemas/MdmJsonObject' }
+        isSystem: { type: boolean }
+        rideType: { $ref: '#/components/schemas/MdmRideType' }
+
+    MdmRideMaster:
+      type: object
+      description: MDM ride with nested operations, capacity, staffing, safety, guest rules, integration, KPIs
+      properties:
+        id: { type: string, format: uuid }
+        parkId: { type: string, format: uuid }
+        parkZoneId: { type: string, format: uuid }
+        rideTypeId: { type: string, format: uuid }
+        internalRideId: { type: string, format: uuid, nullable: true }
+        externalId: { type: string, nullable: true }
+        name: { type: string }
+        shortName: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        manufacturer: { type: string, nullable: true }
+        model: { type: string, nullable: true }
+        buildYear: { type: integer, nullable: true }
+        commissioningDate: { type: string, format: date, nullable: true }
+        lifecycleStatus: { type: string }
+        activeFlag: { type: boolean }
+        park: { $ref: '#/components/schemas/MdmPark' }
+        parkZone: { $ref: '#/components/schemas/MdmParkZone' }
+        rideType: { $ref: '#/components/schemas/MdmRideType' }
+        operations: { $ref: '#/components/schemas/MdmJsonObject' }
+        capacity: { $ref: '#/components/schemas/MdmJsonObject' }
+        staffing: { $ref: '#/components/schemas/MdmJsonObject' }
+        safety: { $ref: '#/components/schemas/MdmJsonObject' }
+        guestRules: { $ref: '#/components/schemas/MdmJsonObject' }
+        integration: { $ref: '#/components/schemas/MdmJsonObject' }
+        kpiTargets: { $ref: '#/components/schemas/MdmJsonObject' }
+        staffRoles: { type: array, items: { $ref: '#/components/schemas/MdmJsonObject' } }
+        documents: { type: array, items: { $ref: '#/components/schemas/MdmJsonObject' } }
+      additionalProperties: true
+
+    MdmParkCreate:
+      type: object
+      required: [code, name]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        timezone: { type: string, nullable: true }
+        activeFlag: { type: boolean }
+        futureHints: { $ref: '#/components/schemas/MdmJsonObject' }
+
+    MdmZoneCreate:
+      type: object
+      required: [code, name]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        sortOrder: { type: integer }
+        legacyZoneId: { type: string, format: uuid, nullable: true }
+
+    MdmRideTemplateCreate:
+      type: object
+      required: [rideTypeId, code, displayName]
+      properties:
+        rideTypeId: { type: string, format: uuid }
+        code: { type: string }
+        displayName: { type: string }
+        defaultProfile: { $ref: '#/components/schemas/MdmJsonObject' }
+        isSystem: { type: boolean }
+
+    MdmRideTemplateUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        displayName: { type: string }
+        defaultProfile: { $ref: '#/components/schemas/MdmJsonObject' }
+        isSystem: { type: boolean }
+        rideTypeId: { type: string, format: uuid }
+        code: { type: string }
+
+    MdmRideCreate:
+      type: object
+      required: [parkId, parkZoneId, rideTypeId, name]
+      properties:
+        parkId: { type: string, format: uuid }
+        parkZoneId: { type: string, format: uuid }
+        rideTypeId: { type: string, format: uuid }
+        internalRideId: { type: string, format: uuid, nullable: true }
+        externalId: { type: string, nullable: true }
+        name: { type: string }
+        shortName: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        manufacturer: { type: string, nullable: true }
+        model: { type: string, nullable: true }
+        buildYear: { type: integer, nullable: true }
+        commissioningDate: { type: string, format: date, nullable: true }
+        lifecycleStatus: { type: string }
+        activeFlag: { type: boolean }
+        profile: { $ref: '#/components/schemas/MdmJsonObject' }
+
+    MdmRideUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        parkId: { type: string, format: uuid }
+        parkZoneId: { type: string, format: uuid }
+        rideTypeId: { type: string, format: uuid }
+        internalRideId: { type: string, format: uuid, nullable: true }
+        externalId: { type: string, nullable: true }
+        name: { type: string }
+        shortName: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        manufacturer: { type: string, nullable: true }
+        model: { type: string, nullable: true }
+        buildYear: { type: integer, nullable: true }
+        commissioningDate: { type: string, format: date, nullable: true }
+        lifecycleStatus: { type: string }
+        activeFlag: { type: boolean }
+        lifecycleReason: { type: string, nullable: true }
+        operations: { $ref: '#/components/schemas/MdmJsonObject' }
+        capacity: { $ref: '#/components/schemas/MdmJsonObject' }
+        staffing: { $ref: '#/components/schemas/MdmJsonObject' }
+        safety: { $ref: '#/components/schemas/MdmJsonObject' }
+        guestRules: { $ref: '#/components/schemas/MdmJsonObject' }
+        integration: { $ref: '#/components/schemas/MdmJsonObject' }
+        kpi: { $ref: '#/components/schemas/MdmJsonObject' }
+        kpiTargets: { $ref: '#/components/schemas/MdmJsonObject' }
+
+    MdmCloneFromTemplateBody:
+      type: object
+      required: [parkZoneId, name]
+      properties:
+        parkZoneId: { type: string, format: uuid }
+        name: { type: string }
+        externalId: { type: string, nullable: true }
+        shortName: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+
+    EnvelopeMdmParks:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/MdmPark' }
+
+    EnvelopeMdmParkOne:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: '#/components/schemas/MdmPark' }
+
+    EnvelopeMdmZones:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/MdmParkZone' }
+
+    EnvelopeMdmZoneOne:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: '#/components/schemas/MdmParkZone' }
+
+    EnvelopeMdmRideTypes:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/MdmRideType' }
+
+    EnvelopeMdmRideTemplates:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/MdmRideTemplate' }
+
+    EnvelopeMdmRideTemplateOne:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: '#/components/schemas/MdmRideTemplate' }
+
+    EnvelopeMdmRideList:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/MdmRideMaster' }
+
+    EnvelopeMdmRideDetail:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: '#/components/schemas/MdmRideMaster' }
+
+    EnvelopeMdmCapacityModel:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: '#/components/schemas/MdmJsonObject' }
+
+    EnvelopeMdmStaffingModel:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: '#/components/schemas/MdmJsonObject' }
+
+    RideMasterExtensionsSignalEntry:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        mlEligible: { type: boolean }
+        boardEligible: { type: boolean }
+
+    RideMasterExtensionsPatch:
+      type: object
+      description: Partial extensions update (merged server-side). At least one property required.
+      minProperties: 1
+      properties:
+        schemaVersion: { type: integer, minimum: 1 }
+        domains:
+          type: array
+          items:
+            type: string
+            enum: [operations, queue, green, maintenance, weather, guestflow, staffing, safety]
+        capabilities:
+          type: object
+          properties:
+            hasQueueSignal: { type: boolean }
+            hasCycleSignal: { type: boolean }
+            hasEnergyMetering: { type: boolean }
+            supportsGreenOptimization: { type: boolean }
+        signals:
+          type: object
+          additionalProperties: true
+          description: Signal entries keyed by domain.metric; null removes a key when not using replaceSignals
+        replaceSignals: { type: boolean }
+
+    RideMasterExtensionsRead:
+      type: object
+      properties:
+        entityType:
+          type: string
+          description: MDM ride vs platform park asset
+          enum: [ride, park_asset]
+        entityId: { type: string, format: uuid }
+        domains:
+          type: array
+          items: { type: string }
+        signals:
+          type: object
+          additionalProperties: { $ref: '#/components/schemas/RideMasterExtensionsSignalEntry' }
+        capabilities:
+          type: object
+          properties:
+            hasQueueSignal: { type: boolean }
+            hasCycleSignal: { type: boolean }
+            hasEnergyMetering: { type: boolean }
+            supportsGreenOptimization: { type: boolean }
+
+    EnvelopeRideMasterExtensionsRead:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: '#/components/schemas/RideMasterExtensionsRead' }
+
+    PlatformPark:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        timezone: { type: string, nullable: true }
+        externalSource: { type: string }
+        externalEntityId: { type: string, nullable: true }
+
+    PlatformAsset:
+      type: object
+      additionalProperties: true
+
+    PlatformObservation:
+      type: object
+      additionalProperties: true
+
+    RideMasterDataPatch:
+      type: object
+      minProperties: 1
+      properties:
+        capacityPph: { type: integer, nullable: true }
+        theoreticalCapacityPph: { type: integer, nullable: true }
+        dispatchIntervalSec: { type: integer, nullable: true }
+        cycleTimeSec: { type: integer, nullable: true }
+        seatsPerCycle: { type: integer, nullable: true }
+        trainsCount: { type: integer, nullable: true }
+        rideCategory: { type: string, nullable: true }
+        minStaff: { type: integer, nullable: true }
+        normalStaff: { type: integer, nullable: true }
+        peakStaff: { type: integer, nullable: true }
+        operatorMin: { type: integer, nullable: true, description: 'Legacy alias → minStaff' }
+        operatorStandard: { type: integer, nullable: true, description: 'Legacy alias → normalStaff' }
+        operatorPeak: { type: integer, nullable: true, description: 'Legacy alias → peakStaff' }
+        weatherSensitive: { type: boolean }
+        rainSensitive: { type: boolean }
+        windLimitKmh: { type: number, nullable: true }
+        minHeightCm: { type: integer, nullable: true }
+        maxHeightCm: { type: integer, nullable: true }
+        thrillLevel: { type: integer, nullable: true }
+        manufacturer: { type: string, nullable: true }
+        buildYear: { type: integer, nullable: true }
+        plcType: { type: string, nullable: true }
+        maintenanceClass: { type: string, nullable: true }
+        targets:
+          type: object
+          nullable: true
+          properties:
+            targetAvailabilityPct: { type: number, nullable: true }
+            targetWaitTimeMin: { type: integer, nullable: true }
+            targetUtilizationPct: { type: number, nullable: true }
+            targetOeePct: { type: number, nullable: true }
+            revenuePriority: { type: string, nullable: true }
+
+    ThemeParksSyncResult:
+      type: object
+      properties:
+        parkId: { type: string, format: uuid }
+        zoneId: { type: string, format: uuid }
+        assetsUpserted: { type: integer }
+        parentsLinked: { type: integer }
+        observationsInserted: { type: integer }
+        mqttPublishes: { type: integer }
+        externalParkId:
+          type: string
+          description: ThemeParks.wiki park UUID when sync used Integration settings
+
+    EnvelopePlatformParks:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/PlatformPark' }
+
+    EnvelopePlatformAssets:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/PlatformAsset' }
+
+    EnvelopePlatformAssetOne:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: '#/components/schemas/PlatformAsset' }
+
+    AssetRuntimeOverride:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        assetId: { type: string, format: uuid }
+        payload: { type: object, additionalProperties: true }
+        validFrom: { type: string, format: date-time, nullable: true }
+        validTo: { type: string, format: date-time, nullable: true }
+        active: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    AssetRuntimeOverrideCreate:
+      type: object
+      required: [payload]
+      properties:
+        payload: { type: object, additionalProperties: true }
+        validFrom: { type: string, format: date-time, nullable: true }
+        validTo: { type: string, format: date-time, nullable: true }
+        active: { type: boolean, default: true }
+
+    AssetRuntimeOverridePatch:
+      type: object
+      minProperties: 1
+      properties:
+        payload: { type: object, additionalProperties: true }
+        validFrom: { type: string, format: date-time, nullable: true }
+        validTo: { type: string, format: date-time, nullable: true }
+        active: { type: boolean }
+
+    EnvelopeAssetRuntimeOverrides:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/AssetRuntimeOverride' }
+
+    EnvelopeAssetRuntimeOverrideOne:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: '#/components/schemas/AssetRuntimeOverride' }
+
+    EnvelopePlatformObservations:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/PlatformObservation' }
+
+    IntegrationFeatureFlags:
+      type: object
+      properties:
+        adapterDiscoverySpyEnabled: { type: boolean, description: Mirrors env ADAPTER_DISCOVERY_SPY_ENABLED }
+        mqttEnforceCapabilities: { type: boolean, description: Mirrors env MQTT_ENFORCE_CAPABILITIES (reserved) }
+        mqttCapabilityGuardMode:
+          type: string
+          enum: [off, warn_only, enforce]
+          description: Mirrors env MQTT_CAPABILITY_GUARD_MODE (Phase 13)
+
+    EnvelopeIntegrationFeatureFlags:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          $ref: '#/components/schemas/IntegrationFeatureFlags'
+
+    UnsSpyDiscoveryEvent:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        classification: { type: string }
+        topicPath: { type: string }
+        mqttInboundMessageId: { type: string, format: uuid, nullable: true }
+        details:
+          type: object
+          additionalProperties: true
+          description: Adapter rows include `source=adapter`, `externalEntityId`, `reviewStatus`, etc.
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    EnvelopeUnsSpyDiscoveryEvents:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            total: { type: integer }
+            limit: { type: integer }
+            offset: { type: integer }
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/UnsSpyDiscoveryEvent' }
+
+    UnsPagedListEnvelopeData:
+      type: object
+      description: Common pagination wrapper for UNS registry, MQTT unknown inbox, and UNS topic proposals.
+      properties:
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+        items:
+          type: array
+          items: { type: object, additionalProperties: true }
+
+    EnvelopeUnsPagedObjects:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: '#/components/schemas/UnsPagedListEnvelopeData' }
+
+    UnsRegistryMirrorSummary:
+      type: object
+      properties:
+        registrySource: { type: string, example: MIRRORED_FROM_LEGACY }
+        counts:
+          type: object
+          additionalProperties: true
+          description: >-
+            Typical keys include `entities`, `mappings`, `topics`, `metadata`, `signalCatalog`,
+            `rideSignalCapabilities`, `sparkplugMetricDefinitions`.
+        lastMirroredAt: { type: string, format: date-time, nullable: true }
+
+    EnvelopeUnsRegistryMirrorSummary:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: '#/components/schemas/UnsRegistryMirrorSummary' }
+
+    UnsHierarchyImportBody:
+      type: object
+      required: [schemaVersion, kind]
+      properties:
+        schemaVersion: { type: integer, enum: [1] }
+        kind: { type: string, enum: [smartpark.uns.hierarchy] }
+        parkId: { type: string, nullable: true }
+        exportedAt: { type: string, nullable: true }
+        roots:
+          type: array
+          items: { type: object, additionalProperties: true }
+
+    UnsHierarchyExportDocument:
+      allOf:
+        - $ref: '#/components/schemas/UnsHierarchyImportBody'
+        - type: object
+          properties:
+            exportedAt: { type: string, format: date-time }
+
+    EnvelopeUnsHierarchyImportSummary:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          additionalProperties: true
+          description: >-
+            Import or dry-run summary (`mode`, `created`, `updated`, `skippedLocked`; preview paths may include
+            `dryRun`, `preview`).
+
+    EnvelopeUnsMqttLiveEvents:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            events:
+              type: array
+              items: { type: object, additionalProperties: true }
+
+    EnvelopeUnsMqttLiveStatus:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            mqtt: { type: object, additionalProperties: true }
+            buffer: { type: object, additionalProperties: true }
+            adapterSimulationActive: { type: boolean }
+
+    EnvelopeUnsMqttLiveTestPublish:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { type: object, additionalProperties: true }
+
+    UnsSpyDiscoveryApproveRequest:
+      type: object
+      required: [mapToExistingEntityId]
+      properties:
+        createEntity:
+          type: boolean
+          description: Phase 12 — unsupported when true (returns 422)
+        mapToExistingEntityId:
+          type: string
+          format: uuid
+          description: Target `park_assets.asset_id` for a ride asset
+        applyTemplateKey: { type: string, nullable: true, example: RIDE_DEFAULT_V1 }
+        createMapping: { type: boolean, default: true, description: Upsert `external_entity_mappings` row }
+
+    EnvelopeUnsSpyDiscoveryApproveResult:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            eventId: { type: string, format: uuid }
+            mappedEntityId: { type: string, format: uuid }
+            templateApplied: { type: boolean }
+            preparedUnsTopics:
+              type: object
+              properties:
+                created: { type: integer }
+                updated: { type: integer }
+
+    EnvelopeUnsSpyDiscoveryActionResult:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            eventId: { type: string, format: uuid }
+            reviewStatus: { type: string, enum: [REJECTED, IGNORED] }
+
+    EnvelopeAdapterDiscoveryScanResult:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            created: { type: integer }
+            updated: { type: integer }
+            skipped: { type: boolean }
+            items:
+              type: array
+              items: { type: object, additionalProperties: true }
+
+    EnvelopeThemeParksSyncResult:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: '#/components/schemas/ThemeParksSyncResult' }
+
+    EnvelopeRideTemplates:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/MdmJsonObject' }
+
+    EnvelopeStaffingTemplates:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/MdmJsonObject' }
+
+    EnvelopeMaintenanceTemplates:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/MdmJsonObject' }

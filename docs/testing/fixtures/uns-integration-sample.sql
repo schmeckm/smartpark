@@ -1,0 +1,25 @@
+-- Optional fixture: HR_MANAGER-only principal for integrations.read denial checks.
+-- Prefer creating via Sequelize in tests (see uns-api.integration.test.js); use this for manual DB setups.
+--
+-- Password hash below is bcrypt for: Smartpark123!
+-- Regenerate: node -e "require('bcrypt').hash('Smartpark123!',12).then(console.log)"
+
+-- Example (adjust UUIDs / email to avoid collisions):
+-- INSERT INTO users (id, first_name, last_name, email, password_hash, role, active, language_code, date_format, time_format, ui_preferences, created_at, updated_at)
+-- VALUES (
+--   'f0000001-0000-4000-8000-000000000099',
+--   'UNS', 'HRFixture',
+--   'uns-hr-fixture@example.com',
+--   '$2b$12$3Sh7oawo1BYuTWa89DgM3uDx2CzvBTPaSHGK0SGACa54Z6Bq1QUO6',
+--   'OPERATOR',
+--   true,
+--   'en',
+--   'YYYY-MM-DD',
+--   '24h',
+--   '{}',
+--   NOW(),
+--   NOW()
+-- );
+-- DELETE FROM user_roles WHERE user_id = 'f0000001-0000-4000-8000-000000000099';
+-- INSERT INTO user_roles (id, user_id, role_code, created_at, updated_at)
+-- VALUES (gen_random_uuid(), 'f0000001-0000-4000-8000-000000000099', 'HR_MANAGER', NOW(), NOW());

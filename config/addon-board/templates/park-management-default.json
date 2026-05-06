@@ -1,0 +1,14 @@
+{
+  "boardId": "park-management-default",
+  "label": "Park management (L0)",
+  "widgets": [
+    { "id": "park-summary", "title": "Park KPI strip" },
+    { "id": "critical-rides", "title": "Critical / watch list" },
+    {
+      "id": "geo-heatmap",
+      "title": "Crowd pressure (rides)",
+      "roles": ["SYSTEM_ADMIN", "OPERATIONS_MANAGER", "PARK_MANAGER", "ANALYST"]
+    },
+    { "id": "forecast-ribbon", "title": "Demand forecast ribbon" }
+  ]
+}

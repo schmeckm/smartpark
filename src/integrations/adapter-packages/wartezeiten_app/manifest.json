@@ -1,0 +1,30 @@
+{
+  "adapterKey": "wartezeiten_app",
+  "name": "Wartezeiten.APP",
+  "description": "Wartezeiten.APP park and queue-time data: park list, live waits, mapped to UNS-style ride observations and the canonical pipeline alongside other providers.",
+  "logoPath": "assets/logo.svg",
+  "bannerPath": "assets/banner.svg",
+  "category": "Leisure & attractions",
+  "website": "https://wartezeiten.app",
+  "qualityTier": "COMMUNITY",
+  "tags": ["queue_times", "parks"],
+  "version": "1.0.0",
+  "runtime": "NODE",
+  "entrypoint": "index.js",
+  "adapterType": "PUBLIC_API",
+  "iotClass": "cloud_polling",
+  "capabilities": ["DISCOVERY", "POLLING", "UNS_OUTPUT", "CANONICAL_OUTPUT"],
+  "providedDomains": ["rides"],
+  "providedMetrics": ["queue_time", "status"],
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "parkId": { "type": "string" }
+    }
+  },
+  "permissions": {
+    "network": true,
+    "mqttPublish": false,
+    "databaseWrite": false
+  }
+}

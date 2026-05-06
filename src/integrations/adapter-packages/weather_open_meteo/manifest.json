@@ -1,0 +1,62 @@
+{
+  "adapterKey": "weather_open_meteo",
+  "name": "Open-Meteo Weather",
+  "description": "Park-level current weather from Open-Meteo (free, no API key). Preferred outputProfiles: [\"SPARKPLUG_JSON\", \"CANONICAL_HISTORIAN\"] for MQTT Sparkplug pipeline; UNS_JSON remains supported for human-readable TPUNS topics.",
+  "version": "1.0.0",
+  "logoPath": "assets/logo.svg",
+  "bannerPath": "assets/banner.svg",
+  "category": "Weather & climate",
+  "website": "https://open-meteo.com",
+  "documentationUrl": "https://open-meteo.com/en/docs",
+  "qualityTier": "CORE",
+  "tags": ["weather", "open_meteo", "forecast", "park"],
+  "runtime": "NODE",
+  "entrypoint": "index.js",
+  "adapterType": "WEATHER",
+  "iotClass": "cloud_polling",
+  "capabilities": ["POLLING", "UNS_OUTPUT", "FEATURE_OUTPUT"],
+  "providedDomains": ["weather"],
+  "providedMetrics": [
+    "temperature",
+    "rain_probability",
+    "rain_mm",
+    "wind_speed",
+    "weather_condition"
+  ],
+  "defaultContextJson": {
+    "parkSlug": "europa_park",
+    "sparkplugGroupId": "europa_park",
+    "sparkplugEdgeNode": "weather_gateway"
+  },
+  "defaultScheduleCron": "*/10 * * * *",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "parkSlug": {
+        "type": "string",
+        "default": "europa_park",
+        "description": "Logical park key in observations (align with UNS / sparkplugGroupId when possible)."
+      },
+      "latitude": {
+        "type": "number",
+        "default": 48.2661,
+        "description": "Park centroid (Europa-Park Rust default)."
+      },
+      "longitude": {
+        "type": "number",
+        "default": 7.7225,
+        "description": "Park centroid (Europa-Park Rust default)."
+      },
+      "timezone": {
+        "type": "string",
+        "default": "Europe/Berlin"
+      }
+    },
+    "required": ["parkSlug", "latitude", "longitude"]
+  },
+  "permissions": {
+    "network": true,
+    "mqttPublish": false,
+    "databaseWrite": false
+  }
+}

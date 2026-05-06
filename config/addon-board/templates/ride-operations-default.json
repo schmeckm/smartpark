@@ -1,0 +1,14 @@
+{
+  "boardId": "ride-operations-default",
+  "label": "Ride operations (L3)",
+  "widgets": [
+    { "id": "ride-picker", "title": "Ride selector" },
+    { "id": "swdec-panel", "title": "SWDEC tiles" },
+    { "id": "ai-recommendation", "title": "AI recommendation" },
+    {
+      "id": "deep-links",
+      "title": "Platform deep links",
+      "roles": ["SYSTEM_ADMIN", "OPERATIONS_MANAGER", "PARK_MANAGER", "ANALYST"]
+    }
+  ]
+}

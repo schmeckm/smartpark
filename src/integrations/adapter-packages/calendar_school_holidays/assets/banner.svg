@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="csh-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e3a5f"/>
+    </linearGradient>
+    <linearGradient id="csh-t" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#818cf8"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="360" fill="url(#csh-bg)"/>
+  <text x="48" y="200" font-family="system-ui,Segoe UI,sans-serif" font-size="56" font-weight="700" fill="url(#csh-t)">School Holiday Demand Calendar</text>
+  <text x="48" y="260" font-family="system-ui,Segoe UI,sans-serif" font-size="22" fill="#94a3b8">Daily demand factors · DE-BW · FR-Grand Est · CH-BS</text>
+</svg>

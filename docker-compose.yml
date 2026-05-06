@@ -1,0 +1,90 @@
+name: smart-park-os
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: smartpark
+      POSTGRES_PASSWORD: smartpark
+      POSTGRES_DB: smartpark
+    ports:
+      - '15432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U smartpark -d smartpark']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mqtt:
+    image: eclipse-mosquitto:2.0.18
+    restart: unless-stopped
+    ports:
+      - '1883:1883'
+      - '9001:9001'
+    volumes:
+      - ./docker/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    command: mosquitto -c /mosquitto/config/mosquitto.conf
+
+  api:
+    build: .
+    restart: unless-stopped
+    # Mount source so UNS / MQTT route changes apply without rebuilding the image (restart api after edits).
+    # Persist adapter install YAML (emitEnabled / ingestCanonicalEnabled), pipeline logs, calendar data — without this,
+    # `data/` lives only in the container layer and resets when the container is recreated.
+    volumes:
+      - ./src:/app/src
+      - ./data:/app/data
+    ports:
+      - '3000:3000'
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      LOG_LEVEL: info
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: smartpark
+      DB_USER: smartpark
+      DB_PASSWORD: smartpark
+      CORS_ORIGIN: '*'
+      JWT_SECRET: change-me-in-production-use-long-random-string
+      JWT_ACCESS_EXPIRES_IN: 15m
+      JWT_REFRESH_DAYS: 7
+      # API must use the compose service name — not 127.0.0.1 (that is only from your Windows host).
+      MQTT_ENABLED: 'true'
+      MQTT_BROKER_URL: mqtt://mqtt:1883
+      MQTT_CLIENT_ID: smart-park-os-api
+      # Pass through from project .env (Compose loads .env for substitution). Enables Open-Meteo → weather_observations.
+      WEATHER_OPEN_METEO_ENABLED: ${WEATHER_OPEN_METEO_ENABLED:-true}
+      WEATHER_OPEN_METEO_INTERVAL_SECONDS: ${WEATHER_OPEN_METEO_INTERVAL_SECONDS:-300}
+      WEATHER_OPEN_METEO_REBUILD_SNAPSHOTS: ${WEATHER_OPEN_METEO_REBUILD_SNAPSHOTS:-true}
+      WEATHER_OPEN_METEO_FETCH_RETRIES: ${WEATHER_OPEN_METEO_FETCH_RETRIES:-3}
+      WEATHER_OPEN_METEO_RETRY_BASE_MS: ${WEATHER_OPEN_METEO_RETRY_BASE_MS:-500}
+    depends_on:
+      db:
+        condition: service_healthy
+      mqtt:
+        condition: service_started
+
+  frontend:
+    build:
+      context: .
+      dockerfile: admin-dashboard/Dockerfile
+    ports:
+      - '5173:5173'
+    depends_on:
+      - api
+    environment:
+      # Leave VITE_API_URL unset so the browser uses same-origin /api and Vite proxies to the API
+      # (works with http://127.0.0.1:5173 and http://<LAN-IP>:5173). Do not set to localhost:3000 in Docker.
+      CHOKIDAR_USEPOLLING: 'true'
+      VITE_PROXY_API_TARGET: http://api:3000
+      GIT_COMMIT: ${GIT_COMMIT:-}
+    volumes:
+      - ./admin-dashboard:/app
+      - frontend_node_modules:/app/node_modules
+
+volumes:
+  pgdata:
+  frontend_node_modules:

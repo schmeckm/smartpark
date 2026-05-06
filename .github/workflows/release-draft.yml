@@ -1,0 +1,26 @@
+# Manuell ausführen: Actions → "Release draft notes" → Run workflow
+# Erzeugt eine Markdown-Zusammenfassung der Commits seit dem letzten Tag (siehe scripts/release-draft.mjs).
+name: Release draft notes
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  draft:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history for git log)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Generate draft
+        run: node scripts/release-draft.mjs >> "$GITHUB_STEP_SUMMARY"

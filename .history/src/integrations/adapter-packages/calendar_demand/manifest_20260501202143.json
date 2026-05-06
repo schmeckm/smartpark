@@ -1,0 +1,63 @@
+{
+  "adapterKey": "calendar_demand",
+  "name": "Calendar Demand Adapter",
+  "version": "1.0.0",
+  "category": "calendar",
+  "description": "Provides school holiday, public holiday, bridge-day and seasonality demand factors for parks. Preferred outputProfiles: [\"SPARKPLUG_JSON\", \"CANONICAL_HISTORIAN\"]; UNS_JSON optional. Public data: Nager.at; school ranges: data/calendar-holidays/*.yaml.",
+  "runtime": "NODE",
+  "entrypoint": "index.js",
+  "logoPath": "assets/logo.svg",
+  "bannerPath": "assets/banner.svg",
+  "adapterType": "CALENDAR",
+  "iotClass": "cloud_polling",
+  "capabilities": ["DISCOVERY", "POLLING", "UNS_OUTPUT", "FEATURE_OUTPUT"],
+  "providedDomains": ["calendar"],
+  "providedMetrics": [
+    "is_weekend",
+    "is_public_holiday",
+    "is_school_holiday",
+    "bridge_day",
+    "month",
+    "weekday",
+    "season_summer",
+    "season_halloween",
+    "season_winter",
+    "holiday_score"
+  ],
+  "defaultContextJson": {
+    "parkSlug": "europapark",
+    "sparkplugGroupId": "europa_park",
+    "sparkplugEdgeNode": "calendar_gateway"
+  },
+  "defaultScheduleCron": "0 3 * * *",
+  "configSchema": {
+    "type": "object",
+    "required": ["parkSlug", "countrySet"],
+    "properties": {
+      "parkSlug": { "type": "string", "default": "europapark" },
+      "countrySet": {
+        "type": "array",
+        "default": ["DE", "FR", "CH"],
+        "description": "ISO country codes for Nager.at public holidays."
+      },
+      "regionWeights": {
+        "type": "object",
+        "default": {
+          "DE-BW": 40,
+          "FR-GrandEst": 30,
+          "CH-BS": 15,
+          "CH-BL": 10,
+          "CH-AG": 5
+        },
+        "description": "Weights for holiday_score (0–100 sum cap). Omit to use this default map."
+      },
+      "timezone": { "type": "string", "default": "Europe/Berlin" },
+      "dateOverride": { "type": "string", "description": "Optional YYYY-MM-DD for tests/backfills." }
+    }
+  },
+  "permissions": {
+    "network": true,
+    "mqttPublish": true,
+    "databaseWrite": false
+  }
+}
