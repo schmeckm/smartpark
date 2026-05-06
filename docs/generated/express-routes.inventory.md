@@ -1,6 +1,6 @@
 # Express route inventory (generated)
 
-- **Generated:** 2026-05-06T20:01:52.842Z
+- **Generated:** 2026-05-06T20:05:57.755Z
 - **Route count:** 328
 
 | Method | Path | Mount origin | In OpenAPI |
@@ -167,36 +167,36 @@
 | GET | `/api/v1/integrations/uns/sparkplug-schema` | src/routes/v1/index.js | yes |
 | PUT | `/api/v1/integrations/uns/sparkplug-schema` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/integrations/uns/suggestions` | src/routes/v1/index.js | yes |
-| POST | `/api/v1/master-data/:entityType/:id/apply-template` | src/app.js | no |
-| DELETE | `/api/v1/master-data/:entityType/:id` | src/app.js | no |
-| GET | `/api/v1/master-data/:entityType/:id` | src/app.js | no |
-| PATCH | `/api/v1/master-data/:entityType/:id` | src/app.js | no |
-| GET | `/api/v1/master-data/:entityType/export/xlsx` | src/app.js | no |
-| GET | `/api/v1/master-data/:entityType/export` | src/app.js | no |
-| POST | `/api/v1/master-data/:entityType/import/xlsx` | src/app.js | no |
-| POST | `/api/v1/master-data/:entityType/import` | src/app.js | no |
-| GET | `/api/v1/master-data/:entityType` | src/app.js | no |
-| POST | `/api/v1/master-data/:entityType` | src/app.js | no |
-| GET | `/api/v1/master-data/assets/:assetId/enrichment` | src/app.js | no |
-| PATCH | `/api/v1/master-data/assets/:assetId/enrichment` | src/app.js | no |
-| GET | `/api/v1/master-data/assets/:assetId` | src/app.js | no |
-| POST | `/api/v1/master-data/rides/:id/activate-prepared-sparkplug-metrics` | src/app.js | no |
-| POST | `/api/v1/master-data/rides/:id/activate-prepared-uns-topics` | src/app.js | no |
-| GET | `/api/v1/master-data/rides/:id/compare-registry-vs-legacy` | src/app.js | no |
-| POST | `/api/v1/master-data/rides/:id/deactivate-prepared-sparkplug-metrics` | src/app.js | no |
-| POST | `/api/v1/master-data/rides/:id/deactivate-prepared-uns-topics` | src/app.js | no |
-| POST | `/api/v1/master-data/rides/:id/prepare-sparkplug-metrics` | src/app.js | no |
-| POST | `/api/v1/master-data/rides/:id/prepare-uns-topics` | src/app.js | no |
-| GET | `/api/v1/master-data/rides/:id/preview-registry-output` | src/app.js | no |
-| POST | `/api/v1/master-data/rides/:id/registry-signal-deprecations/deprecate` | src/app.js | no |
-| GET | `/api/v1/master-data/rides/:id/registry-signal-deprecations/health` | src/app.js | no |
-| POST | `/api/v1/master-data/rides/:id/registry-signal-deprecations/reactivate` | src/app.js | no |
-| GET | `/api/v1/master-data/rides/:id/registry-signal-deprecations` | src/app.js | no |
-| GET | `/api/v1/master-data/rides/:id/signal-capabilities` | src/app.js | no |
-| PUT | `/api/v1/master-data/rides/:id/signal-capabilities` | src/app.js | no |
-| GET | `/api/v1/master-data/rides/:id/topic-activation-status` | src/app.js | no |
-| GET | `/api/v1/master-data/templates/:id` | src/app.js | no |
-| GET | `/api/v1/master-data/templates` | src/app.js | no |
+| POST | `/api/v1/master-data/:entityType/:id/apply-template` | src/app.js | yes |
+| DELETE | `/api/v1/master-data/:entityType/:id` | src/app.js | yes |
+| GET | `/api/v1/master-data/:entityType/:id` | src/app.js | yes |
+| PATCH | `/api/v1/master-data/:entityType/:id` | src/app.js | yes |
+| GET | `/api/v1/master-data/:entityType/export/xlsx` | src/app.js | yes |
+| GET | `/api/v1/master-data/:entityType/export` | src/app.js | yes |
+| POST | `/api/v1/master-data/:entityType/import/xlsx` | src/app.js | yes |
+| POST | `/api/v1/master-data/:entityType/import` | src/app.js | yes |
+| GET | `/api/v1/master-data/:entityType` | src/app.js | yes |
+| POST | `/api/v1/master-data/:entityType` | src/app.js | yes |
+| GET | `/api/v1/master-data/assets/:assetId/enrichment` | src/app.js | yes |
+| PATCH | `/api/v1/master-data/assets/:assetId/enrichment` | src/app.js | yes |
+| GET | `/api/v1/master-data/assets/:assetId` | src/app.js | yes |
+| POST | `/api/v1/master-data/rides/:id/activate-prepared-sparkplug-metrics` | src/app.js | yes |
+| POST | `/api/v1/master-data/rides/:id/activate-prepared-uns-topics` | src/app.js | yes |
+| GET | `/api/v1/master-data/rides/:id/compare-registry-vs-legacy` | src/app.js | yes |
+| POST | `/api/v1/master-data/rides/:id/deactivate-prepared-sparkplug-metrics` | src/app.js | yes |
+| POST | `/api/v1/master-data/rides/:id/deactivate-prepared-uns-topics` | src/app.js | yes |
+| POST | `/api/v1/master-data/rides/:id/prepare-sparkplug-metrics` | src/app.js | yes |
+| POST | `/api/v1/master-data/rides/:id/prepare-uns-topics` | src/app.js | yes |
+| GET | `/api/v1/master-data/rides/:id/preview-registry-output` | src/app.js | yes |
+| POST | `/api/v1/master-data/rides/:id/registry-signal-deprecations/deprecate` | src/app.js | yes |
+| GET | `/api/v1/master-data/rides/:id/registry-signal-deprecations/health` | src/app.js | yes |
+| POST | `/api/v1/master-data/rides/:id/registry-signal-deprecations/reactivate` | src/app.js | yes |
+| GET | `/api/v1/master-data/rides/:id/registry-signal-deprecations` | src/app.js | yes |
+| GET | `/api/v1/master-data/rides/:id/signal-capabilities` | src/app.js | yes |
+| PUT | `/api/v1/master-data/rides/:id/signal-capabilities` | src/app.js | yes |
+| GET | `/api/v1/master-data/rides/:id/topic-activation-status` | src/app.js | yes |
+| GET | `/api/v1/master-data/templates/:id` | src/app.js | yes |
+| GET | `/api/v1/master-data/templates` | src/app.js | yes |
 | GET | `/api/v1/mdm/parks/:parkId/zones` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/mdm/parks/:parkId/zones` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/mdm/parks` | src/routes/v1/index.js | yes |
@@ -230,8 +230,8 @@
 | GET | `/api/v1/operations-facts/parks/:parkId/rides/:rideId` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/operations-facts/parks/:parkId/zones/:zoneId` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/operations-facts/parks/:parkId` | src/routes/v1/index.js | yes |
-| GET | `/api/v1/operations-facts/rides/:id` | src/routes/v1/index.js | no |
-| GET | `/api/v1/operations-facts/rides` | src/routes/v1/index.js | no |
+| GET | `/api/v1/operations-facts/rides/:id` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/operations-facts/rides` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/park-rides` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/parks/:parkId/operational-context` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/parks/:parkId/shift-handovers` | src/routes/v1/index.js | yes |
@@ -246,12 +246,12 @@
 | GET | `/api/v1/parks` | src/routes/v1/index.js | yes |
 | PATCH | `/api/v1/recommendations/:id/status` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/recommendations` | src/routes/v1/index.js | yes |
-| GET | `/api/v1/registry-publisher/events` | src/routes/v1/index.js | no |
-| GET | `/api/v1/registry-publisher/health` | src/routes/v1/index.js | no |
-| POST | `/api/v1/registry-publisher/rides/:id/disable-pilot` | src/routes/v1/index.js | no |
-| POST | `/api/v1/registry-publisher/rides/:id/dry-run` | src/routes/v1/index.js | no |
-| POST | `/api/v1/registry-publisher/rides/:id/publish-once` | src/routes/v1/index.js | no |
-| GET | `/api/v1/registry-publisher/status` | src/routes/v1/index.js | no |
+| GET | `/api/v1/registry-publisher/events` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/registry-publisher/health` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/registry-publisher/rides/:id/disable-pilot` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/registry-publisher/rides/:id/dry-run` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/registry-publisher/rides/:id/publish-once` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/registry-publisher/status` | src/routes/v1/index.js | yes |
 | DELETE | `/api/v1/rides/:id` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/rides/:id` | src/routes/v1/index.js | yes |
 | PATCH | `/api/v1/rides/:id` | src/routes/v1/index.js | yes |
@@ -312,8 +312,8 @@
 | GET | `/api/v1/uns/parks/:parkId/topics` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/uns/parks/:parkId/tree` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/uns/test/publish` | src/routes/v1/index.js | yes |
-| GET | `/api/v1/users/me/settings` | src/routes/v1/index.js | no |
-| PATCH | `/api/v1/users/me/settings` | src/routes/v1/index.js | no |
+| GET | `/api/v1/users/me/settings` | src/routes/v1/index.js | yes |
+| PATCH | `/api/v1/users/me/settings` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/visit-actuals/:actualYear` | src/app.js | yes |
 | PUT | `/api/v1/visit-actuals/:actualYear` | src/app.js | yes |
 | GET | `/api/v1/visit-plans/:id/export/xlsx` | src/app.js | yes |

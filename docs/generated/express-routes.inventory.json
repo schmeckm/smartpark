@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-06T20:01:52.840Z",
+  "generatedAt": "2026-05-06T20:05:57.754Z",
   "apiPrefix": "/api/v1",
   "routeCount": 328,
   "routes": [
@@ -1142,210 +1142,210 @@
       "path": "/api/v1/master-data/:entityType/:id/apply-template",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "DELETE",
       "path": "/api/v1/master-data/:entityType/:id",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/master-data/:entityType/:id",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "PATCH",
       "path": "/api/v1/master-data/:entityType/:id",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/master-data/:entityType/export/xlsx",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/master-data/:entityType/export",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
       "path": "/api/v1/master-data/:entityType/import/xlsx",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
       "path": "/api/v1/master-data/:entityType/import",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/master-data/:entityType",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
       "path": "/api/v1/master-data/:entityType",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/master-data/assets/:assetId/enrichment",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "PATCH",
       "path": "/api/v1/master-data/assets/:assetId/enrichment",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/master-data/assets/:assetId",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
       "path": "/api/v1/master-data/rides/:id/activate-prepared-sparkplug-metrics",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
       "path": "/api/v1/master-data/rides/:id/activate-prepared-uns-topics",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/master-data/rides/:id/compare-registry-vs-legacy",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
       "path": "/api/v1/master-data/rides/:id/deactivate-prepared-sparkplug-metrics",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
       "path": "/api/v1/master-data/rides/:id/deactivate-prepared-uns-topics",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
       "path": "/api/v1/master-data/rides/:id/prepare-sparkplug-metrics",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
       "path": "/api/v1/master-data/rides/:id/prepare-uns-topics",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/master-data/rides/:id/preview-registry-output",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
       "path": "/api/v1/master-data/rides/:id/registry-signal-deprecations/deprecate",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/master-data/rides/:id/registry-signal-deprecations/health",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
       "path": "/api/v1/master-data/rides/:id/registry-signal-deprecations/reactivate",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/master-data/rides/:id/registry-signal-deprecations",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/master-data/rides/:id/signal-capabilities",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "PUT",
       "path": "/api/v1/master-data/rides/:id/signal-capabilities",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/master-data/rides/:id/topic-activation-status",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/master-data/templates/:id",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/master-data/templates",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
@@ -1583,14 +1583,14 @@
       "path": "/api/v1/operations-facts/rides/:id",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/operations-facts/rides",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
@@ -1695,42 +1695,42 @@
       "path": "/api/v1/registry-publisher/events",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/registry-publisher/health",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
       "path": "/api/v1/registry-publisher/rides/:id/disable-pilot",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
       "path": "/api/v1/registry-publisher/rides/:id/dry-run",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
       "path": "/api/v1/registry-publisher/rides/:id/publish-once",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/registry-publisher/status",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "DELETE",
@@ -2157,14 +2157,14 @@
       "path": "/api/v1/users/me/settings",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "PATCH",
       "path": "/api/v1/users/me/settings",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
@@ -2301,8 +2301,8 @@
     }
   ],
   "stats": {
-    "missingFromOpenapiCount": 60,
-    "openapiOperationCount": 268,
+    "missingFromOpenapiCount": 20,
+    "openapiOperationCount": 308,
     "documentedNotLiveCount": 0
   }
 }
