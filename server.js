@@ -30,7 +30,7 @@ const {
   stopAttractionOeeSimulator,
 } = require('./src/services/attraction-oee-simulator.service');
 const { MlTrainingSchedulerService } = require('./src/services/ml/ml-training-scheduler.service');
-const { buildFeatureFlagReport } = require('./src/bootstrap/feature-flags.report');
+const { getFlags } = require('./src/bootstrap/feature-flags');
 const { Lifecycle, installShutdownHandlers } = require('./src/bootstrap/lifecycle');
 
 /**
@@ -52,7 +52,12 @@ function registerDefaultBoot(lifecycle, ctx) {
   lifecycle.register({
     name: 'boot:feature-flags',
     run: () => {
-      logger.info({ flags: buildFeatureFlagReport(env) }, 'feature flags resolved');
+      const flags = getFlags();
+      const warnings = flags.warnings();
+      if (warnings.length > 0) {
+        logger.warn({ warnings }, 'feature flags validation produced warnings (lenient mode)');
+      }
+      logger.info({ flags: flags.toLogPayload() }, 'feature flags resolved');
     },
   });
 
