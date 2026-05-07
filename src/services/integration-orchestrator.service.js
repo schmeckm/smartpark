@@ -18,6 +18,7 @@ const {
   mergeThemeParksEntityRegistryFromMessages,
   mergeThemeParksEntityRegistryFromLiveMessages,
 } = require('../modules/uns/theme-parks-entity-domain.service');
+const { slugifyName } = require('../utils/slugify.util');
 
 const SETTING_KEYS = {
   selectedProvider: 'externalParkData.selectedProvider',
@@ -30,14 +31,6 @@ const SETTING_KEYS = {
   unsManualNodes: 'uns.manualNodes',
   unsSparkplugSchemaOverride: 'uns.sparkplugTopicSchema',
 };
-
-function slugifyName(name) {
-  return String(name || '')
-    .trim()
-    .toLowerCase()
-    .replaceAll(/[^a-z0-9]+/g, '_')
-    .replaceAll(/^_+|_+$/g, '');
-}
 
 function resolveUnsDomainForEntity(entityName, entityType) {
   return resolveThemeParksPublicationDomain(entityName, entityType);

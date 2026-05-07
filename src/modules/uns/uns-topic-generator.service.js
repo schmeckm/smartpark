@@ -1,10 +1,4 @@
-function slugifyName(name) {
-  return String(name || '')
-    .trim()
-    .toLowerCase()
-    .replaceAll(/[^a-z0-9]+/g, '_')
-    .replaceAll(/^_+|_+$/g, '');
-}
+const { slugifyName } = require('../../utils/slugify.util');
 
 function generateTopicPath({ parkSlug, version = 'v1', domain, assetSlug, metric }) {
   return `tpuns/${slugifyName(parkSlug)}/${version}/${slugifyName(domain)}/${slugifyName(assetSlug)}/${slugifyName(metric)}`;
