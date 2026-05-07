@@ -25,7 +25,7 @@
     "themeparks_wiki": {
       "manifest": "src/integrations/adapter-packages/themeparks_wiki/manifest.json",
       "runtime": "src/integrations/adapter-packages/themeparks_wiki/index.js",
-      "providerAdapter": "src/integrations/adapters/themeparks-wiki.adapter.js",
+      "providerAdapter": "src/integrations/adapter-packages/themeparks_wiki/client.js",
       "syncModule": "src/modules/adapters/themeparks/themeparks-sync.service.js",
       "envFlags": ["EXTERNAL_PARK_DATA_DEFAULT_PROVIDER"],
       "selectedParkService": "src/services/themeparks-wiki-selected-park.service.js"
@@ -33,7 +33,7 @@
     "wartezeiten_app": {
       "manifest": "src/integrations/adapter-packages/wartezeiten_app/manifest.json",
       "runtime": "src/integrations/adapter-packages/wartezeiten_app/index.js",
-      "providerAdapter": "src/integrations/adapters/wartezeiten-app.adapter.js"
+      "providerAdapter": "src/integrations/adapter-packages/wartezeiten_app/client.js"
     },
     "weather_open_meteo": {
       "manifest": "src/integrations/adapter-packages/weather_open_meteo/manifest.json",

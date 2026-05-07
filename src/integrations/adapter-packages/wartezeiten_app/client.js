@@ -1,6 +1,6 @@
-const { ProviderAdapterInterface } = require('./provider-adapter.interface');
-const { requestJson } = require('./http-client');
-const { normalizeScheduleDateString } = require('../../utils/schedule-date.util');
+const { ProviderAdapterInterface } = require('../../adapters/provider-adapter.interface');
+const { requestJson } = require('../../adapters/http-client');
+const { normalizeScheduleDateString } = require('../../../utils/schedule-date.util');
 
 const PROVIDER = 'wartezeiten_app';
 const BASE_URL = 'https://api.wartezeiten.app';

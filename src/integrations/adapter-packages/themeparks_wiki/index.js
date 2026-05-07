@@ -1,4 +1,4 @@
-const { ThemeParksWikiAdapter } = require('../../../integrations/adapters/themeparks-wiki.adapter');
+const { ThemeParksWikiAdapter } = require('./client');
 const {
   getThemeparksWikiParkIdFromIntegrationSettings,
 } = require('../../../services/themeparks-wiki-selected-park.service');

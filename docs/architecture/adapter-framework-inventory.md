@@ -68,8 +68,8 @@ layer, and the new one is the runtime contract that wraps it.
 
 | adapterKey | manifest | runtime entrypoint | inner HTTP client | install YAML | DB row | DB-seeded | Provider in legacy registry |
 |---|---|---|---|---|---|---|---|
-| `themeparks_wiki` | `src/integrations/adapter-packages/themeparks_wiki/manifest.json` | `…/themeparks_wiki/index.js` | `src/integrations/adapters/themeparks-wiki.adapter.js` | _(none yet)_ | upserted at boot | yes (`ensureSeedConfigs`) | ✅ |
-| `wartezeiten_app` | `…/wartezeiten_app/manifest.json` | `…/wartezeiten_app/index.js` | `src/integrations/adapters/wartezeiten-app.adapter.js` | _(none yet)_ | upserted at boot | yes | ✅ |
+| `themeparks_wiki` | `src/integrations/adapter-packages/themeparks_wiki/manifest.json` | `…/themeparks_wiki/index.js` | `…/themeparks_wiki/client.js` _(was `src/integrations/adapters/themeparks-wiki.adapter.js`, co-located in C1)_ | _(none yet)_ | upserted at boot | yes (`ensureSeedConfigs`) | ✅ |
+| `wartezeiten_app` | `…/wartezeiten_app/manifest.json` | `…/wartezeiten_app/index.js` | `…/wartezeiten_app/client.js` _(was `src/integrations/adapters/wartezeiten-app.adapter.js`, co-located in C1)_ | _(none yet)_ | upserted at boot | yes | ✅ |
 | `weather_open_meteo` | `…/weather_open_meteo/manifest.json` | `…/weather_open_meteo/index.js` | _(no separate inner class — uses `src/services/open-meteo-client.js`)_ | `data/adapter-install-config/weather_open_meteo.install.yaml` | upserted at boot | no | — |
 | `calendar_school_holidays` | `…/calendar_school_holidays/manifest.json` | `…/calendar_school_holidays/index.js` | _(self-contained: no separate HTTP client)_ | _(none yet)_ | upserted at boot | no | — |
 | `opcua_edge` | `…/opcua_edge/manifest.json` | `…/opcua_edge/index.js` | _(self-contained)_ | `data/adapter-install-config/opcua_edge.install.yaml` | upserted at boot | no | — |
@@ -143,11 +143,10 @@ sync module dispatching to a non-existent provider).
 The audit's R3 was partially wrong (legacy/new are layered). However, three real duplications remain:
 
 ### 5.1 Inner provider classes belong inside their packages
-`themeparks-wiki.adapter.js` and `wartezeiten-app.adapter.js` are imported only by:
-- the legacy `ProviderAdapterRegistry`
-- the matching `adapter-packages/<key>/index.js`
-The cleanest target is to move each class file inside its package directory and have the legacy
-registry import from there. **C2 candidate**.
+**Done in Phase C1.** The two files `themeparks-wiki.adapter.js` and `wartezeiten-app.adapter.js`
+were `git mv`'d into their respective `adapter-packages/<key>/client.js` and the four importers
+(legacy registry, package's own `index.js`, themeparks-sync service) were updated to point at the
+new location.
 
 ### 5.2 `IntegrationOrchestratorService` mixes 6 bounded contexts
 1,091 lines covering: provider sync, canonical ingest, mappings, settings, UNS suggestions, manual UNS
@@ -225,8 +224,8 @@ sequenced tickets are:
 
 | # | Ticket | Risk | What it ships |
 |---|---|---|---|
-| **C0** | Inventory + lock-in tests (THIS PHASE) | none | Baseline JSON + 4 contract tests + governance gate. No code moved. |
-| **C1** | Provider-class co-location | low | Move `themeparks-wiki.adapter.js` into `adapter-packages/themeparks_wiki/client.js` (and same for wartezeiten). Update the 2 importers (the package's `index.js` and the registry). NO logic change, NO key change, NO migration. |
+| **C0** | Inventory + lock-in tests | none | Baseline JSON + 4 contract tests + governance gate. No code moved. **Done.** |
+| **C1** | Provider-class co-location | low | `git mv src/integrations/adapters/{themeparks-wiki,wartezeiten-app}.adapter.js src/integrations/adapter-packages/{themeparks_wiki,wartezeiten_app}/client.js`. Update 4 importers (package `index.js` × 2, legacy registry, themeparks-sync service). NO logic change, NO key change, NO migration. **Done.** |
 | **C2** | Build legacy registry FROM packages | low | `ProviderAdapterRegistry.constructor` reads from package directories that declare a `providerAdapterClient` field in `manifest.json`. Removes hard-coded `new XAdapter()` calls. |
 | **C3** | Decompose `IntegrationOrchestratorService` | high | Split the 1,091-line god service into 6 per-context services under `src/modules/integrations/`. Largest ticket. |
 | **C4** | Fold `src/modules/adapters/themeparks` into the canonical sync path | medium | Replace per-park direct sync calls with `IntegrationOrchestratorService.syncLive(themeparks_wiki, parkId)`. |

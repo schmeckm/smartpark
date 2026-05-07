@@ -10,10 +10,10 @@
  *
  * @see https://themeparks.wiki/ — API base: https://api.themeparks.wiki/v1
  */
-const { ProviderAdapterInterface } = require('./provider-adapter.interface');
-const { requestJson } = require('./http-client');
-const { slugifyName } = require('../../modules/uns/uns-topic-generator.service');
-const { normalizeScheduleDateString } = require('../../utils/schedule-date.util');
+const { ProviderAdapterInterface } = require('../../adapters/provider-adapter.interface');
+const { requestJson } = require('../../adapters/http-client');
+const { slugifyName } = require('../../../modules/uns/uns-topic-generator.service');
+const { normalizeScheduleDateString } = require('../../../utils/schedule-date.util');
 
 const PROVIDER = 'themeparks_wiki';
 const BASE_URL = 'https://api.themeparks.wiki/v1';

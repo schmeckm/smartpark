@@ -1,5 +1,10 @@
-const { ThemeParksWikiAdapter } = require('./themeparks-wiki.adapter');
-const { WartezeitenAppAdapter } = require('./wartezeiten-app.adapter');
+// Phase C1: provider-adapter HTTP client classes were co-located inside their
+// adapter-package directories so each package is self-contained. The legacy
+// registry below still imports them by class for backward compatibility with
+// IntegrationOrchestratorService (Phase C2 will rebuild the registry directly
+// from package manifests, removing these hard-coded imports).
+const { ThemeParksWikiAdapter } = require('../adapter-packages/themeparks_wiki/client');
+const { WartezeitenAppAdapter } = require('../adapter-packages/wartezeiten_app/client');
 const { AppError } = require('../../utils/app-error');
 
 class ProviderAdapterRegistry {

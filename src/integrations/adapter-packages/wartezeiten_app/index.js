@@ -1,4 +1,4 @@
-const { WartezeitenAppAdapter } = require('../../../integrations/adapters/wartezeiten-app.adapter');
+const { WartezeitenAppAdapter } = require('./client');
 
 const adapter = new WartezeitenAppAdapter();
 
