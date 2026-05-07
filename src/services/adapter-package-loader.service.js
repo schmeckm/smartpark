@@ -185,7 +185,6 @@ class AdapterPackageLoaderService {
     const entry = manifest.entrypoint || 'index.js';
     const runtimePath = path.join(packageDir, entry);
     if (!fs.existsSync(runtimePath)) return null;
-    // eslint-disable-next-line import/no-dynamic-require, global-require
     const runtime = require(runtimePath);
     assertRuntimeContract(runtime);
     return { manifest, runtime, packageDir };

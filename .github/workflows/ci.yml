@@ -56,6 +56,9 @@ jobs:
       - name: Seed
         run: npm run db:seed
 
+      - name: Lint (architectural baseline)
+        run: npm run lint
+
       - name: Unit tests + RBAC verify
         run: npm test
 
