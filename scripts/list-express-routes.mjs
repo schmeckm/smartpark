@@ -261,7 +261,7 @@ function buildGapMarkdown({ routes, openapiKeys, missingInOpenapi, documentedNot
   lines.push('');
   lines.push('## Isolated / separate codebases');
   lines.push('');
-  lines.push('- **`tp-uns-mvp`** (if present in the workspace) — treat as a separate lab / MVP tree; not merged into this Express inventory unless mounted by this `app.js`.');
+  lines.push('- **`archive/tp-uns-mvp/`** — historical lab / MVP tree, archived 2026-05-07 (QW9). Frozen reference material; not part of `src/app.js`, `npm test`, `npm run lint`, or any deploy. See `archive/README.md` for the canonical production equivalents.');
   lines.push('');
   lines.push('## Live routes missing from OpenAPI (sample)');
   lines.push('');

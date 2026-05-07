@@ -26,8 +26,8 @@
  * directives", because they document earlier decisions for a future config.
  *
  * Out of scope (not linted): admin-dashboard sub-app, scripts, integration
- * tests, migrations, seeders, the archived `tp-uns-mvp` lab tree, generated
- * docs, and data/log directories.
+ * tests, migrations, seeders, anything under `archive/` (frozen historical
+ * trees including `tp-uns-mvp`), generated docs, and data/log directories.
  */
 
 const globals = require('globals');
@@ -89,7 +89,6 @@ module.exports = [
     ignores: [
       'node_modules/**',
       'admin-dashboard/**',
-      'tp-uns-mvp/**',
       'archive/**',
       'docs/**',
       'data/**',
