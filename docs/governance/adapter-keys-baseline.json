@@ -42,6 +42,7 @@
     }
   },
   "expectedRuntimeContract": ["validateConfig", "discover", "poll", "health"],
+  "providerAdapterManifestField": "providerAdapterClient",
   "providerAdapterRegistryClass": "src/integrations/adapters/provider-adapter-registry.js",
   "providerAdapterServiceClass": "src/services/provider-adapter-registry.service.js",
   "frameworkServiceClass": "src/adapter-framework/adapter-framework.service.js",

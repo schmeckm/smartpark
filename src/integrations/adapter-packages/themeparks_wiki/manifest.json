@@ -14,6 +14,7 @@
   "version": "1.0.0",
   "runtime": "NODE",
   "entrypoint": "index.js",
+  "providerAdapterClient": "client.js",
   "adapterType": "PUBLIC_API",
   "iotClass": "cloud_polling",
   "capabilities": ["DISCOVERY", "POLLING", "UNS_OUTPUT", "CANONICAL_OUTPUT"],

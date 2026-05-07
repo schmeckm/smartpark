@@ -108,9 +108,16 @@ keys comply. The DB column is `VARCHAR(120) UNIQUE`.
 - `app.js` root mounts (Phase A5 baseline): `/integrations/installed-adapters/install-local`, `/integrations/adapters/install-local` (alias, deprecated B2), `/integrations/installed-adapters/:id` DELETE, `/integrations/adapters/packages/:adapterKey/asset` GET, `/integrations/adapters/pipeline-log` GET.
 
 ### 3.5 Provider registry (`ProviderAdapterRegistry`)
-Hard-codes the set `{ themeparks_wiki, wartezeiten_app }` via `new ThemeParksWikiAdapter()` and `new
-WartezeitenAppAdapter()` at construction. The legacy framework is **closed** — adding a new provider
-to the legacy framework is a code change, not configuration.
+**Post Phase C2**: dynamically built from package manifests. The constructor scans
+`src/integrations/adapter-packages/<key>/manifest.json` and, for every manifest that declares
+`providerAdapterClient: "<file>"`, requires `<packageDir>/<file>`, finds the exported class extending
+`ProviderAdapterInterface`, and instantiates it. Adding a new provider is now configuration
+(manifest field + client file), not a code change to the registry.
+
+The two production manifests that declare this field today are `themeparks_wiki` and
+`wartezeiten_app`. The other three packages (`weather_open_meteo`, `calendar_school_holidays`,
+`opcua_edge`) deliberately omit the field — they are pure runtime-contract packages with no upstream
+HTTP client class.
 
 ---
 
@@ -226,7 +233,7 @@ sequenced tickets are:
 |---|---|---|---|
 | **C0** | Inventory + lock-in tests | none | Baseline JSON + 4 contract tests + governance gate. No code moved. **Done.** |
 | **C1** | Provider-class co-location | low | `git mv src/integrations/adapters/{themeparks-wiki,wartezeiten-app}.adapter.js src/integrations/adapter-packages/{themeparks_wiki,wartezeiten_app}/client.js`. Update 4 importers (package `index.js` × 2, legacy registry, themeparks-sync service). NO logic change, NO key change, NO migration. **Done.** |
-| **C2** | Build legacy registry FROM packages | low | `ProviderAdapterRegistry.constructor` reads from package directories that declare a `providerAdapterClient` field in `manifest.json`. Removes hard-coded `new XAdapter()` calls. |
+| **C2** | Build legacy registry FROM packages | low | `ProviderAdapterRegistry.constructor` scans `adapter-packages/<key>/manifest.json` and instantiates the class declared by `manifest.providerAdapterClient`. Removes hard-coded `new XAdapter()` calls. Manifest validator gained an optional `providerAdapterClient` string field; baseline gained a `providerAdapterManifestField` key. **Done.** |
 | **C3** | Decompose `IntegrationOrchestratorService` | high | Split the 1,091-line god service into 6 per-context services under `src/modules/integrations/`. Largest ticket. |
 | **C4** | Fold `src/modules/adapters/themeparks` into the canonical sync path | medium | Replace per-park direct sync calls with `IntegrationOrchestratorService.syncLive(themeparks_wiki, parkId)`. |
 | **C5** | Move `src/adapter-framework/` and `src/services/adapter-*` under `src/modules/integrations/adapter-framework/` | medium | Pure file relocation; no behaviour change. Updates many imports. |

@@ -137,6 +137,55 @@ test('adapter-packages contract: every adapter key matches the regex enforced by
   }
 });
 
+test('adapter-packages contract: every provider package declares providerAdapterClient pointing at an existing file (Phase C2)', () => {
+  const failures = [];
+  for (const adapterKey of baseline.providerAdapterKeys) {
+    const manifestPath = path.join(PACKAGES_DIR, adapterKey, 'manifest.json');
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    if (typeof manifest.providerAdapterClient !== 'string' || !manifest.providerAdapterClient.trim()) {
+      failures.push(`${adapterKey}: manifest.providerAdapterClient must be a non-empty string`);
+      continue;
+    }
+    const clientPath = path.join(PACKAGES_DIR, adapterKey, manifest.providerAdapterClient);
+    if (!fs.existsSync(clientPath)) {
+      failures.push(`${adapterKey}: providerAdapterClient="${manifest.providerAdapterClient}" not found at ${clientPath}`);
+    }
+  }
+  assert.equal(
+    failures.length,
+    0,
+    `providerAdapterClient declaration violations:\n  - ${failures.join('\n  - ')}`
+  );
+});
+
+test('adapter-packages contract: manifest validator rejects malformed providerAdapterClient (Phase C2)', () => {
+  const validator = new AdapterManifestValidatorService();
+  // A baseline-shaped manifest with the field set to non-string fails.
+  const base = {
+    adapterKey: 'x',
+    name: 'X',
+    version: '1.0.0',
+    runtime: 'NODE',
+    adapterType: 'PUBLIC_API',
+    capabilities: [],
+  };
+  const empty = validator.validateManifest({ ...base, providerAdapterClient: '' });
+  assert.equal(empty.valid, false);
+  assert.ok(empty.errors.some((e) => e.includes('providerAdapterClient')));
+
+  const numeric = validator.validateManifest({ ...base, providerAdapterClient: 42 });
+  assert.equal(numeric.valid, false);
+  assert.ok(numeric.errors.some((e) => e.includes('providerAdapterClient')));
+
+  // A manifest with the field absent stays valid.
+  const without = validator.validateManifest({ ...base });
+  assert.equal(without.valid, true);
+
+  // A manifest with the field set to a valid string is also valid.
+  const good = validator.validateManifest({ ...base, providerAdapterClient: 'client.js' });
+  assert.equal(good.valid, true);
+});
+
 test('adapter-packages contract: providerAdapterKeys baseline subset is consistent with the legacy registry', () => {
   // The legacy ProviderAdapterRegistry (src/integrations/adapters/provider-adapter-registry.js)
   // hard-codes the set { themeparks_wiki, wartezeiten_app }. The baseline lists

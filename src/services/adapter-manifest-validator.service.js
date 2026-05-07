@@ -26,6 +26,16 @@ class AdapterManifestValidatorService {
     if (typeof entrypoint !== 'string' || !entrypoint.trim()) {
       errors.push('entrypoint must be a non-empty string');
     }
+    // Phase C2: optional `providerAdapterClient` declares that the package
+    // contributes a class extending `ProviderAdapterInterface`, sourced from
+    // `<packageDir>/<providerAdapterClient>`. The legacy `ProviderAdapterRegistry`
+    // is built dynamically from this field across all packages, replacing the
+    // hard-coded `new ThemeParksWikiAdapter()` calls of the pre-C2 registry.
+    if (manifest.providerAdapterClient != null) {
+      if (typeof manifest.providerAdapterClient !== 'string' || !manifest.providerAdapterClient.trim()) {
+        errors.push('providerAdapterClient must be a non-empty string when present');
+      }
+    }
     if (!manifest.name || typeof manifest.name !== 'string') {
       errors.push('name is required (string)');
     }
