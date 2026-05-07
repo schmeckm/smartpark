@@ -1,3 +1,31 @@
+/integrations/logs:
+  get:
+    tags:
+      - Wave2
+    summary: 'Integration / ingestion log (canonical mount, Phase B3)'
+    description: |
+      Reads `integration_event_log` rows. Identical handler to the deprecated
+      `GET /integration/logs` (singular) — the singular namespace is being folded
+      into `/integrations/*`. New clients should use this path; existing
+      `/integration/logs` consumers continue to work for the deprecation window.
+      Requires the `integration.read` permission (NB: singular permission name,
+      kept stable for backward compatibility with the legacy controller).
+    parameters:
+      -
+        in: query
+        name: limit
+        schema:
+          type: integer
+          default: 100
+      -
+        in: query
+        name: offset
+        schema:
+          type: integer
+          default: 0
+    responses:
+      '200':
+        description: OK
 /integrations/feature-flags:
   get:
     tags:

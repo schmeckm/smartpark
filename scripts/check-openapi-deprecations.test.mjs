@@ -45,11 +45,14 @@ const REQUIRED_DEPRECATED_OPERATIONS = [
  * above — they are the migration target.
  */
 const REQUIRED_CANONICAL_OPERATIONS = [
+  // Phase B5 — /ai/ml/* canonical mount.
   { path: '/ai/ml/predict/rides/{rideId}', method: 'get' },
   { path: '/ai/ml/predict/park-summary', method: 'get' },
   { path: '/ai/ml/dataset/rides', method: 'get' },
   { path: '/ai/ml/train/wait-time/global', method: 'post' },
   { path: '/ai/ml/train/wait-time/rides/{rideId}', method: 'post' },
+  // Phase B3 — plural /integrations/logs canonical mount (replaces /integration/logs).
+  { path: '/integrations/logs', method: 'get' },
 ];
 
 test('OpenAPI: every QW7 stale-route operation is marked deprecated', () => {
