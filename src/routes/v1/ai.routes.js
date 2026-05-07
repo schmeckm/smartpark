@@ -340,41 +340,77 @@ function registerProtectedAiRoutes(v1Router) {
     aiController.getRecommendationExplanation
   );
 
-  v1Router.get(
-    '/ml/predict/rides/:rideId',
-    requirePermission('ai', 'read'),
-    requireParkContext,
-    validateMerged(predictRideMerged),
-    mlPredictionController.getPredictRide
-  );
-  v1Router.get(
-    '/ml/predict/park-summary',
-    requirePermission('ai', 'read'),
-    requireParkContext,
-    validate(parkMlSummaryQuery, 'query'),
-    mlPredictionController.getParkMlSummary
-  );
-  v1Router.get(
-    '/ml/dataset/rides',
-    requirePermission('ai', 'read'),
-    requireParkContext,
-    validate(mlRideDatasetStatsQuery, 'query'),
-    mlPredictionController.getRideDatasetStats
-  );
-  v1Router.post(
-    '/ml/train/wait-time/global',
-    requirePermission('ai', 'refresh'),
-    requireParkContext,
-    validate(trainGlobalWaitBody),
-    mlPredictionController.postTrainGlobalWait
-  );
-  v1Router.post(
-    '/ml/train/wait-time/rides/:rideId',
-    requirePermission('ai', 'refresh'),
-    requireParkContext,
-    validate(rideIdPathParams, 'params'),
-    mlPredictionController.postTrainRideWait
-  );
+  /**
+   * ML wait-time prediction surface — historical mount under `/ml/*` is kept
+   * for backwards compatibility (admin-dashboard still calls `/ml/predict/...`)
+   * and a parallel canonical mount under `/ai/ml/*` was added in Phase B5
+   * because every other AI endpoint lives under `/ai/*`. Both registrations
+   * share the same handlers, middleware, validators, and RBAC; the only
+   * difference is the path. The `/ml/*` paths are marked `deprecated: true`
+   * in OpenAPI with migration descriptions pointing at `/ai/ml/*`.
+   *
+   * Removal of `/ml/*` is a future major-version action; until then both
+   * surfaces stay live.
+   */
+  const mlSurfaceRegistrations = [
+    {
+      method: 'get',
+      path: '/predict/rides/:rideId',
+      handlers: [
+        requirePermission('ai', 'read'),
+        requireParkContext,
+        validateMerged(predictRideMerged),
+        mlPredictionController.getPredictRide,
+      ],
+    },
+    {
+      method: 'get',
+      path: '/predict/park-summary',
+      handlers: [
+        requirePermission('ai', 'read'),
+        requireParkContext,
+        validate(parkMlSummaryQuery, 'query'),
+        mlPredictionController.getParkMlSummary,
+      ],
+    },
+    {
+      method: 'get',
+      path: '/dataset/rides',
+      handlers: [
+        requirePermission('ai', 'read'),
+        requireParkContext,
+        validate(mlRideDatasetStatsQuery, 'query'),
+        mlPredictionController.getRideDatasetStats,
+      ],
+    },
+    {
+      method: 'post',
+      path: '/train/wait-time/global',
+      handlers: [
+        requirePermission('ai', 'refresh'),
+        requireParkContext,
+        validate(trainGlobalWaitBody),
+        mlPredictionController.postTrainGlobalWait,
+      ],
+    },
+    {
+      method: 'post',
+      path: '/train/wait-time/rides/:rideId',
+      handlers: [
+        requirePermission('ai', 'refresh'),
+        requireParkContext,
+        validate(rideIdPathParams, 'params'),
+        mlPredictionController.postTrainRideWait,
+      ],
+    },
+  ];
+
+  for (const reg of mlSurfaceRegistrations) {
+    // Legacy `/ml/...` mount (deprecated, see OpenAPI).
+    v1Router[reg.method](`/ml${reg.path}`, ...reg.handlers);
+    // Canonical `/ai/ml/...` mount (Phase B5).
+    v1Router[reg.method](`/ai/ml${reg.path}`, ...reg.handlers);
+  }
 }
 
 module.exports = { registerProtectedAiRoutes, aiController };

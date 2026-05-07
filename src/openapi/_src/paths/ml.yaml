@@ -3,7 +3,13 @@
     tags:
       - AI
     summary: 'Predict ride wait times (15/30/60 min) from feature store + optional ridge models'
-    description: 'Needs `ai.read` and `X-Park-Id`. Falls back to baseline when no model is trained.'
+    deprecated: true
+    description: |
+      **Deprecated (Phase B5)** — every other AI endpoint lives under `/ai/*`. Use the canonical
+      `GET /ai/ml/predict/rides/{rideId}` instead. Same handler, same RBAC (`ai.read`),
+      same `X-Park-Id` requirement, same response shape; the `/ml/*` mount remains live for
+      backwards compatibility (admin-dashboard still calls it) and will be removed in a
+      future major version.
     parameters:
       -
         in: path
@@ -32,7 +38,13 @@
     tags:
       - AI
     summary: 'Add-on Board L0/L1 — aggregate 60m wait forecasts across ride assets'
-    description: "Needs `ai.read` and `X-Park-Id`. Loads RIDE-type `park_assets`, calls the same prediction path as L3 per ride (batched), then rolls up\n`parkDemandForecastIndex`, `averageForecastWaitTime60`, `forecastCriticalRides`, and per-zone stats for L1 drill-down.\nOptional `zoneId` scopes the asset list to one zone (L1 board). Does not throw if individual ride predictions fail.\nResponses are cached about **45 seconds** per `(park, zone, threshold, limit, offset)` key.\n"
+    deprecated: true
+    description: |
+      **Deprecated (Phase B5)** — use `GET /ai/ml/predict/park-summary`. Same handler, same RBAC.
+      Loads RIDE-type `park_assets`, calls the same prediction path as L3 per ride (batched),
+      then rolls up `parkDemandForecastIndex`, `averageForecastWaitTime60`, `forecastCriticalRides`,
+      and per-zone stats for L1 drill-down. Optional `zoneId` scopes the asset list to one zone.
+      Responses are cached about **45 seconds** per `(park, zone, threshold, limit, offset)` key.
     parameters:
       -
         in: query
@@ -80,7 +92,9 @@
     tags:
       - AI
     summary: 'ML dataset stats from ride_feature_snapshots_5m (join coverage)'
-    description: 'Needs `ai.read` and park context'
+    deprecated: true
+    description: |
+      **Deprecated (Phase B5)** — use `GET /ai/ml/dataset/rides`. Same handler, same RBAC.
     parameters:
       -
         in: query
@@ -119,7 +133,9 @@
     tags:
       - AI
     summary: 'Train global ridge wait-time models (15/30/60) for current park'
-    description: 'Needs `ai.refresh` and `X-Park-Id`'
+    deprecated: true
+    description: |
+      **Deprecated (Phase B5)** — use `POST /ai/ml/train/wait-time/global`. Same handler, same RBAC.
     requestBody:
       required: false
       content:
@@ -143,7 +159,9 @@
     tags:
       - AI
     summary: 'Train ride-specific models when data criteria are met'
-    description: 'Needs `ai.refresh` and `X-Park-Id`'
+    deprecated: true
+    description: |
+      **Deprecated (Phase B5)** — use `POST /ai/ml/train/wait-time/rides/{rideId}`. Same handler, same RBAC.
     parameters:
       -
         in: path

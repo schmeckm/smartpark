@@ -1475,3 +1475,175 @@
           application/json:
             schema:
               $ref: '#/components/schemas/EnvelopeRecommendationExplanation'
+'/ai/ml/predict/rides/{rideId}':
+  get:
+    tags:
+      - AI
+    summary: 'Predict ride wait times (15/30/60 min) from feature store + optional ridge models'
+    description: |
+      Canonical mount under `/ai/ml/*` (Phase B5). Needs `ai.read` and `X-Park-Id`. Falls back to
+      baseline when no model is trained. Identical handler to the deprecated `/ml/predict/rides/{rideId}`.
+    parameters:
+      -
+        in: path
+        name: rideId
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: 'Platform ride asset_id (park_assets.asset_id)'
+      -
+        in: query
+        name: horizon
+        schema:
+          type: string
+          example: 1530
+        description: 'Comma-separated horizons in minutes'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeMlRidePredict'
+/ai/ml/predict/park-summary:
+  get:
+    tags:
+      - AI
+    summary: 'Add-on Board L0/L1 — aggregate 60m wait forecasts across ride assets'
+    description: |
+      Canonical mount under `/ai/ml/*` (Phase B5). Needs `ai.read` and `X-Park-Id`. Loads RIDE-type
+      `park_assets`, calls the same prediction path as L3 per ride (batched), then rolls up
+      `parkDemandForecastIndex`, `averageForecastWaitTime60`, `forecastCriticalRides`, and per-zone
+      stats for L1 drill-down. Optional `zoneId` scopes the asset list to one zone (L1 board). Does
+      not throw if individual ride predictions fail. Responses are cached about **45 seconds** per
+      `(park, zone, threshold, limit, offset)` key.
+    parameters:
+      -
+        in: query
+        name: zoneId
+        schema:
+          type: string
+          format: uuid
+        description: 'When set, only rides in this zone are included (L1 scope).'
+      -
+        in: query
+        name: criticalAtMinutes
+        schema:
+          type: number
+          minimum: 15
+          maximum: 180
+          default: 55
+        description: 'Count rides at or above this forecasted wait (60 min horizon) as critical.'
+      -
+        in: query
+        name: limit
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 80
+        description: 'Max ride assets to evaluate (caps load).'
+      -
+        in: query
+        name: offset
+        schema:
+          type: integer
+          minimum: 0
+          maximum: 500
+          default: 0
+        description: 'Skip this many ride assets (stable name order) for paging large parks.'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeMlParkForecastSummary'
+/ai/ml/dataset/rides:
+  get:
+    tags:
+      - AI
+    summary: 'ML dataset stats from ride_feature_snapshots_5m (join coverage)'
+    description: |
+      Canonical mount under `/ai/ml/*` (Phase B5). Needs `ai.read` and park context.
+    parameters:
+      -
+        in: query
+        name: rideId
+        schema:
+          type: string
+          format: uuid
+      -
+        in: query
+        name: from
+        schema:
+          type: string
+          format: date-time
+      -
+        in: query
+        name: to
+        schema:
+          type: string
+          format: date-time
+      -
+        in: query
+        name: rowLimit
+        schema:
+          type: integer
+          minimum: 100
+          maximum: 50000
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeMlRideDataset'
+/ai/ml/train/wait-time/global:
+  post:
+    tags:
+      - AI
+    summary: 'Train global ridge wait-time models (15/30/60) for current park'
+    description: |
+      Canonical mount under `/ai/ml/*` (Phase B5). Needs `ai.refresh` and `X-Park-Id`.
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              rowLimit:
+                type: integer
+                minimum: 200
+                maximum: 50000
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeMlTrainResult'
+'/ai/ml/train/wait-time/rides/{rideId}':
+  post:
+    tags:
+      - AI
+    summary: 'Train ride-specific models when data criteria are met'
+    description: |
+      Canonical mount under `/ai/ml/*` (Phase B5). Needs `ai.refresh` and `X-Park-Id`.
+    parameters:
+      -
+        in: path
+        name: rideId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeMlTrainRideResult'
