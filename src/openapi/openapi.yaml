@@ -7961,8 +7961,9 @@ paths:
     post:
       tags:
         - Integrations
-      summary: 'Install or upsert a local adapter (alias of installed-adapters/install-local)'
-      description: 'Mounted on **root `app.js`** for the same path as v1 router. Requires **integrations.manage**. Writes install config YAML under `data/adapter-install-config`.'
+      summary: 'Install or upsert a local adapter (DEPRECATED alias of installed-adapters/install-local)'
+      deprecated: true
+      description: "**Deprecated (Phase B2)** — alias of\n`POST /api/v1/integrations/installed-adapters/install-local`. Same\nhandler, same request body schema, same response, same RBAC\n(`integrations.manage`). Kept live so the admin-dashboard (which\ncurrently calls this path) keeps working; new clients MUST use the\ncanonical path.\n\nRuntime signal: every response from this route includes:\n  - `Deprecation: true`\n  - `Link: <…installed-adapters/install-local>; rel=\"successor-version\"`\n  - `X-API-Deprecation-Reason: …`\n\nPhysical removal is a future major-version action after the\ndashboard migrates and a sunset window has been agreed.\n"
       requestBody:
         required: true
         content:
@@ -7971,7 +7972,7 @@ paths:
               $ref: '#/components/schemas/InstallLocalAdapterRequest'
       responses:
         '201':
-          description: 'Created or updated'
+          description: 'Created or updated. Includes Deprecation/Link/Sunset headers.'
           content:
             application/json:
               schema:

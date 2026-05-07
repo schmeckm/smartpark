@@ -10,6 +10,7 @@ const { errorHandler } = require('./middleware/error.middleware');
 const { authenticate } = require('./middleware/auth.middleware');
 const { attachParkContext, requireParkContext } = require('./middleware/park-context.middleware');
 const { requirePermission } = require('./middleware/rbac.middleware');
+const { deprecation } = require('./middleware/deprecation.middleware');
 const aiController = require('./controllers/ai.controller');
 const mlAiController = require('./controllers/ml-ai.controller');
 const integrationsController = require('./controllers/integrations.controller');
@@ -137,8 +138,20 @@ app.post(
   validate(installLocalAdapterBodySchema),
   integrationsController.installLocalAdapter
 );
+/**
+ * Phase B2 alias — same handler as `/api/v1/integrations/installed-adapters/install-local`.
+ * Marked deprecated in OpenAPI and at runtime via Deprecation/Link/Sunset headers
+ * (RFC 8594 / RFC 8288). Kept live so the admin-dashboard's current
+ * `/integrations/adapters/install-local` calls continue to work; physical
+ * removal is a future major-version action after the dashboard migrates to
+ * the canonical path.
+ */
 app.post(
   '/api/v1/integrations/adapters/install-local',
+  deprecation({
+    canonical: '/api/v1/integrations/installed-adapters/install-local',
+    reason: 'Phase B2 — alias of installed-adapters/install-local; new clients should use the canonical path.',
+  }),
   authenticate,
   requirePermission('integrations', 'manage'),
   validate(installLocalAdapterBodySchema),

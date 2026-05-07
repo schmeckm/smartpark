@@ -36,6 +36,8 @@ const REQUIRED_DEPRECATED_OPERATIONS = [
   { path: '/ml/dataset/rides', method: 'get' },
   { path: '/ml/train/wait-time/global', method: 'post' },
   { path: '/ml/train/wait-time/rides/{rideId}', method: 'post' },
+  // Adapter install-local alias; canonical lives at /integrations/installed-adapters/install-local (Phase B2).
+  { path: '/integrations/adapters/install-local', method: 'post' },
 ];
 
 /**
