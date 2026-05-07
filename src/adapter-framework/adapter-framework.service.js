@@ -1,4 +1,3 @@
-const { AdapterLoaderService } = require('./adapter-loader.service');
 const { AdapterPackageRepository } = require('../repositories/adapter-package.repository');
 const {
   AdapterInstallConfigRepository,
@@ -22,7 +21,6 @@ function looksLikeUuidPk(idOrKey) {
 
 class AdapterFrameworkService {
   constructor() {
-    this.loader = new AdapterLoaderService();
     this.unifiedLoader = new AdapterPackageLoaderService();
     this.repo = new AdapterPackageRepository();
     this.installConfigRepo = new AdapterInstallConfigRepository();
@@ -30,8 +28,9 @@ class AdapterFrameworkService {
   }
 
   async reloadLocalPackages() {
-    // Use unified roots (`integrations/adapter-packages` + legacy `adapters/packages`) so DB/registry
-    // matches `scanPackages()` / Devices & Services; legacy-only load left OPC-UA cards without rows → GET 404.
+    // Single root (`src/integrations/adapter-packages`) — keeps DB/registry in sync with
+    // scanPackages() / Devices & Services. Historical note: when a separate legacy root existed,
+    // a legacy-only load left OPC-UA cards without rows → GET 404.
     const loaded = this.unifiedLoader.loadAll();
     this.runtimeMap.clear();
     for (const item of loaded) {
@@ -74,9 +73,8 @@ class AdapterFrameworkService {
   }
 
   /**
-   * Resolve { manifest, runtime, packageDir } from bootstrap map or on-demand load.
-   * Uses {@link AdapterPackageLoaderService} so both `integrations/adapter-packages` and
-   * legacy `adapters/packages` work (reloadLocalPackages only fills the map from legacy).
+   * Resolve { manifest, runtime, packageDir } from bootstrap map or on-demand load
+   * via {@link AdapterPackageLoaderService} (`src/integrations/adapter-packages`).
    */
   _resolveLoaded(adapterKey) {
     let loaded = this.runtimeMap.get(adapterKey);

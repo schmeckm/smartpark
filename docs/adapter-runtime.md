@@ -1,6 +1,6 @@
 # Generic adapter runtime (local packages)
 
-This document describes the **local adapter package** contract, how observations flow through validation and output encoders, and how to run smoke tests. Legacy `AdapterLoaderService` under `src/adapters/packages` still exists for compatibility; **new integrations must live under** `src/integrations/adapter-packages/<adapterKey>/` and are loaded by `AdapterPackageLoaderService` + `AdapterRuntimeService`.
+This document describes the **local adapter package** contract, how observations flow through validation and output encoders, and how to run smoke tests. **All adapter packages live under** `src/integrations/adapter-packages/<adapterKey>/` and are loaded by `AdapterPackageLoaderService` + `AdapterRuntimeService`.
 
 ## Adapter contract (`index.js` + `manifest.json`)
 
@@ -42,7 +42,7 @@ Default profile list when omitted comes from env `OUTPUT_PROFILES` (comma-separa
 
 ## Local package layout
 
-Canonical root:
+Single root:
 
 ```text
 src/integrations/adapter-packages/<adapterKey>/
@@ -54,13 +54,7 @@ src/integrations/adapter-packages/<adapterKey>/
     banner.png      # optional; or banner.jpg / .webp / .svg, or manifest.bannerPath
 ```
 
-Legacy root (still scanned; same `adapterKey` prefers the integration path):
-
-```text
-src/adapters/packages/<adapterKey>/
-```
-
-Loader: `src/services/adapter-package-loader.service.js` — `scanPackages()` merges **integrations** and **legacy** trees (integration wins on duplicate keys). It also discovers `readmePath` (`README.md` or `manifest.readmePath`) and `bannerPath` (manifest or `assets/banner.{png,jpg,webp,svg}`). Same-origin **relative** paths are returned on the adapters API as `readmeAssetUrl` / `bannerAssetUrl` / `logoAssetUrl` (e.g. `/api/v1/integrations/adapters/packages/:adapterKey/asset?path=…`) so browsers behind Vite/Docker are not given internal hostnames like `http://api:3000/…`. That GET is mounted on the root Express app **without** JWT so `img` tags work (`src/app.js`).
+Loader: `src/services/adapter-package-loader.service.js` — `scanPackages()` walks the integrations tree only. It also discovers `readmePath` (`README.md` or `manifest.readmePath`) and `bannerPath` (manifest or `assets/banner.{png,jpg,webp,svg}`). Same-origin **relative** paths are returned on the adapters API as `readmeAssetUrl` / `bannerAssetUrl` / `logoAssetUrl` (e.g. `/api/v1/integrations/adapters/packages/:adapterKey/asset?path=…`) so browsers behind Vite/Docker are not given internal hostnames like `http://api:3000/…`. That GET is mounted on the root Express app **without** JWT so `img` tags work (`src/app.js`).
 
 ## Unified `runAdapter()`
 

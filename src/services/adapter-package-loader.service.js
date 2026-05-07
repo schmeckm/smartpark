@@ -1,6 +1,6 @@
 /**
- * Preferred loader for local adapter packages (runtime + HTTP).
- * Scans `src/integrations/adapter-packages` first, then legacy `src/adapters/packages`.
+ * Loader for local adapter packages (runtime + HTTP).
+ * Scans `src/integrations/adapter-packages` only.
  *
  * TODO: Support installing adapters from private Git / tarball URLs (registry + semver).
  *
@@ -9,7 +9,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { assertRuntimeContract } = require('../adapter-framework/adapter-runtime-contract');
-const { PACKAGES_DIR: LEGACY_PACKAGES_DIR } = require('../adapter-framework/adapter-loader.service');
 const { AdapterManifestValidatorService } = require('./adapter-manifest-validator.service');
 
 const INTEGRATIONS_ADAPTER_PACKAGES = path.join(__dirname, '..', 'integrations', 'adapter-packages');
@@ -93,16 +92,12 @@ class AdapterPackageLoaderService {
   }
 
   /**
-   * Preferred: `src/integrations/adapter-packages`. Legacy `src/adapters/packages` is merged;
-   * same `adapterKey` keeps the integration path version.
+   * Scan `src/integrations/adapter-packages`. Same `adapterKey` collisions are deduplicated
+   * (last-wins inside a single root, which today always picks one folder per key).
    */
   scanPackages() {
     const primary = this._scanRoot(INTEGRATIONS_ADAPTER_PACKAGES);
-    const legacy = this._scanRoot(LEGACY_PACKAGES_DIR);
     const byKey = new Map();
-    for (const item of legacy) {
-      byKey.set(item.adapterKey, item);
-    }
     for (const item of primary) {
       byKey.set(item.adapterKey, item);
     }
@@ -157,7 +152,7 @@ class AdapterPackageLoaderService {
   }
 
   getRoots() {
-    return [INTEGRATIONS_ADAPTER_PACKAGES, LEGACY_PACKAGES_DIR];
+    return [INTEGRATIONS_ADAPTER_PACKAGES];
   }
 
   _findPackageDir(adapterKey) {
