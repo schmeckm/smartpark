@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "description": "Lock list for known (METHOD, path) keys that resolve to more than one Express route registration. Smart Park OS today double-mounts a small set of routes on both root `src/app.js` and `src/routes/v1/index.js` (a deliberate workaround for proxy POST body issues, audited in `docs/architecture/route-mounting.md`). CI (npm test) fails if (a) a NEW duplicate appears, or (b) a baseline duplicate is removed without updating this file (so the dual-mount risk does not silently regrow elsewhere). The long-term goal is to drive `allowedDuplicateKeys` to the empty array as part of the route-mounting unification phase (Phase A1).",
+  "maxAllowedDuplicateCount": 6,
+  "allowedDuplicateKeys": [
+    "DELETE /api/v1/integrations/installed-adapters/:id",
+    "GET /api/v1/integrations/adapters/pipeline-log",
+    "POST /api/v1/ai/feature-store/park-snapshots/bulk-delete",
+    "POST /api/v1/ai/feature-store/park-snapshots/purge",
+    "POST /api/v1/integrations/adapters/install-local",
+    "POST /api/v1/integrations/installed-adapters/install-local"
+  ]
+}

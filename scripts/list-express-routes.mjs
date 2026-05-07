@@ -125,7 +125,37 @@ function collectRoutes(app) {
     }
   }
   walk(app._router?.stack || [], '', 'app');
-  return dedupeRoutes(out);
+  return out;
+}
+
+/**
+ * Find routes registered more than once at the same `(METHOD, path)` key after
+ * normalization. The Express stack is allowed to attach the same handler at
+ * the same path twice (e.g. via root `app.js` and `v1Router`), so this scan
+ * runs against the raw — pre-dedupe — collected list.
+ *
+ * @param {{ method: string, path: string, mountOrigin: string, sourceHint: string }[]} rawRows
+ */
+function findDuplicateRegistrations(rawRows) {
+  const byKey = new Map();
+  for (const r of rawRows) {
+    const k = `${r.method} ${r.path}`;
+    if (!byKey.has(k)) byKey.set(k, []);
+    byKey.get(k).push(r);
+  }
+  const dups = [];
+  for (const [key, rows] of byKey.entries()) {
+    if (rows.length < 2) continue;
+    const origins = [...new Set(rows.map((r) => r.mountOrigin))].sort();
+    dups.push({
+      key,
+      method: rows[0].method,
+      path: rows[0].path,
+      registrationCount: rows.length,
+      mountOrigins: origins,
+    });
+  }
+  return dups.sort((a, b) => a.key.localeCompare(b.key));
 }
 
 /**
@@ -294,7 +324,9 @@ function printTable(rows) {
 
 async function main() {
   const { app } = require(path.join(ROOT, 'src', 'app.js'));
-  const rawRoutes = applyV1Prefix(collectRoutes(app));
+  const rawCollected = applyV1Prefix(collectRoutes(app));
+  const duplicates = findDuplicateRegistrations(rawCollected);
+  const rawRoutes = dedupeRoutes(rawCollected);
   const { keys: openapiKeys } = loadOpenApiOperations();
 
   const inventory = rawRoutes.map((r) => ({
@@ -351,12 +383,29 @@ async function main() {
   });
   writeFileSync(path.join(outDir, 'openapi-gap-report.md'), gapMd, 'utf8');
 
+  const duplicatesPath = path.join(outDir, 'express-routes.duplicates.json');
+  writeFileSync(
+    duplicatesPath,
+    JSON.stringify(
+      {
+        generatedAt: new Date().toISOString(),
+        apiPrefix: API_PREFIX,
+        duplicateKeyCount: duplicates.length,
+        duplicates,
+      },
+      null,
+      2
+    ),
+    'utf8'
+  );
+
   printTable(inventory);
   console.log(`\nWrote ${path.relative(ROOT, jsonPath)}`);
   console.log(`Wrote ${path.relative(ROOT, path.join(outDir, 'express-routes.inventory.md'))}`);
   console.log(`Wrote ${path.relative(ROOT, path.join(outDir, 'openapi-gap-report.md'))}`);
+  console.log(`Wrote ${path.relative(ROOT, duplicatesPath)}`);
   console.log(
-    `\nSummary: ${inventory.length} routes, ${missingInOpenapi.length} missing from OpenAPI (template match), ${documentedNotLive.length} OpenAPI ops not found on app.\n`
+    `\nSummary: ${inventory.length} routes, ${missingInOpenapi.length} missing from OpenAPI (template match), ${documentedNotLive.length} OpenAPI ops not found on app, ${duplicates.length} duplicate (METHOD,path) keys.\n`
   );
 }
 
