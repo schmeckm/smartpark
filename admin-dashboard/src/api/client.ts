@@ -379,7 +379,7 @@ export async function getIntegrationLogs(p?: { limit?: number; offset?: number }
   if (p?.offset != null) q.set('offset', String(p.offset))
   const qs = q.toString()
   const token = getAccessToken()
-  const res = await fetch(url(`/api/v1/integration/logs${qs ? `?${qs}` : ''}`), {
+  const res = await fetch(url(`/api/v1/integrations/logs${qs ? `?${qs}` : ''}`), {
     headers: { Accept: 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
   })
   const text = await res.text()
@@ -1618,8 +1618,11 @@ export type InstallLocalAdapterBody = {
 }
 
 export async function postInstallLocalAdapter(body: InstallLocalAdapterBody): Promise<AdapterPackageDto> {
-  // Prefer `/adapters/install-local` (next to run-local/discover-local); legacy path kept on server too.
-  return fetchEnvelope<AdapterPackageDto>('/api/v1/integrations/adapters/install-local', {
+  // Canonical path under `/integrations/installed-adapters/*`. The shorter
+  // `/integrations/adapters/install-local` alias is still accepted by the server
+  // for backwards compatibility but is marked deprecated (Phase B2) and emits
+  // `Deprecation`/`Link` response headers.
+  return fetchEnvelope<AdapterPackageDto>('/api/v1/integrations/installed-adapters/install-local', {
     method: 'POST',
     body: JSON.stringify(body),
   })
@@ -3928,7 +3931,7 @@ export async function getMlParkForecastSummary(params?: {
   if (params?.limit != null) q.set('limit', String(params.limit))
   if (params?.offset != null) q.set('offset', String(params.offset))
   const qs = q.toString()
-  return fetchEnvelope<Record<string, unknown>>(`/api/v1/ml/predict/park-summary${qs ? `?${qs}` : ''}`)
+  return fetchEnvelope<Record<string, unknown>>(`/api/v1/ai/ml/predict/park-summary${qs ? `?${qs}` : ''}`)
 }
 
 export async function listVisitPlans(year: number): Promise<VisitPlanVersionSummary[]> {
