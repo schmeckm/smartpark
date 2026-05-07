@@ -4,7 +4,7 @@
  * Does not start the HTTP server. Loads `src/app.js` (may initialize Sequelize config; no DB queries required).
  */
 import { createRequire } from 'node:module';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -13,28 +13,35 @@ const YAML = require('yamljs');
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 
+const ROOT_MOUNT_BASELINE_PATH = path.join(ROOT, 'docs', 'governance', 'root-mount-routes-baseline.json');
+
 process.chdir(ROOT);
 
 const API_PREFIX = '/api/v1';
 
-/** Prefixes mounted on `app` in `src/app.js` before `app.use('/api/v1', v1Router)` (and root `/`, `/health`). */
-const APP_JS_DIRECT_PREFIXES = [
-  '/health',
-  '/',
-  `${API_PREFIX}/ai/forecasts/refresh`,
-  `${API_PREFIX}/ai/feature-store/park-snapshots/bulk-delete`,
-  `${API_PREFIX}/ai/feature-store/park-snapshots/purge`,
-  `${API_PREFIX}/integrations/installed-adapters/install-local`,
-  `${API_PREFIX}/integrations/adapters/install-local`,
-  `${API_PREFIX}/integrations/installed-adapters`,
-  `${API_PREFIX}/integrations/adapters/packages`,
-  `${API_PREFIX}/integrations/adapters/pipeline-log`,
-  `${API_PREFIX}/master-data`,
-  `${API_PREFIX}/staff`,
-  `${API_PREFIX}/visit-plans`,
-  `${API_PREFIX}/visit-actuals`,
-  `${API_PREFIX}/adapters`,
-];
+/**
+ * Prefixes mounted on `app` in `src/app.js` before `app.use('/api/v1', v1Router)`
+ * (plus the universal root probes `/` and `/health`). Sourced from the
+ * governance baseline at `docs/governance/root-mount-routes-baseline.json`
+ * so the list lives in ONE place and CI can fail when a new prefix
+ * appears without a matching baseline edit.
+ */
+function loadRootMountBaseline() {
+  try {
+    const raw = readFileSync(ROOT_MOUNT_BASELINE_PATH, 'utf8');
+    const parsed = JSON.parse(raw);
+    const allowed = Array.isArray(parsed.allowedPrefixes) ? parsed.allowedPrefixes : [];
+    const probes = Array.isArray(parsed.policy?.rootProbes) ? parsed.policy.rootProbes : ['/', '/health'];
+    return { allowed, probes };
+  } catch (err) {
+    console.warn(
+      `[list-express-routes] failed to load root-mount baseline (${err?.message}); falling back to a minimal default.`
+    );
+    return { allowed: [], probes: ['/', '/health'] };
+  }
+}
+const { allowed: BASELINE_PREFIXES, probes: ROOT_PROBES } = loadRootMountBaseline();
+const APP_JS_DIRECT_PREFIXES = [...ROOT_PROBES, ...BASELINE_PREFIXES];
 
 function isAppJsDirectMount(fullPath) {
   const p = normalizePath(fullPath);

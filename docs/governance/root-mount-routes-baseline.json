@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "description": "Lock list of HTTP prefixes that are intentionally mounted on `src/app.js` directly (i.e. NOT on `v1Router`). Every (METHOD, path) registered on the live Express app whose `mountOrigin` is `src/app.js` must match one of these prefixes (or one of the universal root probes `/` and `/health`). Adding a new prefix requires lowering the cap in a follow-up PR or providing an ADR — `governance:ci` will fail until both sides agree.",
+  "policy": {
+    "addingNewPrefix": "Adding a prefix requires (a) a sentence below in `migrationNotes` explaining why it cannot live on `v1Router`, AND (b) an ADR documenting a sunset date OR an explicit decision that it remains permanently. Do NOT silently expand the list.",
+    "removingExistingPrefix": "Removing a prefix is good — Phase B planned this. Remove the entry once the route is fully folded into `v1Router` or deleted.",
+    "rootProbes": ["/", "/health"]
+  },
+  "allowedPrefixes": [
+    "/api/v1/ai/forecasts/refresh",
+    "/api/v1/ai/feature-store/park-snapshots/bulk-delete",
+    "/api/v1/ai/feature-store/park-snapshots/purge",
+    "/api/v1/integrations/installed-adapters/install-local",
+    "/api/v1/integrations/adapters/install-local",
+    "/api/v1/integrations/installed-adapters",
+    "/api/v1/integrations/adapters/packages",
+    "/api/v1/integrations/adapters/pipeline-log",
+    "/api/v1/master-data",
+    "/api/v1/staff",
+    "/api/v1/visit-plans",
+    "/api/v1/visit-actuals",
+    "/api/v1/adapters"
+  ],
+  "migrationNotes": {
+    "/api/v1/ai/forecasts/refresh": "Heavy long-running operation; intentionally mounted with a different timeout middleware than the rest of /api/v1/ai/*.",
+    "/api/v1/ai/feature-store/park-snapshots/bulk-delete": "Same as above — body-parser limits differ from the v1Router default.",
+    "/api/v1/ai/feature-store/park-snapshots/purge": "Same as above.",
+    "/api/v1/integrations/installed-adapters/install-local": "QW7-deprecated alongside `/integrations/adapters/install-local`. Phase B will fold one of them; until then the dual mount is locked by `route-duplicates-baseline.json`.",
+    "/api/v1/integrations/adapters/install-local": "QW7-deprecated. See above.",
+    "/api/v1/integrations/installed-adapters": "Mounted on `app` because it shares a multer instance with install-local. Phase B will normalize.",
+    "/api/v1/integrations/adapters/packages": "Same multer-sharing reason.",
+    "/api/v1/integrations/adapters/pipeline-log": "Same multer-sharing reason.",
+    "/api/v1/master-data": "MDM router has its own RBAC + tenant-context middleware stack; folding into v1Router is a Phase D / Phase F task.",
+    "/api/v1/staff": "Pre-MDM routes; will fold into MDM `/master-data/staff` in Phase D.",
+    "/api/v1/visit-plans": "Phase B planned this fold.",
+    "/api/v1/visit-actuals": "Phase B planned this fold.",
+    "/api/v1/adapters": "Mounted before the body-parser tweaks for /integrations to keep file-upload semantics simple. Phase B will revisit."
+  }
+}

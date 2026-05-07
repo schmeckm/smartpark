@@ -4,14 +4,18 @@ Lightweight checks to catch **new** contract drift: invalid OpenAPI, undocumente
 
 ## What runs in CI
 
-After database migrate/seed and `npm test`, CI runs `npm run governance:ci` (same as **`npm run check:openapi-drift`**), which in order:
+After database migrate/seed and `npm test`, CI runs `npm run governance:ci` which chains four gates:
 
-1. **`validate:openapi:parse`** — Loads `src/openapi/openapi.yaml` with `yamljs`; fails on invalid YAML or a missing `openapi` / `paths` shell.
-2. **`audit:routes`** — Regenerates `docs/generated/express-routes.inventory.json` and gap reports via `scripts/list-express-routes.mjs` (Express inventory + heuristic OpenAPI match).
-3. **Inventory limits** — Fails if `documentedNotLiveCount` > **0** (OpenAPI operation with no matching live route) or if `missingFromOpenapiCount` > **`maxAllowedMissingRouteCount`** in `docs/governance/openapi-undocumented-routes-baseline.json` (currently **2**).
-4. **`check-openapi-route-drift.mjs`** — Ensures every live route that is still “missing” from OpenAPI matches an entry in **`allowedMissingTemplateKeys`**. Any **new** undocumented template key fails the build.
+1. **`check:openapi-drift`** — runs:
+   - **`validate:openapi:parse`** — Loads `src/openapi/openapi.yaml` with `yamljs`; fails on invalid YAML or a missing `openapi` / `paths` shell.
+   - **`audit:routes`** — Regenerates `docs/generated/express-routes.inventory.json` and gap reports via `scripts/list-express-routes.mjs` (Express inventory + heuristic OpenAPI match).
+   - **Inventory limits** — Fails if `documentedNotLiveCount` > **0** (OpenAPI operation with no matching live route) or if `missingFromOpenapiCount` > **`maxAllowedMissingRouteCount`** in `docs/governance/openapi-undocumented-routes-baseline.json` (currently **2**).
+   - **`check-openapi-route-drift.mjs`** — Ensures every live route that is still “missing” from OpenAPI matches an entry in **`allowedMissingTemplateKeys`**. Any **new** undocumented template key fails the build.
+2. **`check:route-duplicates`** (Phase QW6) — Counts (METHOD, path) pairs registered more than once across the live Express app. Fails if the count exceeds `docs/governance/express-route-duplicates-baseline.json` or if any duplicate is not on the baseline allowlist.
+3. **`check:root-mount-baseline`** (Phase A5) — Walks every route whose `mountOrigin` is `src/app.js` and confirms its path is covered by `docs/governance/root-mount-routes-baseline.json` (`allowedPrefixes` + `policy.rootProbes`). Fails if any new prefix appears outside the baseline. Warns (without failing) when an allowed prefix has no matching live route — those baseline entries are safe to prune.
+4. **`check:openapi-build`** (Phase A4) — Builds `src/openapi/openapi.yaml` in memory from `src/openapi/_src/` and structurally compares to the committed artifact. Fails on any drift (paths, ops per path, schemas, parameters, responses, security, tags).
 
-Together, (3) and (4) enforce both a **numeric cap** on gaps and an **explicit allowlist** for the only accepted undocumented templates today (`GET /`, `GET /health`).
+Together, (1) and (3) enforce both a **numeric cap** on gaps and an **explicit allowlist** for the only accepted undocumented templates today (`GET /`, `GET /health`) plus a **prefix allowlist** for routes that intentionally bypass `v1Router`.
 
 ## Workflow: adding a new HTTP route
 
