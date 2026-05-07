@@ -1,0 +1,21 @@
+/audit-logs:
+  get:
+    tags:
+      - Audit
+    summary: 'List audit logs (OPERATIONS_MANAGER, SECURITY_MANAGER, ADMIN)'
+    parameters:
+      -
+        in: query
+        name: limit
+        schema:
+          type: integer
+          default: 50
+      -
+        in: query
+        name: offset
+        schema:
+          type: integer
+          default: 0
+    responses:
+      '200':
+        description: OK

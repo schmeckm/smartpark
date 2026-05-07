@@ -1,0 +1,53 @@
+/recommendations:
+  get:
+    tags:
+      - Recommendations
+    summary: 'List recommendations'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Recommendation'
+'/recommendations/{id}/status':
+  parameters:
+    -
+      $ref: '#/components/parameters/IdPath'
+  patch:
+    tags:
+      - Recommendations
+    summary: 'Update recommendation workflow status'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - status
+            properties:
+              status:
+                type: string
+                enum:
+                  - OPEN
+                  - ACCEPTED
+                  - REJECTED
+                  - COMPLETED
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data:
+                  $ref: '#/components/schemas/Recommendation'
+      '404':
+        $ref: '#/components/responses/NotFound'

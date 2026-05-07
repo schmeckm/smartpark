@@ -1,0 +1,366 @@
+/uns-spy/events:
+  get:
+    tags:
+      - UNS
+    summary: 'List UNS Spy discovery events (MQTT observe + adapter discovery)'
+    description: 'Requires **integrations.read** OR **rides.read**. Optional `eventSource` filters rows: `adapter` = `details.source=adapter` (ThemeParks discovery inbox); `mqtt` = other rows; `all` = default (no filter).'
+    security:
+      -
+        bearerAuth: []
+    parameters:
+      -
+        in: query
+        name: limit
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+      -
+        in: query
+        name: offset
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+      -
+        in: query
+        name: classification
+        schema:
+          type: string
+          maxLength: 40
+      -
+        in: query
+        name: topicPrefix
+        schema:
+          type: string
+          maxLength: 500
+      -
+        in: query
+        name: eventSource
+        schema:
+          type: string
+          enum:
+            - mqtt
+            - adapter
+            - all
+          default: all
+    responses:
+      '200':
+        description: 'Paged discovery events'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeUnsSpyDiscoveryEvents'
+            examples:
+              adapterFilter:
+                summary: eventSource=adapter
+                value:
+                  success: true
+                  data:
+                    total: 1
+                    limit: 50
+                    offset: 0
+                    items:
+                      -
+                        id: 00000000-0000-4000-8000-000000000001
+                        classification: NEW
+                        topicPath: 'smartpark/{parkId}/rides/ext-123/state'
+                        details:
+                          source: adapter
+                          reviewStatus: PENDING
+                          externalEntityId: ext-123
+                        createdAt: '2026-05-01T12:00:00.000Z'
+                        updatedAt: '2026-05-01T12:00:00.000Z'
+      '401':
+        description: 'Missing or invalid JWT'
+      '403':
+        description: 'Missing integrations.read and rides.read'
+        content:
+          application/json:
+            examples:
+              forbidden:
+                value:
+                  success: false
+                  message: 'Insufficient permissions'
+                  code: FORBIDDEN
+/uns-spy/proposals:
+  get:
+    tags:
+      - UNS
+    summary: 'List UNS topic proposals (UNS Spy observe pipeline)'
+    description: 'Requires **integrations.read** OR **rides.read**. Paged rows from `uns_topic_proposals`; optional **`status`** filter.'
+    security:
+      -
+        bearerAuth: []
+    parameters:
+      -
+        in: query
+        name: limit
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+      -
+        in: query
+        name: offset
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+      -
+        in: query
+        name: status
+        schema:
+          type: string
+          maxLength: 40
+    responses:
+      '200':
+        description: 'Paged proposals'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeUnsPagedObjects'
+      '401':
+        description: 'Missing or invalid JWT'
+      '403':
+        description: 'Missing integrations.read and rides.read'
+'/uns-spy/proposals/{id}/approve':
+  post:
+    tags:
+      - UNS
+    summary: 'Approve an MQTT-linked UNS topic proposal (Phase T.1)'
+    description: 'Requires **integrations.manage** OR **rides.update**. For proposals created from MQTT inbound discovery (`uns_topic_proposals` linked to `uns_discovery_events` with `mqtt_inbound_message_id` set): validates ride + signal catalog, merges `ride_signal_capabilities` (OPERATOR_CONFIGURED), prepares `uns_registry_topics` (`PREPARED_OPERATOR`), optionally prepares Sparkplug metrics when **`signalSource` = `MQTT_EDGE`**, and optionally activates prepared rows. Sets proposal **`status` = `approved`**. TPUNS proposals must match the canonical topic path for the selected ride and catalog signal.'
+    security:
+      -
+        bearerAuth: []
+    parameters:
+      -
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/UnsSpyMqttProposalApproveRequest'
+    responses:
+      '200':
+        description: 'Registry topic prepared/activated and proposal marked approved'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeUnsSpyMqttProposalApproveResult'
+      '401':
+        description: 'Missing or invalid JWT'
+      '403':
+        description: 'Missing integrations.manage and rides.update'
+      '404':
+        description: 'Proposal not found'
+      '409':
+        description: 'Proposal not pending'
+      '422':
+        description: 'Validation error, not an MQTT-linked proposal, topic mismatch, or domain not supported'
+'/uns-spy/proposals/{id}/reject':
+  post:
+    tags:
+      - UNS
+    summary: 'Reject an MQTT-linked UNS topic proposal (Phase T.1)'
+    description: 'Requires **integrations.manage** OR **rides.update**. Marks proposal **`status` = `rejected`**; does not create registry topics or change live UNS state.'
+    security:
+      -
+        bearerAuth: []
+    parameters:
+      -
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/UnsSpyMqttProposalRejectRequest'
+    responses:
+      '200':
+        description: 'Proposal rejected'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeUnsSpyMqttProposalRejectResult'
+      '401':
+        description: 'Missing or invalid JWT'
+      '403':
+        description: 'Missing integrations.manage and rides.update'
+      '404':
+        description: 'Proposal not found'
+      '409':
+        description: 'Proposal not pending'
+      '422':
+        description: 'Not an MQTT-linked proposal'
+'/uns-spy/events/{id}/approve':
+  post:
+    tags:
+      - UNS
+    summary: 'Approve an adapter-sourced discovery event (map to existing ride asset)'
+    description: 'Requires **integrations.manage** OR **rides.update**. Phase 12: maps external entity to an existing `park_assets` ride row via `external_entity_mappings`, updates event `details.reviewStatus=APPROVED`, optionally applies ride template and prepares UNS registry topics (prepared/inactive only). Does **not** create `uns_nodes` and does **not** publish MQTT from this handler.'
+    security:
+      -
+        bearerAuth: []
+    parameters:
+      -
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/UnsSpyDiscoveryApproveRequest'
+    responses:
+      '200':
+        description: 'Approval result (mapped entity, optional template/prepare summary)'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeUnsSpyDiscoveryApproveResult'
+            examples:
+              approved:
+                value:
+                  success: true
+                  data:
+                    eventId: 00000000-0000-4000-8000-000000000010
+                    mappedEntityId: 00000000-0000-4000-8000-000000000020
+                    templateApplied: false
+                    preparedUnsTopics:
+                      created: 0
+                      updated: 0
+      '401':
+        description: 'Missing or invalid JWT'
+      '403':
+        description: 'Missing integrations.manage and rides.update'
+      '404':
+        description: 'Discovery event or target ride asset not found'
+      '409':
+        description: 'Event already approved (code `ALREADY_APPROVED`)'
+        content:
+          application/json:
+            examples:
+              alreadyApproved:
+                value:
+                  success: false
+                  message: 'Event already approved'
+                  code: ALREADY_APPROVED
+      '422':
+        description: 'Validation error, not an adapter event (`NOT_ADAPTER_EVENT`), or unsupported body (`createEntity` not supported)'
+        content:
+          application/json:
+            examples:
+              notAdapter:
+                value:
+                  success: false
+                  message: 'Discovery event is not adapter-sourced'
+                  code: NOT_ADAPTER_EVENT
+              joiMissingMap:
+                value:
+                  success: false
+                  message: 'Validation failed'
+                  code: VALIDATION_ERROR
+'/uns-spy/events/{id}/reject':
+  post:
+    tags:
+      - UNS
+    summary: 'Reject an adapter-sourced discovery event'
+    description: 'Requires **integrations.manage** OR **rides.update**. Sets `details.reviewStatus=REJECTED`.'
+    security:
+      -
+        bearerAuth: []
+    parameters:
+      -
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeUnsSpyDiscoveryActionResult'
+            examples:
+              rejected:
+                value:
+                  success: true
+                  data:
+                    eventId: 00000000-0000-4000-8000-000000000002
+                    reviewStatus: REJECTED
+      '401':
+        description: 'Missing or invalid JWT'
+      '403':
+        description: 'Missing permission'
+      '404':
+        description: 'Event not found'
+        content:
+          application/json:
+            examples:
+              notFound:
+                value:
+                  success: false
+                  message: 'Discovery event not found'
+                  code: NOT_FOUND
+      '422':
+        description: 'Not an adapter-sourced event'
+'/uns-spy/events/{id}/ignore':
+  post:
+    tags:
+      - UNS
+    summary: 'Ignore an adapter-sourced discovery event'
+    description: 'Requires **integrations.manage** OR **rides.update**. Sets classification IGNORED and reviewStatus IGNORED.'
+    security:
+      -
+        bearerAuth: []
+    parameters:
+      -
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeUnsSpyDiscoveryActionResult'
+            examples:
+              ignored:
+                value:
+                  success: true
+                  data:
+                    eventId: 00000000-0000-4000-8000-000000000003
+                    reviewStatus: IGNORED
+      '401':
+        description: 'Missing or invalid JWT'
+      '403':
+        description: 'Missing permission'
+      '404':
+        description: 'Event not found'
+      '422':
+        description: 'Not an adapter-sourced event'

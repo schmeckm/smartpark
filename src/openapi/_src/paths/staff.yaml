@@ -1,0 +1,170 @@
+/staff:
+  get:
+    tags:
+      - Staff
+    summary: 'List staff'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Staff'
+  post:
+    tags:
+      - Staff
+    summary: 'Create staff member'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StaffCreate'
+    responses:
+      '201':
+        description: Created
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data:
+                  $ref: '#/components/schemas/Staff'
+/staff/export:
+  get:
+    tags:
+      - Staff
+    summary: 'Export staff roster (JSON bundle)'
+    description: 'Same shape accepted by **POST** `/staff/import` (`schemaVersion`, `items`, …).'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeStaffExportBundle'
+/staff/export/xlsx:
+  get:
+    tags:
+      - Staff
+    summary: 'Download staff roster as XLSX'
+    responses:
+      '200':
+        description: 'Spreadsheet attachment (`staff-roster.xlsx`)'
+        content:
+          application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+            schema:
+              type: string
+              format: binary
+/staff/import:
+  post:
+    tags:
+      - Staff
+    summary: 'Import staff from JSON bundle (upsert per row)'
+    description: "Per-item create needs `staff.create`; update by `id` needs `staff.update`. Failures are listed in `data.failed` without aborting the whole batch.\n"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StaffImportBundle'
+    responses:
+      '200':
+        description: 'OK — summary counts and per-row failures'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeStaffImportResult'
+      '400':
+        description: 'Validation error'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+/staff/import/xlsx:
+  post:
+    tags:
+      - Staff
+    summary: 'Import staff from a single XLSX upload'
+    requestBody:
+      required: true
+      content:
+        multipart/form-data:
+          schema:
+            type: object
+            required:
+              - file
+            properties:
+              file:
+                type: string
+                format: binary
+                description: '.xlsx; field name `file`'
+    responses:
+      '200':
+        description: 'OK — same envelope as JSON import'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeStaffImportResult'
+      '400':
+        description: 'Missing file or invalid spreadsheet'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+'/staff/{id}':
+  parameters:
+    -
+      $ref: '#/components/parameters/IdPath'
+  get:
+    tags:
+      - Staff
+    summary: 'Get staff by id'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data:
+                  $ref: '#/components/schemas/Staff'
+      '404':
+        $ref: '#/components/responses/NotFound'
+  patch:
+    tags:
+      - Staff
+    summary: 'Update staff member'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StaffUpdate'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data:
+                  $ref: '#/components/schemas/Staff'
+      '404':
+        $ref: '#/components/responses/NotFound'
+  delete:
+    tags:
+      - Staff
+    summary: 'Delete staff member'
+    responses:
+      '204':
+        description: 'No content'
+      '404':
+        $ref: '#/components/responses/NotFound'

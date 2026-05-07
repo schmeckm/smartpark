@@ -16,14 +16,16 @@ Together, (3) and (4) enforce both a **numeric cap** on gaps and an **explicit a
 ## Workflow: adding a new HTTP route
 
 1. Implement the route in Express (`src/routes/v1/index.js`, `src/app.js`, or a mounted router).
-2. **Prefer** adding the operation to `src/openapi/openapi.yaml` in the same change (method, path relative to `servers` → `/api/v1/...`, summary, tags, security, request/response shapes as appropriate).
-3. Run locally: **`npm run check:openapi-drift`** (or the same steps individually: `validate:openapi:parse`, `audit:routes`, `validate:openapi:route-drift`).
+2. **Prefer** adding the operation to OpenAPI in the same change.
+   - Edit the relevant file under **`src/openapi/_src/`** (Phase A4) — paths live in `_src/paths/<family>.yaml`, schemas in `_src/components/schemas.yaml`, etc. **Do not** hand-edit the top-level `src/openapi/openapi.yaml`; it is a build artifact.
+   - Run **`npm run build:openapi`** to regenerate `src/openapi/openapi.yaml` from `_src/`. Commit both.
+3. Run locally: **`npm run check:openapi-drift`** (parse + route audit + drift gate) and **`npm run check:openapi-build`** (verifies `_src/` and the built artifact have not drifted).
 4. If `audit:routes` shows your route as documented (`inOpenApi: yes` in the inventory), the allowlist step passes with no baseline edit.
-5. Commit OpenAPI + route code together when possible.
+5. Commit OpenAPI (`_src/` + rebuilt `openapi.yaml`) + route code together when possible.
 
 ## OpenAPI update expectations
 
-- **Whenever you add or change an HTTP surface** that clients, proxies, or codegen rely on, update `src/openapi/openapi.yaml` in the same PR unless the team explicitly treats the route as private and extends governance (allowlist / max count) with review.
+- **Whenever you add or change an HTTP surface** that clients, proxies, or codegen rely on, update the appropriate `src/openapi/_src/` file (and rebuild) in the same PR unless the team explicitly treats the route as private and extends governance (allowlist / max count) with review. The top-level `src/openapi/openapi.yaml` is generated — never edit it directly.
 - Path keys in the spec are under the **`servers`** URL (`/api/v1`); inventory paths for v1 routes are full `/api/v1/...`. Root **`GET /`** and **`GET /health`** are mounted without that prefix on `app`; the OpenAPI file documents `/api/v1/health` style probes, so the inventory still shows two “missing” templates until those root probes are modeled (e.g. extra `servers` entry) — that is why they are allowlisted and why **`maxAllowedMissingRouteCount`** is **2**.
 
 Regenerate generated docs when touching routes or OpenAPI:

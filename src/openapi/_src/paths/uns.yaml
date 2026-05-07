@@ -1,0 +1,364 @@
+'/uns/parks/{parkId}/tree':
+  get:
+    tags:
+      - UNS
+    summary: 'Get UNS tree by park'
+    description: 'Requires **integrations.read**. Returns `{ success, data }` where **`data`** is an array of root UNS nodes with nested **`children`**. Leaf nodes may include derived Sparkplug topic hints (`sparkplugTopic`, etc.).'
+    parameters:
+      -
+        in: path
+        name: parkId
+        required: true
+        schema:
+          type: string
+          description: 'Park scope key (UUID string for platform parks).'
+    responses:
+      '200':
+        description: 'UNS hierarchy roots'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeUnsTree'
+      '401':
+        description: 'Missing or invalid JWT'
+      '403':
+        description: 'Missing integrations.read'
+'/uns/parks/{parkId}/nodes':
+  post:
+    tags:
+      - UNS
+    summary: 'Create UNS node'
+    description: 'Requires **integrations.manage**. Validates parent belongs to the same **`parkId`** when provided.'
+    parameters:
+      -
+        in: path
+        name: parkId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/UnsNodeCreate'
+    responses:
+      '201':
+        description: 'Created node'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeUnsNodeMutation'
+      '401':
+        description: 'Missing or invalid JWT'
+      '403':
+        description: 'Missing integrations.manage'
+      '404':
+        description: 'Parent node not found for this park'
+      '422':
+        description: 'Joi / domain validation failure'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+'/uns/nodes/{id}':
+  put:
+    tags:
+      - UNS
+    summary: 'Update UNS node'
+    description: 'Requires **integrations.manage**. At least one mutable field required (see `UnsNodeUpdate`).'
+    parameters:
+      -
+        $ref: '#/components/parameters/IdPath'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/UnsNodeUpdate'
+    responses:
+      '200':
+        description: 'Updated node'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeUnsNodeMutation'
+      '401':
+        description: 'Missing or invalid JWT'
+      '403':
+        description: 'Missing integrations.manage'
+      '404':
+        description: 'Node not found'
+      '422':
+        description: 'Validation failure or empty patch'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+  delete:
+    tags:
+      - UNS
+    summary: 'Delete UNS node'
+    description: 'Requires **integrations.manage**.'
+    parameters:
+      -
+        $ref: '#/components/parameters/IdPath'
+    responses:
+      '204':
+        description: 'No content'
+      '401':
+        description: 'Missing or invalid JWT'
+      '403':
+        description: 'Missing integrations.manage'
+      '404':
+        description: 'Node not found'
+'/uns/parks/{parkId}/latest-state':
+  get:
+    tags:
+      - UNS
+    summary: 'Get latest UNS topic values for park'
+    description: 'Requires **integrations.read**. Returns rows from **`uns_latest_states`** for the park (`topicPath`, JSON payload, `eventTime`, `quality`, `source`), ordered by **`eventTime`** descending.'
+    parameters:
+      -
+        in: path
+        name: parkId
+        required: true
+        schema:
+          type: string
+    responses:
+      '200':
+        description: 'Latest persisted UNS scalars / payloads per topic'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeUnsLatestStateList'
+      '401':
+        description: 'Missing or invalid JWT'
+      '403':
+        description: 'Missing integrations.read'
+'/uns/parks/{parkId}/topics':
+  get:
+    tags:
+      - UNS
+    summary: 'List generated active UNS topics'
+    description: 'Requires **integrations.read**. Returns active leaf nodes with derived Sparkplug topic strings for the given **`sparkplugMessageType`** (default **`DDATA`**). Other values follow Sparkplug B rules (`NBIRTH`, `DBIRTH`, …).'
+    parameters:
+      -
+        in: path
+        name: parkId
+        required: true
+        schema:
+          type: string
+      -
+        in: query
+        name: sparkplugMessageType
+        required: false
+        schema:
+          type: string
+          enum:
+            - NBIRTH
+            - NDEATH
+            - DBIRTH
+            - DDEATH
+            - DDATA
+            - NCMD
+            - DCMD
+            - STATE
+          default: DDATA
+    responses:
+      '200':
+        description: 'Topic explorer rows'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeUnsTopicsList'
+      '401':
+        description: 'Missing or invalid JWT'
+      '403':
+        description: 'Missing integrations.read'
+'/uns/parks/{parkId}/hierarchy-schema':
+  get:
+    tags:
+      - UNS
+    summary: 'Export UNS hierarchy schema JSON for a park'
+    description: 'Requires **integrations.read**. Returns a JSON document (not the usual `{ success, data }` envelope) with `Content-Disposition: attachment` for download. Shape matches import body (`schemaVersion`, `kind`, `roots`, etc.).'
+    parameters:
+      -
+        in: path
+        name: parkId
+        required: true
+        schema:
+          type: string
+    responses:
+      '200':
+        description: 'Hierarchy export JSON body'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UnsHierarchyExportDocument'
+  put:
+    tags:
+      - UNS
+    summary: 'Import UNS hierarchy schema (merge or replace)'
+    description: 'Requires **integrations.manage**. Query **`mode`**: `merge` (default) or `replace` (destructive). Body is a `smartpark.uns.hierarchy` document (`schemaVersion: 1`). Response uses the standard envelope with a summary object (`created`, `updated`, `skippedLocked`, etc.).'
+    parameters:
+      -
+        in: path
+        name: parkId
+        required: true
+        schema:
+          type: string
+      -
+        in: query
+        name: mode
+        schema:
+          type: string
+          enum:
+            - merge
+            - replace
+          default: merge
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/UnsHierarchyImportBody'
+    responses:
+      '200':
+        description: 'Import summary'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeUnsHierarchyImportSummary'
+      '422':
+        description: 'Validation / document mismatch'
+'/uns/parks/{parkId}/hierarchy-schema/preview':
+  post:
+    tags:
+      - UNS
+    summary: 'Dry-run hierarchy schema import'
+    description: 'Requires **integrations.read**. Same body and **`mode`** query as **PUT** `/uns/parks/{parkId}/hierarchy-schema`, but simulates the import and returns preview data without persisting (except validation paths that fail early).'
+    parameters:
+      -
+        in: path
+        name: parkId
+        required: true
+        schema:
+          type: string
+      -
+        in: query
+        name: mode
+        schema:
+          type: string
+          enum:
+            - merge
+            - replace
+          default: merge
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/UnsHierarchyImportBody'
+    responses:
+      '200':
+        description: 'Dry-run result'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeUnsHierarchyImportSummary'
+      '422':
+        description: 'Validation error'
+'/uns/parks/{parkId}/mqtt-live/events':
+  get:
+    tags:
+      - UNS
+    summary: 'Sparkplug MQTT live buffer snapshot for UNS Live'
+    description: 'Requires **integrations.read**. In-memory broker-fed buffer only (not a DB query). Optional **`limit`** query (1–2000, default 500). `parkId` path param is slugified for Sparkplug group id matching.'
+    parameters:
+      -
+        in: path
+        name: parkId
+        required: true
+        schema:
+          type: string
+      -
+        in: query
+        name: limit
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 2000
+          default: 500
+    responses:
+      '200':
+        description: 'Flattened Sparkplug rows'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeUnsMqttLiveEvents'
+'/uns/parks/{parkId}/mqtt-live/status':
+  get:
+    tags:
+      - UNS
+    summary: 'MQTT connector state and live-buffer stats for admin'
+    description: 'Requires **integrations.read**. Returns MQTT client state, buffer counters, and adapter simulation flag.'
+    parameters:
+      -
+        in: path
+        name: parkId
+        required: true
+        schema:
+          type: string
+    responses:
+      '200':
+        description: 'Status bundle'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeUnsMqttLiveStatus'
+'/uns/parks/{parkId}/mqtt-live/test-event':
+  post:
+    tags:
+      - UNS
+    summary: 'Publish a synthetic canonical-derived Sparkplug test event'
+    description: 'Requires **integrations.manage**. Uses `canonicalToSparkplug` publisher; **503** `MQTT_UNAVAILABLE` when publish fails or MQTT disabled.'
+    parameters:
+      -
+        in: path
+        name: parkId
+        required: true
+        schema:
+          type: string
+    responses:
+      '200':
+        description: 'Publish result'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeUnsMqttLiveTestPublish'
+      '503':
+        description: 'MQTT publish failed or disabled'
+/uns/test/publish:
+  post:
+    tags:
+      - UNS
+    summary: 'Publish UNS test message to MQTT'
+    description: 'Requires **integrations.manage**. Publishes **`payload`** JSON to **`topic`** via the configured MQTT client. Fails at runtime when MQTT is not connected (server error path — not a stable HTTP contract in all environments).'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/UnsTestPublishRequest'
+    responses:
+      '200':
+        description: 'Publish acknowledged'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeUnsTestPublish'
+      '401':
+        description: 'Missing or invalid JWT'
+      '403':
+        description: 'Missing integrations.manage'

@@ -1,0 +1,48 @@
+tags:
+  -
+    name: Auth
+  -
+    name: Health
+  -
+    name: Audit
+  -
+    name: Zones
+  -
+    name: Rides
+  -
+    name: Staff
+  -
+    name: Events
+  -
+    name: Recommendations
+  -
+    name: Dashboard
+  -
+    name: Wave2
+  -
+    name: AI
+  -
+    name: Integrations
+  -
+    name: UNS
+  -
+    name: MDM
+  -
+    name: Platform
+    description: 'Authenticated user profile and preferences (e.g. `/users/me/settings`).'
+  -
+    name: Operations
+    description: "Shared **Operations Facts** layer — normalized KPI envelopes (`value`, `status`, `quality`, `source`, `updatedAt`)\nfor Add-on Board and SQDCP/SWDEC. See `docs/architecture/operations-facts-layer.md` and `docs/architecture/source-of-truth.md`.\n"
+  -
+    name: SQDC
+  -
+    name: Incidents
+  -
+    name: Admin
+  -
+    name: VisitPlanning
+  -
+    name: OperationsAdapters
+  -
+    name: Geo
+    description: "Park-level **geo pressure** (wait hotspots, forecasts) and **guest flow** simulation / journey event ingest.\n`{parkSlug}` resolves like master-data (internal UUID, URL slug, or external entity id).\n"

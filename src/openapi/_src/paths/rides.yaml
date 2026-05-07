@@ -1,0 +1,96 @@
+/rides:
+  get:
+    tags:
+      - Rides
+    summary: 'List rides'
+    deprecated: true
+    description: "**Deprecated — legacy master data.** Use `GET /assets?type=ride` (or\n`GET /master-data/rides` for the MDM-backed view that includes signal capabilities\nand registry topic state). The legacy `rides` table is being unified with the\nplatform asset hierarchy.\n"
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Ride'
+  post:
+    tags:
+      - Rides
+    summary: 'Create ride'
+    deprecated: true
+    description: "**Deprecated — legacy master data.** New rides should be created via `POST /assets`\n(with `type=ride` and a `parkId` parent). The MDM layer is the source of truth.\n"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RideCreate'
+    responses:
+      '201':
+        description: Created
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data:
+                  $ref: '#/components/schemas/Ride'
+'/rides/{id}':
+  parameters:
+    -
+      $ref: '#/components/parameters/IdPath'
+  get:
+    tags:
+      - Rides
+    summary: 'Get ride by id'
+    deprecated: true
+    description: "**Deprecated — legacy master data.** Use `GET /assets/{assetId}` (with `type=ride`)\nor the MDM endpoint `GET /master-data/rides/{id}` for the canonical view.\n"
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data:
+                  $ref: '#/components/schemas/Ride'
+      '404':
+        $ref: '#/components/responses/NotFound'
+  patch:
+    tags:
+      - Rides
+    summary: 'Update ride'
+    deprecated: true
+    description: "**Deprecated — legacy master data.** Update rides via `PATCH /assets/{assetId}` or\nthe MDM endpoint `PATCH /master-data/rides/{id}`.\n"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RideUpdate'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data:
+                  $ref: '#/components/schemas/Ride'
+      '404':
+        $ref: '#/components/responses/NotFound'
+  delete:
+    tags:
+      - Rides
+    summary: 'Delete ride'
+    responses:
+      '204':
+        description: 'No content'
+      '404':
+        $ref: '#/components/responses/NotFound'

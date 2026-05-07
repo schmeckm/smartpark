@@ -1,0 +1,137 @@
+'/operations-facts/parks/{parkId}':
+  get:
+    tags:
+      - Operations
+    summary: 'Operations facts for all rides in the park (debug / transparency)'
+    description: "Returns one facts envelope per active ride. Each KPI includes `source` and `quality` so UI boards can explain\ndifferences vs stored SQDC daily snapshots. Requires `X-Park-Id` matching `{parkId}`.\nMissing inputs yield `quality: MISSING` and `value: null` — never a hard error for absent signals.\n"
+    parameters:
+      -
+        in: path
+        name: parkId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeOperationsFactsPark'
+      '403':
+        description: 'Park id does not match authenticated park context'
+'/operations-facts/parks/{parkId}/zones/{zoneId}':
+  get:
+    tags:
+      - Operations
+    summary: 'Operations facts for rides in one zone'
+    description: 'Same envelope as park-wide; filtered by `zoneId`. `X-Park-Id` must match `{parkId}`.'
+    parameters:
+      -
+        in: path
+        name: parkId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      -
+        in: path
+        name: zoneId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeOperationsFactsZone'
+      '403':
+        description: 'Park id does not match authenticated park context'
+'/operations-facts/parks/{parkId}/rides/{rideId}':
+  get:
+    tags:
+      - Operations
+    summary: 'Operations facts for one ride asset'
+    description: "Single-ride envelope used internally by Add-on Board and SQDC asset boards. Same KPI definitions as\n`swdec` ride cards; this route exposes raw facts with source transparency.\n"
+    parameters:
+      -
+        in: path
+        name: parkId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      -
+        in: path
+        name: rideId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeOperationsFactsRide'
+      '403':
+        description: 'Park id does not match authenticated park context'
+      '404':
+        description: 'Ride asset not found'
+/operations-facts/rides:
+  get:
+    tags:
+      - Operations
+    summary: 'List ride operations facts (registry-first query)'
+    description: 'Requires **`integrations.read`** or **`rides.read`**, **`X-Park-Id`**, and query **`parkId`** (UUID) matching active park context.'
+    parameters:
+      -
+        in: query
+        name: parkId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+'/operations-facts/rides/{id}':
+  get:
+    tags:
+      - Operations
+    summary: 'Get operations facts for one ride asset (registry-first)'
+    description: 'Requires **`integrations.read`** or **`rides.read`** and **`X-Park-Id`**.'
+    parameters:
+      -
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '404':
+        description: 'Not found'

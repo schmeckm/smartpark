@@ -1,0 +1,31 @@
+/admin/platform-settings:
+  get:
+    tags:
+      - Admin
+    summary: 'List platform settings'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+'/admin/platform-settings/{settingKey}':
+  parameters:
+    -
+      in: path
+      name: settingKey
+      required: true
+      schema:
+        type: string
+  patch:
+    tags:
+      - Admin
+    summary: 'Patch platform setting'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'

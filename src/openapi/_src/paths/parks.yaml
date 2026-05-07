@@ -1,0 +1,396 @@
+/parks:
+  get:
+    tags:
+      - Platform
+    summary: 'Canonical parks (internal master data)'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopePlatformParks'
+'/parks/{parkSlug}/geo/pressure/live':
+  parameters:
+    -
+      $ref: '#/components/parameters/ParkSlugPath'
+    -
+      in: query
+      name: assetTypeCode
+      schema:
+        type: string
+        maxLength: 32
+        nullable: true
+    -
+      in: query
+      name: provider
+      schema:
+        type: string
+        maxLength: 32
+        description: 'Forecast provider hint for downstream engines'
+  get:
+    tags:
+      - Geo
+    summary: 'Live crowd / wait pressure snapshot for map layer'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGeoPressurePayload'
+      '400':
+        description: 'Park scope mismatch (`X-Park-Id` vs resolved park)'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+      '404':
+        $ref: '#/components/responses/NotFound'
+'/parks/{parkSlug}/geo/pressure/forecast':
+  parameters:
+    -
+      $ref: '#/components/parameters/ParkSlugPath'
+    -
+      in: query
+      name: assetTypeCode
+      schema:
+        type: string
+        maxLength: 32
+        nullable: true
+    -
+      in: query
+      name: provider
+      schema:
+        type: string
+        maxLength: 32
+  get:
+    tags:
+      - Geo
+    summary: 'Forecast pressure snapshot for map layer'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGeoPressurePayload'
+      '400':
+        description: 'Park scope mismatch'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+      '404':
+        $ref: '#/components/responses/NotFound'
+'/parks/{parkSlug}/geo/entities':
+  parameters:
+    -
+      $ref: '#/components/parameters/ParkSlugPath'
+    -
+      in: query
+      name: assetTypeCode
+      schema:
+        type: string
+        maxLength: 32
+        nullable: true
+  get:
+    tags:
+      - Geo
+    summary: 'Geo-annotated entities (assets/zones) for the park map'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGeoEntities'
+      '404':
+        $ref: '#/components/responses/NotFound'
+'/parks/{parkSlug}/geo/hotspots':
+  parameters:
+    -
+      $ref: '#/components/parameters/ParkSlugPath'
+    -
+      in: query
+      name: assetTypeCode
+      schema:
+        type: string
+        maxLength: 32
+        nullable: true
+    -
+      in: query
+      name: limit
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 50
+        default: 10
+  get:
+    tags:
+      - Geo
+    summary: 'Top wait / pressure hotspots (trimmed live payload)'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGeoHotspots'
+      '404':
+        $ref: '#/components/responses/NotFound'
+'/parks/{parkSlug}/geo/pressure/simulate':
+  parameters:
+    -
+      $ref: '#/components/parameters/ParkSlugPath'
+  post:
+    tags:
+      - Geo
+    summary: 'Simulate pressure with optional per-key overrides (wait/downtime flags)'
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/GeoPressureSimulateBody'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGeoPressurePayload'
+      '404':
+        $ref: '#/components/responses/NotFound'
+'/parks/{parkSlug}/geo/flow/simulation':
+  parameters:
+    -
+      $ref: '#/components/parameters/ParkSlugPath'
+    -
+      in: query
+      name: mode
+      schema:
+        type: string
+        enum:
+          - synthetic
+          - from_log
+    -
+      in: query
+      name: from
+      schema:
+        type: string
+        format: date-time
+    -
+      in: query
+      name: to
+      schema:
+        type: string
+        format: date-time
+    -
+      in: query
+      name: guestCount
+      schema:
+        type: integer
+        minimum: 50
+        maximum: 8000
+    -
+      in: query
+      name: transitionCount
+      schema:
+        type: integer
+        minimum: 2
+        maximum: 25
+    -
+      in: query
+      name: maxHopM
+      schema:
+        type: integer
+        minimum: 120
+        maximum: 1500
+    -
+      in: query
+      name: seed
+      schema:
+        type: integer
+        minimum: 0
+        maximum: 2147483646
+    -
+      in: query
+      name: assetTypeCode
+      schema:
+        type: string
+        maxLength: 32
+        nullable: true
+    -
+      in: query
+      name: topEdges
+      schema:
+        type: integer
+        minimum: 10
+        maximum: 80
+  get:
+    tags:
+      - Geo
+    summary: 'Guest journey flow graph (synthetic demo or from `visitor_journey_events` log)'
+    description: "`mode=from_log` requires migrated `visitor_journey_events`; otherwise API may respond **503** with `SCHEMA_MIGRATION_REQUIRED`.\n"
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGeoFlowSimulation'
+      '400':
+        description: 'Invalid time range'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+      '404':
+        $ref: '#/components/responses/NotFound'
+      '503':
+        description: 'DB missing journey table (run migrations)'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+'/parks/{parkSlug}/geo/flow/events/batch':
+  parameters:
+    -
+      $ref: '#/components/parameters/ParkSlugPath'
+  post:
+    tags:
+      - Geo
+    summary: 'Ingest journey step events (batch, max 500)'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/GeoFlowEventsBatchBody'
+    responses:
+      '200':
+        description: 'OK — append summary (`GeoFlowBatchAppendResult`)'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGeoFlowBatchAppend'
+      '400':
+        description: 'Asset not in park or validation error'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+      '404':
+        $ref: '#/components/responses/NotFound'
+      '503':
+        description: 'DB missing journey table'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+'/parks/{parkId}/operational-context':
+  parameters:
+    -
+      in: path
+      name: parkId
+      required: true
+      schema:
+        type: string
+        format: uuid
+    -
+      in: query
+      name: at
+      required: false
+      description: 'ISO-8601 instant for evaluation (defaults to now)'
+      schema:
+        type: string
+        format: date-time
+  get:
+    tags:
+      - Platform
+    summary: 'Park operational view (calendar, scheduled opening hours, latest feature snapshot)'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                data:
+                  type: object
+                  additionalProperties: true
+      '404':
+        $ref: '#/components/responses/NotFound'
+'/parks/{parkId}/shift-handovers':
+  parameters:
+    -
+      in: path
+      name: parkId
+      required: true
+      schema:
+        type: string
+        format: uuid
+  get:
+    tags:
+      - Platform
+    summary: 'List shift handover entries for a park'
+    parameters:
+      -
+        in: query
+        name: from
+        schema:
+          type: string
+          format: date-time
+        description: 'Optional — filter entries overlapping this window (use with `to`)'
+      -
+        in: query
+        name: to
+        schema:
+          type: string
+          format: date-time
+      -
+        in: query
+        name: limit
+        schema:
+          type: integer
+          default: 50
+    responses:
+      '200':
+        description: OK
+  post:
+    tags:
+      - Platform
+    summary: 'Create shift handover (optional downtime snapshot for window)'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - windowFrom
+              - windowTo
+            properties:
+              windowFrom:
+                type: string
+                format: date-time
+              windowTo:
+                type: string
+                format: date-time
+              shiftLabel:
+                type: string
+                maxLength: 64
+              notes:
+                type: string
+              includeDowntimeSnapshot:
+                type: boolean
+                default: true
+              includeIncidentSnapshot:
+                type: boolean
+                default: true
+    responses:
+      '201':
+        description: Created

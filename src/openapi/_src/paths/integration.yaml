@@ -1,0 +1,23 @@
+/integration/logs:
+  get:
+    tags:
+      - Wave2
+    summary: 'Integration / ingestion log'
+    deprecated: true
+    description: "**Deprecated.** Use `/integrations/adapters/pipeline-log` (or the per-adapter logs under\n`/integrations/installed-adapters/{id}/logs`). The singular `/integration` namespace will be\nconsolidated into `/integrations/*` in a future release; new clients should not depend on it.\n"
+    parameters:
+      -
+        in: query
+        name: limit
+        schema:
+          type: integer
+          default: 100
+      -
+        in: query
+        name: offset
+        schema:
+          type: integer
+          default: 0
+    responses:
+      '200':
+        description: OK

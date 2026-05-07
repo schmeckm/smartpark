@@ -1,0 +1,381 @@
+/mdm/parks:
+  get:
+    tags:
+      - MDM
+    summary: 'List master-data parks'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeMdmParks'
+  post:
+    tags:
+      - MDM
+    summary: 'Create park'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MdmParkCreate'
+    responses:
+      '201':
+        description: Created
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeMdmParkOne'
+'/mdm/parks/{parkId}/zones':
+  parameters:
+    -
+      in: path
+      name: parkId
+      required: true
+      schema:
+        type: string
+        format: uuid
+  get:
+    tags:
+      - MDM
+    summary: 'List zones in park'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeMdmZones'
+  post:
+    tags:
+      - MDM
+    summary: 'Create zone'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MdmZoneCreate'
+    responses:
+      '201':
+        description: Created
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeMdmZoneOne'
+/mdm/ride-types:
+  get:
+    tags:
+      - MDM
+    summary: 'List ride type catalog'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeMdmRideTypes'
+/mdm/ride-templates:
+  get:
+    tags:
+      - MDM
+    summary: 'List ride templates'
+    parameters:
+      -
+        in: query
+        name: rideTypeId
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeMdmRideTemplates'
+  post:
+    tags:
+      - MDM
+    summary: 'Create ride template'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MdmRideTemplateCreate'
+    responses:
+      '201':
+        description: Created
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeMdmRideTemplateOne'
+'/mdm/ride-templates/{id}':
+  parameters:
+    -
+      $ref: '#/components/parameters/IdPath'
+  get:
+    tags:
+      - MDM
+    summary: 'Get template by id'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeMdmRideTemplateOne'
+      '404':
+        $ref: '#/components/responses/NotFound'
+  put:
+    tags:
+      - MDM
+    summary: 'Update template'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MdmRideTemplateUpdate'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeMdmRideTemplateOne'
+'/mdm/ride-templates/{templateId}/clone-ride':
+  post:
+    tags:
+      - MDM
+    summary: 'Create MDM ride from template (applies default profile)'
+    parameters:
+      -
+        in: path
+        name: templateId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MdmCloneFromTemplateBody'
+    responses:
+      '201':
+        description: Created
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeMdmRideDetail'
+/mdm/rides:
+  get:
+    tags:
+      - MDM
+    summary: 'List MDM rides'
+    parameters:
+      -
+        in: query
+        name: parkId
+        schema:
+          type: string
+          format: uuid
+      -
+        in: query
+        name: parkZoneId
+        schema:
+          type: string
+          format: uuid
+      -
+        in: query
+        name: activeFlag
+        schema:
+          type: boolean
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeMdmRideList'
+  post:
+    tags:
+      - MDM
+    summary: 'Create MDM ride'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MdmRideCreate'
+    responses:
+      '201':
+        description: Created
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeMdmRideDetail'
+'/mdm/rides/{id}':
+  parameters:
+    -
+      $ref: '#/components/parameters/IdPath'
+  get:
+    tags:
+      - MDM
+    summary: 'Get MDM ride with extensions'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeMdmRideDetail'
+      '404':
+        $ref: '#/components/responses/NotFound'
+  put:
+    tags:
+      - MDM
+    summary: 'Update MDM ride'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MdmRideUpdate'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeMdmRideDetail'
+'/mdm/rides/{id}/extensions':
+  get:
+    tags:
+      - MDM
+    summary: 'Read UNS signal extension metadata (read-only, Phase C)'
+    description: 'Normalized domains, per-signal hints, and coarse capabilities from `mdm_rides.extensions`. Missing data returns empty structures.'
+    parameters:
+      -
+        $ref: '#/components/parameters/IdPath'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeRideMasterExtensionsRead'
+      '404':
+        $ref: '#/components/responses/NotFound'
+  patch:
+    tags:
+      - MDM
+    summary: 'Patch UNS ride extensions metadata (Phase E)'
+    description: 'Merged with `mergeExtensions`; persists `mdm_rides.extensions`. Requires `rides` update permission. Signal keys must be `domain.metric` with a supported domain; `replaceSignals` + `signals` replaces the whole signal map.'
+    parameters:
+      -
+        $ref: '#/components/parameters/IdPath'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RideMasterExtensionsPatch'
+    responses:
+      '200':
+        description: 'OK — normalized read DTO'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeRideMasterExtensionsRead'
+      '400':
+        description: 'Invalid body (unknown domains, invalid signal keys, or replaceSignals without signals)'
+      '404':
+        $ref: '#/components/responses/NotFound'
+'/mdm/rides/{id}/active':
+  patch:
+    tags:
+      - MDM
+    summary: 'Activate or deactivate ride'
+    parameters:
+      -
+        $ref: '#/components/parameters/IdPath'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - activeFlag
+            properties:
+              activeFlag:
+                type: boolean
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeMdmRideDetail'
+'/mdm/rides/{id}/capacity-model':
+  get:
+    tags:
+      - MDM
+    summary: 'Capacity model snapshot'
+    parameters:
+      -
+        $ref: '#/components/parameters/IdPath'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeMdmCapacityModel'
+'/mdm/rides/{id}/staffing-model':
+  get:
+    tags:
+      - MDM
+    summary: 'Staffing model snapshot'
+    parameters:
+      -
+        $ref: '#/components/parameters/IdPath'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeMdmStaffingModel'
+'/mdm/rides/{id}/zone':
+  patch:
+    tags:
+      - MDM
+    summary: 'Assign ride to park zone'
+    parameters:
+      -
+        $ref: '#/components/parameters/IdPath'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - parkZoneId
+            properties:
+              parkZoneId:
+                type: string
+                format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeMdmRideDetail'

@@ -1,0 +1,42 @@
+/events:
+  get:
+    tags:
+      - Events
+    summary: 'List crowd events'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/CrowdEvent'
+  post:
+    tags:
+      - Events
+    summary: 'Create crowd event'
+    description: "When `eventType` is `CROWD_SPIKE` and crowd exceeds 75% of the zone `maxCapacity`, the service\nevaluates staffing, security posture, and ride wait times to create recommendations.\nBy default the zone `currentCrowdLevel` is synced from `crowdLevel` (`syncZone: false` opts out).\n"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CrowdEventCreate'
+    responses:
+      '201':
+        description: Created
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data:
+                  $ref: '#/components/schemas/CrowdEvent'
+                recommendations:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Recommendation'

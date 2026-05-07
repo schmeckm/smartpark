@@ -1,0 +1,15 @@
+/dashboard/summary:
+  get:
+    tags:
+      - Dashboard
+    summary: 'Operational dashboard summary'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data:
+                  $ref: '#/components/schemas/DashboardSummary'

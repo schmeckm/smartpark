@@ -1,0 +1,30 @@
+'/visit-actuals/{actualYear}':
+  parameters:
+    -
+      in: path
+      name: actualYear
+      required: true
+      schema:
+        type: integer
+  get:
+    tags:
+      - VisitPlanning
+    summary: 'Get visit actuals'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+  put:
+    tags:
+      - VisitPlanning
+    summary: 'Put visit actuals'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'

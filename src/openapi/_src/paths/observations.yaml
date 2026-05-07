@@ -1,0 +1,30 @@
+/observations/live:
+  get:
+    tags:
+      - Platform
+    summary: 'Recent live observations (queue, status, …)'
+    parameters:
+      -
+        in: query
+        name: parkId
+        schema:
+          type: string
+          format: uuid
+      -
+        in: query
+        name: limit
+        schema:
+          type: integer
+          default: 200
+      -
+        in: query
+        name: metricCode
+        schema:
+          type: string
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopePlatformObservations'

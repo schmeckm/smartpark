@@ -1,0 +1,77 @@
+/sync/themeparks/from-settings:
+  post:
+    tags:
+      - Platform
+    summary: 'Sync platform master data from Integration settings'
+    description: 'Uses the ThemeParks.wiki park saved under Integration settings (`externalParkData.selectedPark`). No park UUID in the request body or path — same source as "Save selection" / Sync entities in the admin UI.'
+    responses:
+      '200':
+        description: 'Sync summary (includes externalParkId used)'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeThemeParksSyncResult'
+      '422':
+        description: 'No ThemeParks park selected in settings'
+/sync/themeparks/discovery/from-settings:
+  post:
+    tags:
+      - Platform
+    summary: 'Re-scan ThemeParks-linked park_assets into UNS Spy adapter discovery inbox'
+    description: 'Idempotent discovery scan: creates/updates `uns_discovery_events` rows with `details.source=adapter` for assets linked to THEMEPARKS_WIKI. Does **not** run a ThemeParks API sync, does **not** write `uns_nodes`, does **not** publish MQTT. Gated by env `ADAPTER_DISCOVERY_SPY_ENABLED=true`.'
+    security:
+      -
+        bearerAuth: []
+    responses:
+      '200':
+        description: 'Scan summary (`created`, `updated`, `items`)'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeAdapterDiscoveryScanResult'
+            examples:
+              scanOk:
+                value:
+                  success: true
+                  data:
+                    created: 2
+                    updated: 1
+                    skipped: false
+                    items: []
+      '401':
+        description: 'Missing or invalid JWT'
+      '403':
+        description: 'Missing integrations.manage **or** ADAPTER_DISCOVERY_SPY_ENABLED=false (feature disabled)'
+        content:
+          application/json:
+            examples:
+              featureOff:
+                value:
+                  success: false
+                  message: 'Adapter discovery is disabled (ADAPTER_DISCOVERY_SPY_ENABLED=false)'
+                  code: FEATURE_DISABLED
+      '404':
+        description: 'Internal park not found for selected ThemeParks park (run full sync first)'
+      '422':
+        description: 'No ThemeParks park selected in Integration settings'
+'/sync/themeparks/{parkId}':
+  post:
+    tags:
+      - Platform
+    summary: 'Sync ThemeParks.wiki entities + live queue into canonical platform (explicit UUID)'
+    description: 'parkId is the ThemeParks.wiki park entity UUID (external), not the internal parks.id.'
+    parameters:
+      -
+        in: path
+        name: parkId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: 'Sync summary'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeThemeParksSyncResult'

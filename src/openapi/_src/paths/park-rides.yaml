@@ -1,0 +1,19 @@
+/park-rides:
+  get:
+    tags:
+      - Platform
+    summary: 'Ride assets with ride_master_data (enterprise catalog)'
+    parameters:
+      -
+        in: query
+        name: parkId
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopePlatformAssets'

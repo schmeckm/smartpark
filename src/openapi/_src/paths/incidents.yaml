@@ -1,0 +1,65 @@
+/incidents:
+  get:
+    tags:
+      - Incidents
+    summary: 'List incidents'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+  post:
+    tags:
+      - Incidents
+    summary: 'Create incident'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+'/incidents/{id}':
+  parameters:
+    -
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+        format: uuid
+  get:
+    tags:
+      - Incidents
+    summary: 'Get incident'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+  patch:
+    tags:
+      - Incidents
+    summary: 'Patch incident'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+  delete:
+    tags:
+      - Incidents
+    summary: 'Delete incident'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'

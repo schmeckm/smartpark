@@ -1,0 +1,36 @@
+/templates/ride:
+  get:
+    tags:
+      - Platform
+    summary: 'List ride templates'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeRideTemplates'
+/templates/staffing:
+  get:
+    tags:
+      - Platform
+    summary: 'List staffing templates'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeStaffingTemplates'
+/templates/maintenance:
+  get:
+    tags:
+      - Platform
+    summary: 'List maintenance templates'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeMaintenanceTemplates'

@@ -1,0 +1,91 @@
+/uns-registry/mirror/summary:
+  get:
+    tags:
+      - UNS
+    summary: 'UNS registry mirror — aggregate counts (mirrored legacy projection)'
+    description: 'Requires **integrations.read**. Triggers stale sync from legacy platform tables when needed; returns counts for mirrored registry entities, mappings, topics, metadata, signal catalog, ride capabilities, and Sparkplug metric definitions.'
+    responses:
+      '200':
+        description: 'Summary counts'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeUnsRegistryMirrorSummary'
+/uns-registry/entities:
+  get:
+    tags:
+      - UNS
+    summary: 'List mirrored UNS registry entities'
+    description: 'Requires **integrations.read**. Optional filters **`parkId`**, **`entityKind`**, pagination.'
+    parameters:
+      -
+        in: query
+        name: parkId
+        schema:
+          type: string
+          format: uuid
+          nullable: true
+      -
+        in: query
+        name: entityKind
+        schema:
+          type: string
+          maxLength: 64
+      -
+        in: query
+        name: limit
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+      -
+        in: query
+        name: offset
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+    responses:
+      '200':
+        description: 'Paged registry entity rows'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeUnsPagedObjects'
+/uns-registry/topics:
+  get:
+    tags:
+      - UNS
+    summary: 'List mirrored UNS registry topics'
+    description: 'Requires **integrations.read**. Optional **`parkId`** filter and pagination.'
+    parameters:
+      -
+        in: query
+        name: parkId
+        schema:
+          type: string
+          format: uuid
+          nullable: true
+      -
+        in: query
+        name: limit
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+      -
+        in: query
+        name: offset
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+    responses:
+      '200':
+        description: 'Paged topic rows'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeUnsPagedObjects'

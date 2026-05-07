@@ -1,0 +1,1110 @@
+/integrations/feature-flags:
+  get:
+    tags:
+      - Integrations
+    summary: 'Read-only integration feature flags (server env)'
+    description: 'Exposes non-secret booleans for admin UI (e.g. adapter discovery inbox, future MQTT capability gate). Requires **integrations.read** (same permission family as other Integration settings reads).'
+    security:
+      -
+        bearerAuth: []
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeIntegrationFeatureFlags'
+            examples:
+              sample:
+                value:
+                  success: true
+                  data:
+                    adapterDiscoverySpyEnabled: true
+                    mqttEnforceCapabilities: false
+      '401':
+        description: 'Missing or invalid JWT'
+      '403':
+        description: 'Missing integrations.read'
+        content:
+          application/json:
+            examples:
+              forbidden:
+                value:
+                  success: false
+                  message: 'Insufficient permissions'
+                  code: FORBIDDEN
+/integrations/providers:
+  get:
+    tags:
+      - Integrations
+    summary: 'List registered provider adapters'
+    responses:
+      '200':
+        description: OK
+'/integrations/providers/{provider}/config':
+  get:
+    tags:
+      - Integrations
+    summary: 'Get provider adapter config'
+    parameters:
+      -
+        in: path
+        name: provider
+        required: true
+        schema:
+          type: string
+    responses:
+      '200':
+        description: OK
+  patch:
+    tags:
+      - Integrations
+    summary: 'Patch provider adapter config'
+    parameters:
+      -
+        in: path
+        name: provider
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            type: object
+    responses:
+      '200':
+        description: OK
+'/integrations/{provider}/destinations':
+  get:
+    tags:
+      - Integrations
+    summary: 'List destinations for a ThemeParks-style provider'
+    description: 'Requires **integrations.read**. Provider slug (e.g. `themeparks`) identifies the adapter.'
+    parameters:
+      -
+        in: path
+        name: provider
+        required: true
+        schema:
+          type: string
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+'/integrations/{provider}/parks':
+  get:
+    tags:
+      - Integrations
+    summary: 'List parks for a provider (optionally scoped to a destination)'
+    description: 'Requires **integrations.read**. Optional **`destinationId`** query to filter canonical context.'
+    parameters:
+      -
+        in: path
+        name: provider
+        required: true
+        schema:
+          type: string
+      -
+        in: query
+        name: destinationId
+        schema:
+          type: string
+          nullable: true
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+'/integrations/{provider}/entity/{entityId}':
+  get:
+    tags:
+      - Integrations
+    summary: 'Get one external entity snapshot for a provider'
+    description: 'Requires **integrations.read**. `entityId` is the provider’s external entity identifier (string).'
+    parameters:
+      -
+        in: path
+        name: provider
+        required: true
+        schema:
+          type: string
+      -
+        in: path
+        name: entityId
+        required: true
+        schema:
+          type: string
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '404':
+        description: 'Entity not found'
+'/integrations/{provider}/entity/{entityId}/children':
+  get:
+    tags:
+      - Integrations
+    summary: 'List child entities for a provider entity'
+    description: 'Requires **integrations.read**.'
+    parameters:
+      -
+        in: path
+        name: provider
+        required: true
+        schema:
+          type: string
+      -
+        in: path
+        name: entityId
+        required: true
+        schema:
+          type: string
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+'/integrations/{provider}/entity/{entityId}/live':
+  get:
+    tags:
+      - Integrations
+    summary: 'Live wait / status style payload for one provider entity'
+    description: 'Requires **integrations.read**. Used for ThemeParks live boards and similar surfaces.'
+    parameters:
+      -
+        in: path
+        name: provider
+        required: true
+        schema:
+          type: string
+      -
+        in: path
+        name: entityId
+        required: true
+        schema:
+          type: string
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+'/integrations/{provider}/entity/{entityId}/schedule':
+  get:
+    tags:
+      - Integrations
+    summary: 'Operating schedule / calendar slice for one provider entity'
+    description: 'Requires **integrations.read**.'
+    parameters:
+      -
+        in: path
+        name: provider
+        required: true
+        schema:
+          type: string
+      -
+        in: path
+        name: entityId
+        required: true
+        schema:
+          type: string
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+'/integrations/{provider}/sync/destinations':
+  post:
+    tags:
+      - Integrations
+    summary: 'Fetch and ingest destination canonical messages'
+    parameters:
+      -
+        in: path
+        name: provider
+        required: true
+        schema:
+          type: string
+    responses:
+      '200':
+        description: OK
+'/integrations/{provider}/sync/parks':
+  post:
+    tags:
+      - Integrations
+    summary: 'Fetch and ingest park canonical messages'
+    parameters:
+      -
+        in: path
+        name: provider
+        required: true
+        schema:
+          type: string
+    responses:
+      '200':
+        description: OK
+'/integrations/{provider}/sync/entities':
+  post:
+    tags:
+      - Integrations
+    summary: 'Fetch and ingest entity canonical messages'
+    parameters:
+      -
+        in: path
+        name: provider
+        required: true
+        schema:
+          type: string
+    responses:
+      '200':
+        description: OK
+'/integrations/{provider}/sync/live':
+  post:
+    tags:
+      - Integrations
+    summary: 'Fetch and ingest live wait/status canonical messages'
+    parameters:
+      -
+        in: path
+        name: provider
+        required: true
+        schema:
+          type: string
+    responses:
+      '200':
+        description: OK
+'/integrations/{provider}/sync/calendar':
+  post:
+    tags:
+      - Integrations
+    summary: 'Fetch and ingest operating-hours/crowd canonical messages'
+    parameters:
+      -
+        in: path
+        name: provider
+        required: true
+        schema:
+          type: string
+    responses:
+      '200':
+        description: OK
+'/integrations/{provider}/sync/all-parks':
+  post:
+    tags:
+      - Integrations
+    summary: 'Sync all parks within the selected destination for a provider'
+    description: 'Requires **integrations.manage**. Body fields align with other provider sync routes (`destinationId`, optional `parkId`, optional `year` / `month` for calendar-scoped providers).'
+    parameters:
+      -
+        in: path
+        name: provider
+        required: true
+        schema:
+          type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/IntegrationProviderSyncBody'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '422':
+        description: 'Validation error'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+/integrations/canonical/messages:
+  get:
+    tags:
+      - Integrations
+    summary: 'List canonical inbound messages'
+    responses:
+      '200':
+        description: OK
+'/integrations/canonical/messages/{id}':
+  get:
+    tags:
+      - Integrations
+    summary: 'Get one canonical inbound message'
+    parameters:
+      -
+        $ref: '#/components/parameters/IdPath'
+    responses:
+      '200':
+        description: OK
+'/integrations/canonical/messages/{id}/reprocess':
+  post:
+    tags:
+      - Integrations
+    summary: 'Reprocess a failed canonical message'
+    parameters:
+      -
+        $ref: '#/components/parameters/IdPath'
+    responses:
+      '200':
+        description: OK
+/integrations/mappings:
+  get:
+    tags:
+      - Integrations
+    summary: 'List external entity mappings'
+    responses:
+      '200':
+        description: OK
+'/integrations/mappings/{id}':
+  patch:
+    tags:
+      - Integrations
+    summary: 'Update one mapping'
+    parameters:
+      -
+        $ref: '#/components/parameters/IdPath'
+    requestBody:
+      content:
+        application/json:
+          schema:
+            type: object
+    responses:
+      '200':
+        description: OK
+/integrations/settings:
+  get:
+    tags:
+      - Integrations
+    summary: 'Get integration runtime settings'
+    responses:
+      '200':
+        description: OK
+  patch:
+    tags:
+      - Integrations
+    summary: 'Patch integration runtime settings'
+    requestBody:
+      content:
+        application/json:
+          schema:
+            type: object
+    responses:
+      '200':
+        description: OK
+/integrations/uns/suggestions:
+  get:
+    tags:
+      - Integrations
+    summary: 'UNS topic path suggestions for manual integration tooling'
+    description: 'Requires **integrations.read**.'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+/integrations/uns/manual:
+  get:
+    tags:
+      - Integrations
+    summary: 'List manually created UNS integration nodes'
+    description: 'Requires **integrations.read**.'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+  post:
+    tags:
+      - Integrations
+    summary: 'Create a manual UNS node (integration-managed)'
+    description: 'Requires **integrations.manage**.'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/IntegrationManualUnsNodeCreate'
+    responses:
+      '200':
+        description: 'Created row'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '422':
+        description: 'Validation error'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+'/integrations/uns/manual/{id}':
+  delete:
+    tags:
+      - Integrations
+    summary: 'Delete a manual UNS integration node'
+    description: 'Requires **integrations.manage**.'
+    parameters:
+      -
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '404':
+        description: 'Node not found'
+/integrations/uns/sparkplug-schema:
+  get:
+    tags:
+      - Integrations
+    summary: 'Export Sparkplug topic schema document (YAML or JSON)'
+    description: 'Requires **integrations.read**. Query **`source`**: `baseline` (default) or `active`. Response may be YAML or JSON depending on server negotiation; treat as integration artifact download.'
+    parameters:
+      -
+        in: query
+        name: source
+        schema:
+          type: string
+          enum:
+            - baseline
+            - active
+          default: baseline
+    responses:
+      '200':
+        description: 'Schema document'
+        content:
+          application/yaml:
+            schema:
+              type: string
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+  put:
+    tags:
+      - Integrations
+    summary: 'Upload / replace Sparkplug UNS topic schema bundle'
+    description: 'Requires **integrations.manage**. Body matches `smartpark.uns.sparkplug_topics` v1 shape.'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/IntegrationUnsSparkplugSchemaUpload'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '422':
+        description: 'Validation error'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+  delete:
+    tags:
+      - Integrations
+    summary: 'Delete stored Sparkplug UNS topic schema'
+    description: 'Requires **integrations.manage**.'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+/integrations/uns/materialize-nodes:
+  post:
+    tags:
+      - Integrations
+    summary: 'Materialize UNS nodes from integration / registry context'
+    description: 'Requires **integrations.manage**. No request body; side effects depend on server state.'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+/integrations/adapters/packages:
+  get:
+    tags:
+      - Integrations
+    summary: 'List DB-registered adapter packages plus filesystem scan of src/integrations/adapter-packages'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                data:
+                  type: array
+                  description: 'Rows from adapter_packages (Sequelize)'
+                meta:
+                  type: object
+                  properties:
+                    localIntegrationPackages:
+                      type: array
+                      description: 'Scan of manifest.json + entrypoint under integrations/adapter-packages'
+/integrations/adapters/pipeline-log:
+  get:
+    tags:
+      - Integrations
+    summary: 'Read recent adapter pipeline log (NDJSON tail on server; optional adapterKey filter)'
+    parameters:
+      -
+        in: query
+        name: adapterKey
+        schema:
+          type: string
+        description: 'Filter to one adapter key (omit for all adapters in tail window)'
+      -
+        in: query
+        name: limit
+        schema:
+          type: integer
+          default: 200
+          minimum: 1
+          maximum: 500
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                data:
+                  type: object
+                  additionalProperties: true
+/integrations/adapters/packages/reload:
+  post:
+    tags:
+      - Integrations
+    summary: 'Reload local adapter packages from filesystem'
+    responses:
+      '200':
+        description: OK
+'/integrations/adapters/packages/{adapterKey}/health':
+  post:
+    tags:
+      - Integrations
+    summary: 'Run adapter runtime health check'
+    parameters:
+      -
+        in: path
+        name: adapterKey
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            type: object
+    responses:
+      '200':
+        description: OK
+/integrations/output/encode:
+  post:
+    tags:
+      - Integrations
+    summary: 'Encode adapter observation for UNS JSON, Sparkplug JSON MVP, and/or canonical historian (no side effects)'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - observation
+              - context
+            properties:
+              observation:
+                type: object
+                description: 'Normalized observation (domain'
+                'assetSlug,': metric
+                'value,': …)
+              context:
+                type: object
+                description: 'Non-empty parkSlug and/or sparkplugGroupId (UNS_JSON uses sparkplugGroupId first when set).'
+                properties:
+                  parkSlug:
+                    type: string
+                  sparkplugGroupId:
+                    type: string
+              profiles:
+                type: array
+                items:
+                  type: string
+                  enum:
+                    - uns_json
+                    - sparkplug_json
+                    - canonical_historian
+    responses:
+      '200':
+        description: OK
+/integrations/output/emit:
+  post:
+    tags:
+      - Integrations
+    summary: 'Encode and optionally publish MQTT and/or ingest canonical messages (integrations manage)'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - observation
+              - context
+            properties:
+              observation:
+                type: object
+              context:
+                type: object
+              profiles:
+                type: array
+                items:
+                  type: string
+                  enum:
+                    - uns_json
+                    - sparkplug_json
+                    - canonical_historian
+              emitMqtt:
+                type: boolean
+                default: false
+              ingestCanonical:
+                type: boolean
+                default: false
+              autoApply:
+                type: boolean
+                default: true
+    responses:
+      '200':
+        description: OK
+/integrations/adapters/demo/run:
+  post:
+    tags:
+      - Integrations
+    summary: 'Run the demo static adapter (poll, validate, encode, optional emit, adapter run log)'
+    requestBody:
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              config:
+                type: object
+              context:
+                type: object
+                description: 'Merged with default parkSlug for encoders'
+              profiles:
+                type: array
+                items:
+                  type: string
+                  enum:
+                    - uns_json
+                    - sparkplug_json
+                    - canonical_historian
+              emitMqtt:
+                type: boolean
+                default: false
+              ingestCanonical:
+                type: boolean
+                default: false
+              autoApply:
+                type: boolean
+                default: true
+    responses:
+      '200':
+        description: OK
+/integrations/adapters/run-local:
+  post:
+    tags:
+      - Integrations
+    summary: 'Run any local adapter package poll() pipeline (validate, encode, optional emit, run log)'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - adapterKey
+              - context
+            properties:
+              adapterKey:
+                type: string
+                example: demo_static_adapter
+              mode:
+                type: string
+                enum:
+                  - poll
+                default: poll
+              config:
+                type: object
+              context:
+                type: object
+                description: 'At least one of parkSlug or sparkplugGroupId (non-empty). For UNS_JSON topics, sparkplugGroupId wins when set so TPUNS paths match Sparkplug group / UNS Live filter.'
+                properties:
+                  parkSlug:
+                    type: string
+                    example: europa_park
+                  sparkplugGroupId:
+                    type: string
+                    example: europa_park
+                  sparkplugEdgeNode:
+                    type: string
+                    example: weather_gateway
+              profiles:
+                type: array
+                description: 'UNS_JSON / uns_json aliases accepted'
+                items:
+                  type: string
+                  enum:
+                    - uns_json
+                    - sparkplug_json
+                    - canonical_historian
+                    - UNS_JSON
+                    - SPARKPLUG_JSON
+                    - CANONICAL_HISTORIAN
+              emit:
+                type: boolean
+                default: false
+                description: 'If true'
+                MQTT: 'publish + canonical ingest'
+              emitMqtt:
+                type: boolean
+                description: 'When sent together with optional ingestCanonical, overrides `emit` for MQTT only (e.g. weather UNS without canonical).'
+              ingestCanonical:
+                type: boolean
+                description: 'When sent with emitMqtt (or alone), overrides `emit` for canonical ingest only.'
+              autoApply:
+                type: boolean
+                default: true
+    responses:
+      '200':
+        description: OK
+/integrations/adapters/discover-local:
+  post:
+    tags:
+      - Integrations
+    summary: 'Run local adapter discover() (no observation encode/emit)'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - adapterKey
+            properties:
+              adapterKey:
+                type: string
+                example: demo_static_adapter
+              config:
+                type: object
+              context:
+                type: object
+    responses:
+      '200':
+        description: OK
+/integrations/adapters/health-local:
+  post:
+    tags:
+      - Integrations
+    summary: 'Run local adapter health() (read; no encode/emit/run log)'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - adapterKey
+            properties:
+              adapterKey:
+                type: string
+                example: demo_static_adapter
+              config:
+                type: object
+              context:
+                type: object
+    responses:
+      '200':
+        description: OK
+/integrations/adapters/install-local:
+  post:
+    tags:
+      - Integrations
+    summary: 'Install or upsert a local adapter (alias of installed-adapters/install-local)'
+    description: 'Mounted on **root `app.js`** for the same path as v1 router. Requires **integrations.manage**. Writes install config YAML under `data/adapter-install-config`.'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/InstallLocalAdapterRequest'
+    responses:
+      '201':
+        description: 'Created or updated'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeAdapterPackageOne'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '422':
+        description: 'Validation error'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+'/integrations/adapters/packages/{adapterKey}/asset':
+  get:
+    tags:
+      - Integrations
+    summary: 'Read a file asset from a local adapter package directory'
+    description: 'Mounted on **root `app.js`**. Requires **integrations.read**. Query **`path`** is required (relative path inside the package, max 500 chars).'
+    parameters:
+      -
+        in: path
+        name: adapterKey
+        required: true
+        schema:
+          type: string
+      -
+        in: query
+        name: path
+        required: true
+        schema:
+          type: string
+          maxLength: 500
+    responses:
+      '200':
+        description: 'File bytes or JSON (depends on asset)'
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+          text/plain:
+            schema:
+              type: string
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '404':
+        description: 'Asset not found'
+'/integrations/adapters/{adapterKey}/inventory':
+  get:
+    tags:
+      - Integrations
+    summary: 'Adapter package inventory (manifest + discovered IO metadata)'
+    description: 'Requires **integrations.read**.'
+    parameters:
+      -
+        in: path
+        name: adapterKey
+        required: true
+        schema:
+          type: string
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '404':
+        description: 'Unknown adapter key'
+/integrations/installed-adapters:
+  get:
+    tags:
+      - Integrations
+    summary: 'List installed adapter packages (DB + scan); install config is hydrated from YAML per adapterKey'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeInstalledAdapterList'
+/integrations/installed-adapters/install-local:
+  post:
+    tags:
+      - Integrations
+    summary: 'Install or upsert a local adapter package; writes install config to YAML (data/adapter-install-config)'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/InstallLocalAdapterRequest'
+    responses:
+      '201':
+        description: 'Created or updated (enriched adapter row)'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeAdapterPackageOne'
+'/integrations/installed-adapters/{id}':
+  parameters:
+    -
+      $ref: '#/components/parameters/InstalledAdapterIdPath'
+  get:
+    tags:
+      - Integrations
+    summary: 'Get one installed adapter (hydrated install from YAML or legacy DB)'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeAdapterPackageOne'
+      '404':
+        $ref: '#/components/responses/NotFound'
+  patch:
+    tags:
+      - Integrations
+    summary: 'Update install configuration YAML for this adapter (configJson, contextJson, outputProfiles, emitEnabled, ingestCanonicalEnabled, scheduleCron). At least one body field required. Does not store install blob in DB.'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PatchInstalledAdapterRequest'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeAdapterPackageOne'
+      '404':
+        $ref: '#/components/responses/NotFound'
+      '422':
+        description: 'Validation error'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+  delete:
+    tags:
+      - Integrations
+    summary: 'Uninstall adapter — removes DB row and deletes YAML file data/adapter-install-config/{adapterKey}.install.yaml'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeAdapterUninstall'
+      '404':
+        $ref: '#/components/responses/NotFound'

@@ -1,0 +1,46 @@
+/health:
+  get:
+    tags:
+      - Health
+    summary: 'Liveness probe'
+    security: []
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HealthResponse'
+/health/db:
+  get:
+    tags:
+      - Health
+    summary: 'Database connectivity'
+    security: []
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HealthDbResponse'
+/health/ready:
+  get:
+    tags:
+      - Health
+    summary: 'Readiness probe (database)'
+    description: 'Returns 200 when PostgreSQL accepts a connection; 503 when authentication fails. No JWT.'
+    security: []
+    responses:
+      '200':
+        description: Ready
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HealthReadyResponse'
+      '503':
+        description: 'Not ready'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HealthReadyFailureResponse'
