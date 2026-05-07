@@ -10,7 +10,6 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const request = require('supertest');
 const {
   sequelize,
   MqttInboundMessage,
