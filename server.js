@@ -16,10 +16,13 @@ const {
   stopAttractionOeeSimulator,
 } = require('./src/services/attraction-oee-simulator.service');
 const { MlTrainingSchedulerService } = require('./src/services/ml/ml-training-scheduler.service');
+const { buildFeatureFlagReport } = require('./src/bootstrap/feature-flags.report');
 
 const port = env.port;
 
 async function start() {
+  logger.info({ flags: buildFeatureFlagReport(env) }, 'feature flags resolved');
+
   await sequelize.authenticate();
   logger.info('database connection established');
 
