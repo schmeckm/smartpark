@@ -164,6 +164,12 @@ paths:
     get:
       tags: [Zones]
       summary: List zones
+      deprecated: true
+      description: |
+        **Deprecated — legacy master data.** Use the platform asset hierarchy instead:
+        list parks via `GET /parks` and zones-as-assets via `GET /assets?type=zone`. The MDM
+        layer is the single source of truth; this endpoint reads from the legacy `zones` table
+        and does not honor multi-park asset relationships.
       responses:
         '200':
           description: OK
@@ -179,6 +185,11 @@ paths:
     post:
       tags: [Zones]
       summary: Create zone
+      deprecated: true
+      description: |
+        **Deprecated — legacy master data.** New zones should be created via the platform
+        asset endpoints (`POST /assets` with `type=zone` and a `parkId` parent). The legacy
+        `zones` table is read-only for new integrations.
       requestBody:
         required: true
         content:
@@ -202,6 +213,9 @@ paths:
     get:
       tags: [Zones]
       summary: Get zone by id
+      deprecated: true
+      description: |
+        **Deprecated — legacy master data.** Use `GET /assets/{assetId}` (with `type=zone`) instead.
       responses:
         '200':
           description: OK
@@ -217,6 +231,10 @@ paths:
     patch:
       tags: [Zones]
       summary: Update zone
+      deprecated: true
+      description: |
+        **Deprecated — legacy master data.** Update zones via `PATCH /assets/{assetId}` (the MDM
+        path is the single source of truth).
       requestBody:
         required: true
         content:
@@ -238,6 +256,9 @@ paths:
     delete:
       tags: [Zones]
       summary: Delete zone
+      deprecated: true
+      description: |
+        **Deprecated — legacy master data.** Delete zones via `DELETE /assets/{assetId}`.
       responses:
         '204':
           description: No content
@@ -248,6 +269,12 @@ paths:
     get:
       tags: [Rides]
       summary: List rides
+      deprecated: true
+      description: |
+        **Deprecated — legacy master data.** Use `GET /assets?type=ride` (or
+        `GET /master-data/rides` for the MDM-backed view that includes signal capabilities
+        and registry topic state). The legacy `rides` table is being unified with the
+        platform asset hierarchy.
       responses:
         '200':
           description: OK
@@ -263,6 +290,10 @@ paths:
     post:
       tags: [Rides]
       summary: Create ride
+      deprecated: true
+      description: |
+        **Deprecated — legacy master data.** New rides should be created via `POST /assets`
+        (with `type=ride` and a `parkId` parent). The MDM layer is the source of truth.
       requestBody:
         required: true
         content:
@@ -286,6 +317,10 @@ paths:
     get:
       tags: [Rides]
       summary: Get ride by id
+      deprecated: true
+      description: |
+        **Deprecated — legacy master data.** Use `GET /assets/{assetId}` (with `type=ride`)
+        or the MDM endpoint `GET /master-data/rides/{id}` for the canonical view.
       responses:
         '200':
           description: OK
@@ -301,6 +336,10 @@ paths:
     patch:
       tags: [Rides]
       summary: Update ride
+      deprecated: true
+      description: |
+        **Deprecated — legacy master data.** Update rides via `PATCH /assets/{assetId}` or
+        the MDM endpoint `PATCH /master-data/rides/{id}`.
       requestBody:
         required: true
         content:
@@ -693,6 +732,11 @@ paths:
     get:
       tags: [Wave2]
       summary: Integration / ingestion log
+      deprecated: true
+      description: |
+        **Deprecated.** Use `/integrations/adapters/pipeline-log` (or the per-adapter logs under
+        `/integrations/installed-adapters/{id}/logs`). The singular `/integration` namespace will be
+        consolidated into `/integrations/*` in a future release; new clients should not depend on it.
       parameters:
         - in: query
           name: limit
