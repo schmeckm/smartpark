@@ -10,6 +10,11 @@ const {
   IntegrationSettingsService,
   INTEGRATION_SETTING_KEYS,
 } = require('../modules/integrations/orchestrator/integration-settings.service');
+const {
+  SparkplugTopicSchemaService,
+  unsSchemaMatchesPark,
+  applyUploadedUnsSchemaEntries,
+} = require('../modules/integrations/orchestrator/sparkplug-topic-schema.service');
 const { emitExternalMappingUpdated, emitExternalParkDataUpdated } = require('../sockets');
 const env = require('../config/env');
 const { getPlatformSettingsService } = require('./platform-settings.service');
@@ -60,6 +65,16 @@ class IntegrationOrchestratorService {
       settingRepository: this.settingRepository,
       registryService: this.registryService,
       unsParkKeyResolver: async () => this.resolveUnsParkKey(),
+    });
+    this.sparkplugSchema = new SparkplugTopicSchemaService({
+      settingRepository: this.settingRepository,
+      selectedParkResolver: () => this.selectedParkOrThrow(),
+      parkSlugResolver: async (selected) => {
+        const parkEntity = await this.getProviderEntity(selected.provider, selected.externalParkId);
+        return slugifyName(parkEntity?.name || selected.parkName || selected.externalParkId);
+      },
+      dynamicTopicRowsResolver: (selected, parkSlug) =>
+        this.buildDynamicUnsTopicNodesFromIntegrations(selected, parkSlug),
     });
   }
 
@@ -434,36 +449,11 @@ class IntegrationOrchestratorService {
   }
 
   _unsSchemaMatchesPark(doc, selected) {
-    return String(doc?.provider) === String(selected.provider) && String(doc?.externalParkId) === String(selected.externalParkId);
+    return unsSchemaMatchesPark(doc, selected);
   }
 
   _applyUploadedUnsSchemaEntries(entries, selected, parkSlug) {
-    return entries.map((e) => {
-      const assetSlug = slugifyName(e.assetSlug);
-      const metric = slugifyName(e.metric);
-      const customSp = e.sparkplugTopic && String(e.sparkplugTopic).trim() ? String(e.sparkplugTopic).trim() : undefined;
-      const et = e.entityType != null && String(e.entityType).trim() !== '' ? String(e.entityType).trim().toUpperCase() : null;
-      const resolvedDomain =
-        e.domain != null && String(e.domain).trim() !== ''
-          ? slugifyName(e.domain)
-          : resolveUnsDomainForEntity(null, et);
-      return {
-        provider: selected.provider,
-        externalParkId: selected.externalParkId,
-        externalEntityId: e.externalEntityId != null && e.externalEntityId !== '' ? String(e.externalEntityId) : null,
-        entityName: e.entityName || assetSlug,
-        entityType: et,
-        domain: resolvedDomain,
-        assetSlug,
-        metric,
-        topicPath:
-          e.topicPath && String(e.topicPath).trim()
-            ? String(e.topicPath).trim()
-            : generateTopicPath({ parkSlug, version: 'v1', domain: resolvedDomain, assetSlug, metric }),
-        sparkplugTopic: customSp,
-        source: 'SCHEMA_UPLOAD',
-      };
-    });
+    return applyUploadedUnsSchemaEntries(entries, selected, parkSlug);
   }
 
   async buildDynamicUnsTopicNodesFromIntegrations(selected, parkSlug) {
@@ -660,79 +650,16 @@ class IntegrationOrchestratorService {
     };
   }
 
-  async getSparkplugTopicSchemaDocument({ source }) {
-    const selected = await this.selectedParkOrThrow();
-    const parkEntity = await this.getProviderEntity(selected.provider, selected.externalParkId);
-    const parkSlug = slugifyName(parkEntity?.name || selected.parkName || selected.externalParkId);
-    const defaultGroupId = env.sparkplugGroupId || parkSlug;
-    const defaultEdgeNodeId = env.sparkplugEdgeNode || 'park_gateway';
-
-    if (source === 'active') {
-      const stored = await this.settingRepository.getValue(SETTING_KEYS.unsSparkplugSchemaOverride, null);
-      if (stored?.entries?.length && this._unsSchemaMatchesPark(stored, selected)) {
-        const groupId = stored.sparkplug?.groupId || defaultGroupId;
-        const edgeNodeId = stored.sparkplug?.edgeNodeId || defaultEdgeNodeId;
-        const entries = enrichRowsWithSparkplug([...stored.entries], { groupId, edgeNodeId });
-        return {
-          schemaVersion: 1,
-          kind: 'smartpark.uns.sparkplug_topics',
-          provider: selected.provider,
-          externalParkId: selected.externalParkId,
-          parkSlug: stored.parkSlug || parkSlug,
-          updatedAt: stored.updatedAt || null,
-          sparkplug: { groupId, edgeNodeId },
-          entries,
-        };
-      }
-    }
-
-    const dynamicNodes = await this.buildDynamicUnsTopicNodesFromIntegrations(selected, parkSlug);
-    const entries = enrichRowsWithSparkplug(dynamicNodes, {
-      groupId: defaultGroupId,
-      edgeNodeId: defaultEdgeNodeId,
-    });
-    return {
-      schemaVersion: 1,
-      kind: 'smartpark.uns.sparkplug_topics',
-      provider: selected.provider,
-      externalParkId: selected.externalParkId,
-      parkSlug,
-      updatedAt: null,
-      sparkplug: { groupId: defaultGroupId, edgeNodeId: defaultEdgeNodeId },
-      entries,
-    };
+  getSparkplugTopicSchemaDocument({ source }) {
+    return this.sparkplugSchema.get({ source });
   }
 
-  async putSparkplugTopicSchemaDocument(doc) {
-    const selected = await this.selectedParkOrThrow();
-    const parkEntity = await this.getProviderEntity(selected.provider, selected.externalParkId);
-    const parkSlug = slugifyName(parkEntity?.name || selected.parkName || selected.externalParkId);
-    if (doc.externalParkId && String(doc.externalParkId) !== String(selected.externalParkId)) {
-      throw new AppError('Schema externalParkId does not match selected park', 422, { code: 'VALIDATION_ERROR' });
-    }
-    if (doc.provider && String(doc.provider) !== String(selected.provider)) {
-      throw new AppError('Schema provider does not match selected provider', 422, { code: 'VALIDATION_ERROR' });
-    }
-    const entriesRaw = this._applyUploadedUnsSchemaEntries(doc.entries, selected, parkSlug);
-    const groupId = doc.sparkplug?.groupId || env.sparkplugGroupId || parkSlug;
-    const edgeNodeId = doc.sparkplug?.edgeNodeId || env.sparkplugEdgeNode || 'park_gateway';
-    const entries = enrichRowsWithSparkplug(entriesRaw, { groupId, edgeNodeId });
-    const normalized = {
-      schemaVersion: 1,
-      kind: 'smartpark.uns.sparkplug_topics',
-      provider: selected.provider,
-      externalParkId: selected.externalParkId,
-      parkSlug: doc.parkSlug ? String(doc.parkSlug) : parkSlug,
-      updatedAt: new Date().toISOString(),
-      sparkplug: { groupId, edgeNodeId },
-      entries,
-    };
-    await this.settingRepository.upsertValue(SETTING_KEYS.unsSparkplugSchemaOverride, normalized);
-    return { entryCount: normalized.entries.length };
+  putSparkplugTopicSchemaDocument(doc) {
+    return this.sparkplugSchema.put(doc);
   }
 
-  async deleteSparkplugTopicSchemaDocument() {
-    await this.settingRepository.deleteByKey(SETTING_KEYS.unsSparkplugSchemaOverride);
+  deleteSparkplugTopicSchemaDocument() {
+    return this.sparkplugSchema.delete();
   }
 
   /**
