@@ -9,6 +9,7 @@ import {
   scanBaselineFiles,
   diffAgainstBaseline,
   loadBaseline,
+  discoverScanTargets,
 } from './check-orchestrator-provider-branches.mjs';
 
 /**
@@ -23,6 +24,9 @@ import {
  *   - C3.7: hooks registry replaces the branches; baseline is empty.
  *           Tests below assert the orchestrator and pipeline service
  *           are now branch-free.
+ *   - C3.9: scan target list is auto-discovered. Adding a new file
+ *           under `src/modules/integrations/orchestrator/` puts it
+ *           under the gate without baseline edits.
  */
 
 test('scanFile: the integration orchestrator has zero provider-branches (post-C3.7)', () => {
@@ -46,6 +50,39 @@ test('scanFile: the canonical-ingestion pipeline has zero provider-branches (pos
     'the ingestion pipeline must NOT contain `provider === \'<key>\'` branches. ' +
       'Use a post-ingest hook in the adapter module instead. ' +
       `Found: ${JSON.stringify(matches, null, 2)}`
+  );
+});
+
+test('discoverScanTargets: includes the legacy facade and every orchestrator module', () => {
+  const targets = discoverScanTargets();
+  assert.ok(
+    targets.includes('src/services/integration-orchestrator.service.js'),
+    'must include the legacy facade'
+  );
+  assert.ok(
+    targets.some((t) => t.startsWith('src/modules/integrations/orchestrator/') && t.endsWith('.js')),
+    'must include at least one orchestrator module'
+  );
+  for (const t of targets) {
+    assert.ok(!t.endsWith('.test.js'), `discovered target ${t} must not be a test file`);
+  }
+});
+
+test('discoverScanTargets: every discovered file is branch-free (the C3.9 gate)', () => {
+  const targets = discoverScanTargets();
+  const hits = [];
+  for (const t of targets) {
+    hits.push(...scanFile(t));
+  }
+  assert.equal(
+    hits.length,
+    0,
+    [
+      'C3.9 gate failed: a hard-coded `provider === \'<key>\'` branch was found in an',
+      'orchestrator-context module. Provider-specific work must run through a post-ingest',
+      'hook (canonical-ingestion-hooks.js). Offending lines:',
+      JSON.stringify(hits, null, 2),
+    ].join('\n')
   );
 });
 

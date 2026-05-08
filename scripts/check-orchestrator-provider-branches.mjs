@@ -1,12 +1,21 @@
 #!/usr/bin/env node
 /**
- * Phase C3.0 governance gate.
+ * Phase C3 orchestrator-decomposition governance gate.
  *
- * Scans the integration orchestrator (and, after C3.x extractions, every
- * file under src/modules/integrations/orchestrator/) for hard-coded
+ * Scans the integration orchestrator surface for hard-coded
  * `provider === '<key>'` control-flow branches and asserts the set
  * matches the baseline at
  *   docs/governance/orchestrator-provider-branches-baseline.json
+ *
+ * Scan scope (Phase C3.9):
+ *   - the legacy facade: src/services/integration-orchestrator.service.js
+ *   - every *.js file under src/modules/integrations/orchestrator/
+ *     (excluding *.test.js)
+ *
+ * The discovery is automatic — adding a new orchestrator-context module
+ * is enough to put it under the gate. New `provider === '<key>'` checks
+ * MUST go through a post-ingest hook in the adapter package instead
+ * (see src/modules/integrations/orchestrator/canonical-ingestion-hooks.js).
  *
  * The pattern flagged is:
  *   /provider[^=]*===\s*'[a-z_]+'/i
@@ -77,15 +86,53 @@ export function scanFile(relPath) {
 }
 
 /**
- * Scan every file listed in the baseline and return the union.
+ * Static legacy entry point still scanned for backward compatibility.
+ */
+const LEGACY_FACADE = 'src/services/integration-orchestrator.service.js';
+
+/**
+ * Directory holding all extracted orchestrator-context services.
+ * Every *.js file in here is auto-discovered and scanned.
+ */
+const ORCHESTRATOR_MODULES_DIR = 'src/modules/integrations/orchestrator';
+
+/**
+ * Auto-discover the canonical scan target list.
  *
- * @param {{ scannedFiles: string[] }} baseline
+ * @returns {string[]} relative-to-repo file paths
+ */
+export function discoverScanTargets() {
+  /** @type {string[]} */
+  const out = [];
+  if (fs.existsSync(path.join(REPO_ROOT, LEGACY_FACADE))) {
+    out.push(LEGACY_FACADE);
+  }
+  const dir = path.join(REPO_ROOT, ORCHESTRATOR_MODULES_DIR);
+  if (fs.existsSync(dir)) {
+    for (const entry of fs.readdirSync(dir)) {
+      if (!entry.endsWith('.js')) continue;
+      if (entry.endsWith('.test.js')) continue;
+      out.push(path.posix.join(ORCHESTRATOR_MODULES_DIR, entry));
+    }
+  }
+  return out.sort();
+}
+
+/**
+ * Scan every file in the discovered surface and return the union.
+ *
+ * The baseline's `scannedFiles` is used only for diagnostics — the
+ * actual scan target list is computed at runtime so that adding a new
+ * orchestrator module automatically falls under the gate.
+ *
+ * @param {{ scannedFiles?: string[] }} _baseline
  * @returns {BranchMatch[]}
  */
-export function scanBaselineFiles(baseline) {
+export function scanBaselineFiles(_baseline) {
+  const targets = discoverScanTargets();
   /** @type {BranchMatch[]} */
   const out = [];
-  for (const f of baseline.scannedFiles || []) {
+  for (const f of targets) {
     out.push(...scanFile(f));
   }
   return out;
@@ -141,18 +188,19 @@ function main() {
     process.exit(2);
   }
 
+  const targets = discoverScanTargets();
   const { ok, added, removed } = diffAgainstBaseline(current, baseline);
   if (ok) {
     if (current.length === 0) {
       console.log(
         `[check:orchestrator-provider-branches] OK — 0 provider control-flow branches in ` +
-          `${(baseline.scannedFiles || []).length} scanned file(s) (Phase C3.7+: post-ingest ` +
+          `${targets.length} auto-discovered file(s) (Phase C3.7+: post-ingest ` +
           `hook registry replaces the legacy hard-coded branches).`
       );
     } else {
       console.log(
         `[check:orchestrator-provider-branches] OK — ${current.length}/${current.length} ` +
-          `provider control-flow branches match the baseline.`
+          `provider control-flow branches match the baseline (${targets.length} scanned file(s)).`
       );
     }
     process.exit(0);

@@ -1,4 +1,24 @@
-const { AppError } = require('../utils/app-error');
+'use strict';
+
+/**
+ * IntegrationOrchestratorService — Phase C3.9 facade.
+ *
+ * Pre-C3 (1091 LOC) this class mixed 9 bounded contexts. Phases C3.1–C3.8
+ * extracted each context into its own module under
+ * `src/modules/integrations/orchestrator/*` and per-adapter hooks under
+ * `src/modules/adapters/*`. This file is now a thin composition layer
+ * that:
+ *   1. wires the per-context services together with shared collaborators
+ *      (registry, settings repository, mapping service, …);
+ *   2. exposes the legacy public API surface so existing controllers,
+ *      bootstrap, and tests keep working without churn;
+ *   3. re-exports `SETTING_KEYS` for backward compatibility (now owned
+ *      by IntegrationSettingsService as `INTEGRATION_SETTING_KEYS`).
+ *
+ * Adding new behavior here is a smell — extend the appropriate
+ * sub-service or write a new one.
+ */
+
 const { logger } = require('../utils/logger');
 const { ProviderAdapterRegistryService } = require('./provider-adapter-registry.service');
 const { CanonicalInboundMessageService } = require('./canonical-inbound-message.service');
@@ -24,32 +44,9 @@ const {
 } = require('../modules/integrations/orchestrator/integration-polling.service');
 const { emitExternalMappingUpdated, emitExternalParkDataUpdated } = require('../sockets');
 const { getPlatformSettingsService } = require('./platform-settings.service');
-const { generateTopicPath, buildCanonicalUnsTopic } = require('../modules/uns/uns-topic-generator.service');
-const { enrichRowsWithSparkplug } = require('../modules/uns/sparkplug-topic-builder.service');
-const { getCanonicalToSparkplugPublisher } = require('./canonicalToSparkplugPublisher');
-const {
-  resolveThemeParksPublicationDomain,
-  mergeThemeParksEntityRegistryFromMessages,
-  mergeThemeParksEntityRegistryFromLiveMessages,
-} = require('../modules/uns/theme-parks-entity-domain.service');
 const { slugifyName } = require('../utils/slugify.util');
 
-/**
- * Phase C3.3 — `SETTING_KEYS` is now owned by the extracted
- * IntegrationSettingsService as `INTEGRATION_SETTING_KEYS`. Re-exported
- * here under its historical name for backward compatibility with
- * downstream callers that imported it from this module.
- */
 const SETTING_KEYS = INTEGRATION_SETTING_KEYS;
-
-function resolveUnsDomainForEntity(entityName, entityType) {
-  return resolveThemeParksPublicationDomain(entityName, entityType);
-}
-
-/* Phase C3.2: provider-browsing helpers (listFromProviderPayload,
- * normalizedEntityType, isParkEntity, isDestinationEntity, asArray,
- * normalizeDestinationAndParkRows) moved to
- * `src/modules/integrations/orchestrator/provider-browser.service.js`. */
 
 class IntegrationOrchestratorService {
   constructor() {

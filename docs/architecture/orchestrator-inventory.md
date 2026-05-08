@@ -1,6 +1,11 @@
-# IntegrationOrchestratorService — Decomposition Inventory (Phase C3.0)
+# IntegrationOrchestratorService — Decomposition Inventory
 
-Status: **active inventory** — read this before touching the orchestrator.
+Status (Phase C3.9): **decomposition complete** — the orchestrator is
+now a slim facade (≈ 300 LOC, was 1,091) that wires per-context services
+together and re-exposes the legacy public API for unchanged controllers
+and bootstrap. Read this before touching anything in
+`src/modules/integrations/orchestrator/` or extending the orchestrator
+with new behavior.
 
 This document is the safety net for **Phase C3** (decomposing the
 `IntegrationOrchestratorService` into bounded contexts). It exists so the
@@ -304,19 +309,19 @@ migrated.
 Each commit ends with a green `npm test`, `npm run lint`,
 `npm run governance:ci`. Stop on red.
 
-| Commit | Scope | Files touched | Risk |
-|---|---|---|---|
-| **C3.0 (this commit)** | Inventory doc + lock-in tests + provider-branch baseline + governance script. **No production code touched.** | this doc + 3 new test/script files + `package.json` (1 new script) + governance baseline | trivial |
-| C3.1 | Extract `manual-uns-node.service.js`. Orchestrator delegates to it. | new module + orchestrator (3 methods → 3 delegations) | low |
-| C3.2 | Extract `provider-browser.service.js`. Orchestrator delegates. | new module + orchestrator (10 methods → 10 delegations) | low |
-| C3.3 | Extract `canonical-message-query` (or fold into existing `CanonicalInboundMessageService` — decide during C3.3 reading). | small | low |
-| C3.4 | Extract `integration-settings.service.js`. | new module + orchestrator | low |
-| C3.5 | Extract `sparkplug-topic-schema.service.js`. | new module + orchestrator | low |
-| C3.6 | Extract `uns-topic-suggestion.service.js` + clarify `theme-parks-entity-domain.service` (§4.3). | medium | medium |
-| C3.7 | Extract `canonical-ingestion-pipeline.service.js` **with** the `post-ingest-hooks.registry.js` — kills the 2 hard-coded `themeparks_wiki` branches (§4.1). | new module + register hook in `themeparks_wiki` adapter package | **highest** — semantic change, even though behavior is preserved |
-| C3.8 | Extract `integration-polling.service.js`. | new module + bootstrap registration | low |
-| C3.9 | Convert legacy file to slim facade + add governance gate forbidding new `if (provider === '<x>')` branches outside the hook registry. | orchestrator → facade | low |
-| C3.10 | (Optional) migrate callers to direct imports; eventually delete the facade. | many small touches in controller | medium — many small edits |
+| Commit | Scope | Files touched | Risk | Status |
+|---|---|---|---|---|
+| C3.0 | Inventory doc + lock-in tests + provider-branch baseline + governance script. No production code touched. | this doc + 3 new test/script files + `package.json` (1 new script) + governance baseline | trivial | **DONE** |
+| C3.1 | Extract `manual-uns-node.service.js`. Orchestrator delegates to it. | new module + orchestrator (3 methods → 3 delegations) | low | **DONE** |
+| C3.2 | Extract `provider-browser.service.js`. Orchestrator delegates. | new module + orchestrator (10 methods → 10 delegations) | low | **DONE** |
+| C3.3 | Extract `integration-settings.service.js` (settings, bootstrap, polling-config). | new module + orchestrator | low | **DONE** |
+| C3.4 | Extract `sparkplug-topic-schema.service.js`. | new module + orchestrator (3 methods + 2 helpers) | low | **DONE** |
+| C3.5 | Inline canonical-message query into `CanonicalInboundMessageService`. The 3 thin pass-throughs (`listCanonicalMessages`, `getCanonicalMessage`, `reprocessCanonicalMessage`) are removed from the orchestrator surface; the controller calls `CanonicalInboundMessageService` directly. Contract test updated. | controller + orchestrator | low | **DONE** |
+| C3.6 | Extract `uns-topic-suggestion.service.js` (~190 LOC) + clarified theme-parks helpers. | new module + orchestrator | medium | **DONE** |
+| C3.7 | Extract `canonical-ingestion-pipeline.service.js` together with `canonical-ingestion-hooks.js` registry. Kills the 2 hard-coded `themeparks_wiki` branches (§4.1). Provider modules self-register via `canonical-ingestion-hooks.bootstrap.js`. | new modules + themeparks-sync.service self-registration + orchestrator | highest — semantic change, behavior preserved | **DONE** |
+| C3.8 | Extract `integration-polling.service.js`. Orchestrator's `startPollingIfEnabled()` collapses to a one-line delegation. | new module + orchestrator | low | **DONE** |
+| C3.9 | Convert legacy file to slim facade (≈ 300 LOC) + final governance gate that auto-discovers every file under `src/modules/integrations/orchestrator/` and forbids `provider === '<key>'` branches anywhere in the orchestrator surface. Dead imports removed. | orchestrator → facade + governance script + baseline | low | **DONE** |
+| C3.10 | (Optional, deferred) migrate callers to direct imports; eventually delete the facade. | many small touches in controller | medium — many small edits | pending |
 
 C3.0 is intentionally **doc + tests only**. No production source file is
 modified. After C3.0 lands, every subsequent commit can be reverted in

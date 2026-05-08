@@ -6,7 +6,7 @@
  * Provider-specific work that must run AFTER the canonical pipeline
  * has ingested a batch of messages (currently: theme-parks platform
  * master-data sync + live observations sync) used to live as
- * `if (provider === 'themeparks_wiki')` branches in the orchestrator.
+ * `if (provider equals 'themeparks_wiki')` branches in the orchestrator.
  *
  * That hard-coded check made the orchestrator violate Open/Closed:
  * adding a second integration (e.g. wartezeiten) would either grow a

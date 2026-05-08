@@ -1,13 +1,28 @@
 {
   "$schema": "./README.md#orchestrator-provider-branches-baseline",
-  "description": "Phase C3.7: the orchestrator and its extracted ingestion-pipeline service must contain ZERO hard-coded `provider === '<key>'` control-flow branches. Provider-specific work runs through the post-ingest hook registry (`src/modules/integrations/orchestrator/canonical-ingestion-hooks.js`); each provider self-registers via the bootstrap entry point. Adding a new branch in either of the scanned files requires writing a hook in the provider module instead and is rejected by the gate.",
+  "description": "Phase C3.9: every file under `src/modules/integrations/orchestrator/` (and the legacy facade `src/services/integration-orchestrator.service.js`) must contain ZERO hard-coded `provider === '<key>'` control-flow branches. The scan target is auto-discovered by `scripts/check-orchestrator-provider-branches.mjs` — adding a new orchestrator-context module is enough to put it under the gate. Provider-specific work runs through the post-ingest hook registry (`src/modules/integrations/orchestrator/canonical-ingestion-hooks.js`); each provider self-registers via the bootstrap entry point at `canonical-ingestion-hooks.bootstrap.js`. Adding a new branch in any scanned file requires writing a hook in the provider module instead and is rejected by the gate.",
+  "discovery": {
+    "legacyFacade": "src/services/integration-orchestrator.service.js",
+    "moduleDir": "src/modules/integrations/orchestrator",
+    "include": "*.js (excluding *.test.js)",
+    "note": "The `scannedFiles` array below is informational — the script computes its scan list at runtime."
+  },
   "scannedFiles": [
-    "src/services/integration-orchestrator.service.js",
-    "src/modules/integrations/orchestrator/canonical-ingestion-pipeline.service.js"
+    "src/modules/integrations/orchestrator/canonical-ingestion-hooks.bootstrap.js",
+    "src/modules/integrations/orchestrator/canonical-ingestion-hooks.js",
+    "src/modules/integrations/orchestrator/canonical-ingestion-pipeline.service.js",
+    "src/modules/integrations/orchestrator/integration-polling.service.js",
+    "src/modules/integrations/orchestrator/integration-settings.service.js",
+    "src/modules/integrations/orchestrator/manual-uns-node.service.js",
+    "src/modules/integrations/orchestrator/provider-browser.service.js",
+    "src/modules/integrations/orchestrator/sparkplug-topic-schema.service.js",
+    "src/modules/integrations/orchestrator/uns-topic-suggestion.service.js",
+    "src/services/integration-orchestrator.service.js"
   ],
   "matches": [],
   "matchCount": 0,
   "rules": {
-    "newBranchesNotAllowed": "Adding a new `if (provider === '<key>')` branch in any scanned file requires (a) writing a post-ingest hook in the adapter module and registering it via `canonicalIngestionHooks.registerAfterEntities` / `registerAfterLive` and (b) explicit justification in the PR description. Drive-by additions fail the governance gate. The baseline is empty as of C3.7 because the orchestrator no longer needs to know about any provider key."
+    "newBranchesNotAllowed": "Adding a new `if (provider === '<key>')` branch in any scanned file requires (a) writing a post-ingest hook in the adapter module and registering it via `canonicalIngestionHooks.registerAfterEntities` / `registerAfterLive`, and (b) explicit justification in the PR description. Drive-by additions fail the governance gate. The baseline is empty as of C3.7 because the orchestrator no longer needs to know about any provider key.",
+    "autoDiscovery": "Adding a new file under `src/modules/integrations/orchestrator/` automatically puts it under this gate (Phase C3.9)."
   }
 }

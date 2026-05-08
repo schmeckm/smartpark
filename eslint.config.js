@@ -44,7 +44,6 @@ const smartParkRules = require('./tools/eslint-rules');
  */
 const MAX_LINES_ALLOW_LIST = [
   'src/modules/master-data/master-data.service.js', // 1122
-  'src/services/integration-orchestrator.service.js', // 1003
   'src/services/sqdc-board.service.js', // 982
   'src/services/attraction-oee-simulator.service.js', // 888
   'src/services/ai-studio.service.js', // 843
