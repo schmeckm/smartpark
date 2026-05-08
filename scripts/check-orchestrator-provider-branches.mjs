@@ -143,10 +143,18 @@ function main() {
 
   const { ok, added, removed } = diffAgainstBaseline(current, baseline);
   if (ok) {
-    console.log(
-      `[check:orchestrator-provider-branches] OK — ${current.length}/${current.length} ` +
-        `provider control-flow branches match the baseline.`
-    );
+    if (current.length === 0) {
+      console.log(
+        `[check:orchestrator-provider-branches] OK — 0 provider control-flow branches in ` +
+          `${(baseline.scannedFiles || []).length} scanned file(s) (Phase C3.7+: post-ingest ` +
+          `hook registry replaces the legacy hard-coded branches).`
+      );
+    } else {
+      console.log(
+        `[check:orchestrator-provider-branches] OK — ${current.length}/${current.length} ` +
+          `provider control-flow branches match the baseline.`
+      );
+    }
     process.exit(0);
   }
 

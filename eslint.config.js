@@ -69,6 +69,7 @@ const MID_FN_MODELS_ALLOW_LIST = [
   'src/controllers/attraction-oee-simulator.controller.js', // 1
   'src/middleware/park-context.middleware.js', // 1
   'src/modules/adapters/themeparks/themeparks-sync.controller.js', // 3
+  'src/modules/adapters/themeparks/themeparks-sync.service.js', // 2 — lazy `require(models)` inside post-ingest hook callbacks (C3.7); avoids circular require during module-init hook registration
   'src/modules/master-data/entity-type-templates.service.js', // 1
   'src/modules/master-data/master-data.service.js', // 1
   'src/modules/mdm/mdm.controller.js', // 1
@@ -80,7 +81,6 @@ const MID_FN_MODELS_ALLOW_LIST = [
   'src/services/canonical-message-apply.service.js', // 4
   'src/services/geo-flow-simulator.service.js', // 2
   'src/services/geo-pressure-engine.service.js', // 1
-  'src/services/integration-orchestrator.service.js', // 2
   'src/services/uns-spy-adapter-discovery.service.js', // 2
 ];
 

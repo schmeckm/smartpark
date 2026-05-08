@@ -12,37 +12,41 @@ import {
 } from './check-orchestrator-provider-branches.mjs';
 
 /**
- * Phase C3.0 — unit tests for the governance script that locks the
- * count of `provider === '<key>'` branches in the orchestrator. The
- * script itself is exercised via the npm `governance:ci` umbrella; this
- * file pins the parsing/diff logic so the script can't regress
+ * Unit tests for the governance script that locks the count of
+ * `provider === '<key>'` branches across the orchestrator surface.
+ * The script itself is exercised via the npm `governance:ci` umbrella;
+ * this file pins the parsing/diff logic so the script can't regress
  * silently while baseline numbers stay green.
+ *
+ * Phase history:
+ *   - C3.0: orchestrator had 2 branches; baseline pinned both.
+ *   - C3.7: hooks registry replaces the branches; baseline is empty.
+ *           Tests below assert the orchestrator and pipeline service
+ *           are now branch-free.
  */
 
-test('scanFile detects the two known orchestrator provider branches', () => {
+test('scanFile: the integration orchestrator has zero provider-branches (post-C3.7)', () => {
   const matches = scanFile('src/services/integration-orchestrator.service.js');
-  assert.ok(matches.length >= 2, `expected at least 2 matches, got ${matches.length}`);
-  for (const m of matches) {
-    assert.match(m.text, /provider/);
-    assert.match(m.text, /===/);
-    assert.match(m.text, /'[a-z_]+'/);
-  }
+  assert.equal(
+    matches.length,
+    0,
+    'the orchestrator must NOT contain `provider === \'<key>\'` branches after C3.7. ' +
+      'Use a post-ingest hook in the adapter module instead. ' +
+      `Found: ${JSON.stringify(matches, null, 2)}`
+  );
 });
 
-test('scanFile ignores default-value seeds (`getValue(..., { provider: "X" })`)', () => {
-  const matches = scanFile('src/services/integration-orchestrator.service.js');
-  for (const m of matches) {
-    assert.doesNotMatch(
-      m.text,
-      /getString\s*\(/,
-      `default-value getString line incorrectly flagged: ${m.text}`
-    );
-    assert.doesNotMatch(
-      m.text,
-      /getValue\s*\([^)]*\{\s*provider\s*:/,
-      `default-value getValue line incorrectly flagged: ${m.text}`
-    );
-  }
+test('scanFile: the canonical-ingestion pipeline has zero provider-branches (post-C3.7)', () => {
+  const matches = scanFile(
+    'src/modules/integrations/orchestrator/canonical-ingestion-pipeline.service.js'
+  );
+  assert.equal(
+    matches.length,
+    0,
+    'the ingestion pipeline must NOT contain `provider === \'<key>\'` branches. ' +
+      'Use a post-ingest hook in the adapter module instead. ' +
+      `Found: ${JSON.stringify(matches, null, 2)}`
+  );
 });
 
 test('loadBaseline returns a parseable JSON document', () => {

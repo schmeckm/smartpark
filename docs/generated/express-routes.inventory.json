@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-05-07T18:04:41.035Z",
+  "generatedAt": "2026-05-08T09:07:36.311Z",
   "apiPrefix": "/api/v1",
-  "routeCount": 330,
+  "routeCount": 336,
   "routes": [
     {
       "method": "POST",
@@ -342,6 +342,41 @@
     {
       "method": "POST",
       "path": "/api/v1/ai/ml-profiles",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/ml/dataset/rides",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/ml/predict/park-summary",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/ml/predict/rides/:rideId",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai/ml/train/wait-time/global",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai/ml/train/wait-time/rides/:rideId",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
       "inOpenApi": true
@@ -1015,6 +1050,13 @@
       "method": "GET",
       "path": "/api/v1/integrations/installed-adapters",
       "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/integrations/logs",
+      "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
       "inOpenApi": true
     },
@@ -2316,7 +2358,7 @@
   ],
   "stats": {
     "missingFromOpenapiCount": 2,
-    "openapiOperationCount": 328,
+    "openapiOperationCount": 334,
     "documentedNotLiveCount": 0
   }
 }

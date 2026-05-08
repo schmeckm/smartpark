@@ -466,3 +466,25 @@ module.exports = {
   publishMQTTState,
   EXTERNAL_SOURCE,
 };
+
+/* Phase C3.7 — provider self-registration with the canonical-ingestion
+ * post-ingest hook registry. The pipeline service requires
+ * `canonical-ingestion-hooks.bootstrap.js`, which in turn requires this
+ * file, so these registrations run before any sync call. The hooks
+ * receive `{ sequelize, models, externalParkId }` and run the existing
+ * platform master-data / live-only sync. Errors are surfaced; the
+ * pipeline wraps each call in try/catch (preserves pre-C3.7 behavior:
+ * the integration ingestion is never blocked by a hook failure). */
+const {
+  canonicalIngestionHooks,
+} = require('../../integrations/orchestrator/canonical-ingestion-hooks');
+
+canonicalIngestionHooks.registerAfterEntities('themeparks_wiki', async ({ externalParkId }) => {
+  const { sequelize, ...models } = require('../../../models');
+  return syncParkFromThemeParks(sequelize, models, String(externalParkId));
+});
+
+canonicalIngestionHooks.registerAfterLive('themeparks_wiki', async ({ externalParkId }) => {
+  const { sequelize, ...models } = require('../../../models');
+  return syncThemeParksLiveOnly(sequelize, models, String(externalParkId));
+});

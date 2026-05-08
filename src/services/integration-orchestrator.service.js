@@ -16,6 +16,9 @@ const {
 const {
   UnsTopicSuggestionService,
 } = require('../modules/integrations/orchestrator/uns-topic-suggestion.service');
+const {
+  CanonicalIngestionPipelineService,
+} = require('../modules/integrations/orchestrator/canonical-ingestion-pipeline.service');
 const { emitExternalMappingUpdated, emitExternalParkDataUpdated } = require('../sockets');
 const env = require('../config/env');
 const { getPlatformSettingsService } = require('./platform-settings.service');
@@ -84,6 +87,13 @@ class IntegrationOrchestratorService {
       },
       dynamicTopicRowsResolver: (selected, parkSlug) =>
         this.unsTopicSuggestion.buildDynamicUnsTopicNodesFromIntegrations(selected, parkSlug),
+    });
+    this.ingestionPipeline = new CanonicalIngestionPipelineService({
+      settingRepository: this.settingRepository,
+      canonicalService: this.canonicalService,
+      providerBrowser: this.providerBrowser,
+      socketEvents: { emitExternalParkDataUpdated },
+      onAfterEntitiesSynced: () => this.materializeUnsNodesFromSuggestions(),
     });
   }
 
@@ -163,250 +173,32 @@ class IntegrationOrchestratorService {
     return this.providerBrowser.getProviderEntitySchedule(provider, entityId, options);
   }
 
-  async syncDestinations(provider) {
-    const adapter = await this.resolveProvider(provider);
-    const data = await adapter.fetchDestinations();
-    const msgs = adapter.normalizeToCanonicalMessages({ type: 'destinations', items: data });
-    const autoApplyEnabled = await this.settingRepository.getValue(SETTING_KEYS.autoApplyEnabled, { enabled: true });
-    const rows = await this.canonicalService.ingest(msgs, { autoApply: autoApplyEnabled.enabled !== false });
-    try {
-      for (const m of msgs) {
-        if (m.messageType !== 'DESTINATION_SYNCED') continue;
-        const p = m.payload || {};
-        const destGid = slugifyName(p.name || p.externalDestinationId || p.id || 'destination');
-        mergeThemeParksEntityRegistryFromMessages({
-          sparkplugGroupId: destGid,
-          parkExternalId: null,
-          destinationExternalId: String(p.externalDestinationId || p.id || ''),
-          messages: [m],
-        });
-      }
-    } catch (e) {
-      logger.warn({ err: e.message }, 'themeParks entity registry merge after destination sync failed');
-    }
-    return { count: rows.length, provider: adapter.getProviderInfo().provider };
+  syncDestinations(provider) {
+    return this.ingestionPipeline.syncDestinations(provider);
   }
 
-  async syncParks(provider, destinationId) {
-    const adapter = await this.resolveProvider(provider);
-    let resolvedDestinationId = destinationId;
-    if (!resolvedDestinationId) {
-      const selectedDestination = await this.settingRepository.getValue(SETTING_KEYS.selectedDestination, null);
-      if (selectedDestination?.provider === adapter.getProviderInfo().provider) {
-        resolvedDestinationId = selectedDestination.externalDestinationId;
-      }
-    }
-    if (!resolvedDestinationId) {
-      throw new AppError('No destination selected for park sync', 422, { code: 'VALIDATION_ERROR' });
-    }
-    const data = await adapter.fetchParks(resolvedDestinationId);
-    const msgs = adapter.normalizeToCanonicalMessages({
-      type: 'parks',
-      destinationId: resolvedDestinationId,
-      items: data,
-    });
-    const autoApplyEnabled = await this.settingRepository.getValue(SETTING_KEYS.autoApplyEnabled, { enabled: true });
-    const rows = await this.canonicalService.ingest(msgs, { autoApply: autoApplyEnabled.enabled !== false });
-    try {
-      for (const m of msgs) {
-        if (m.messageType !== 'PARK_SYNCED') continue;
-        const p = m.payload || {};
-        const parkGid = slugifyName(p.name || p.externalParkId || '');
-        mergeThemeParksEntityRegistryFromMessages({
-          sparkplugGroupId: parkGid,
-          parkExternalId: String(p.externalParkId || m.externalParkId || ''),
-          destinationExternalId: String(resolvedDestinationId || p.externalDestinationId || ''),
-          messages: [m],
-        });
-      }
-    } catch (e) {
-      logger.warn({ err: e.message }, 'themeParks entity registry merge after park sync failed');
-    }
-    return { count: rows.length, provider: adapter.getProviderInfo().provider };
+  syncParks(provider, destinationId) {
+    return this.ingestionPipeline.syncParks(provider, destinationId);
   }
 
-  async selectedParkOrThrow() {
-    const park = await this.settingRepository.getValue(SETTING_KEYS.selectedPark, null);
-    if (!park?.externalParkId || !park?.provider) {
-      throw new AppError('No selected park configured', 422, { code: 'VALIDATION_ERROR' });
-    }
-    return park;
+  selectedParkOrThrow() {
+    return this.ingestionPipeline.selectedParkOrThrow();
   }
 
-  async syncEntities(provider, parkId) {
-    const selected = parkId ? { provider, externalParkId: parkId } : await this.selectedParkOrThrow();
-    const adapter = await this.resolveProvider(selected.provider);
-    const data = await adapter.fetchEntities(selected.externalParkId);
-    const msgs = adapter.normalizeToCanonicalMessages({ type: 'entities', parkId: selected.externalParkId, items: data });
-    const autoApplyEnabled = await this.settingRepository.getValue(SETTING_KEYS.autoApplyEnabled, { enabled: true });
-    const rows = await this.canonicalService.ingest(msgs, { autoApply: autoApplyEnabled.enabled !== false });
-
-    try {
-      const parkEntity = await this.getProviderEntity(selected.provider, selected.externalParkId);
-      const parkSlug = slugifyName(parkEntity?.name || selected.parkName || selected.externalParkId);
-      const sparkplugGroupId = env.sparkplugGroupId || parkSlug;
-      mergeThemeParksEntityRegistryFromMessages({
-        sparkplugGroupId,
-        parkExternalId: String(selected.externalParkId),
-        destinationExternalId: parkEntity?.destinationId != null ? String(parkEntity.destinationId) : null,
-        messages: msgs,
-      });
-      await getCanonicalToSparkplugPublisher().publishFromEntitySyncMessages({
-        parkSlug,
-        provider: selected.provider,
-        messages: msgs,
-      });
-    } catch (e) {
-      logger.warn({ err: e.message }, 'canonicalToSparkplugPublisher after entity sync failed');
-    }
-
-    try {
-      const savedPark = await this.settingRepository.getValue(SETTING_KEYS.selectedPark, null);
-      const matchesSelected =
-        savedPark?.externalParkId &&
-        String(savedPark.externalParkId) === String(selected.externalParkId) &&
-        String(savedPark.provider || '') === String(selected.provider || '');
-      if (matchesSelected) {
-        await this.materializeUnsNodesFromSuggestions();
-      }
-    } catch (e) {
-      logger.warn({ err: e.message }, 'UNS materialize after entity sync failed');
-    }
-
-    let platformMasterData = null;
-    if (String(selected.provider || '').toLowerCase() === 'themeparks_wiki' && selected.externalParkId) {
-      try {
-        const { sequelize, ...models } = require('../models');
-        const { syncParkFromThemeParks } = require('../modules/adapters/themeparks/themeparks-sync.service');
-        platformMasterData = await syncParkFromThemeParks(sequelize, models, String(selected.externalParkId));
-      } catch (e) {
-        logger.warn({ err: e.message }, 'platform park_assets sync after integration entity sync failed');
-        platformMasterData = { error: e.message };
-      }
-    }
-
-    return {
-      count: rows.length,
-      provider: selected.provider,
-      externalParkId: selected.externalParkId,
-      platformMasterData,
-    };
+  syncEntities(provider, parkId) {
+    return this.ingestionPipeline.syncEntities(provider, parkId);
   }
 
-  async syncLive(provider, parkId) {
-    const selected = parkId ? { provider, externalParkId: parkId } : await this.selectedParkOrThrow();
-    const adapter = await this.resolveProvider(selected.provider);
-    const live = await adapter.fetchLiveData(selected.externalParkId);
-    const msgs = adapter.normalizeToCanonicalMessages({ type: 'live', parkId: selected.externalParkId, items: live });
-    const autoApplyEnabled = await this.settingRepository.getValue(SETTING_KEYS.autoApplyEnabled, { enabled: true });
-    const rows = await this.canonicalService.ingest(msgs, { autoApply: autoApplyEnabled.enabled !== false });
-
-    try {
-      const parkEntity = await this.getProviderEntity(selected.provider, selected.externalParkId);
-      const parkSlug = slugifyName(parkEntity?.name || selected.parkName || selected.externalParkId);
-      const sparkplugGroupId = env.sparkplugGroupId || parkSlug;
-      mergeThemeParksEntityRegistryFromLiveMessages({
-        sparkplugGroupId,
-        parkExternalId: String(selected.externalParkId),
-        destinationExternalId: parkEntity?.destinationId != null ? String(parkEntity.destinationId) : null,
-        messages: msgs,
-      });
-      await getCanonicalToSparkplugPublisher().publishFromLiveCanonicalMessages({
-        parkSlug,
-        provider: selected.provider,
-        messages: msgs,
-      });
-    } catch (e) {
-      logger.warn({ err: e.message }, 'canonicalToSparkplugPublisher after live sync failed');
-    }
-
-    emitExternalParkDataUpdated({
-      provider: selected.provider,
-      park: selected.externalParkId,
-      sampledAt: new Date().toISOString(),
-      messageCount: rows.length,
-    });
-
-    let platformLive = null;
-    if (String(selected.provider || '').toLowerCase() === 'themeparks_wiki' && selected.externalParkId) {
-      try {
-        const { sequelize, ...models } = require('../models');
-        const { syncThemeParksLiveOnly } = require('../modules/adapters/themeparks/themeparks-sync.service');
-        platformLive = await syncThemeParksLiveOnly(sequelize, models, String(selected.externalParkId));
-      } catch (e) {
-        logger.warn({ err: e.message }, 'platform live observations sync after integration live sync failed');
-        platformLive = { error: e.message };
-      }
-    }
-
-    return {
-      count: rows.length,
-      provider: selected.provider,
-      externalParkId: selected.externalParkId,
-      platformLive,
-    };
+  syncLive(provider, parkId) {
+    return this.ingestionPipeline.syncLive(provider, parkId);
   }
 
-  async syncCalendar(provider, parkId, options = {}) {
-    const selected = parkId ? { provider, externalParkId: parkId } : await this.selectedParkOrThrow();
-    const adapter = await this.resolveProvider(selected.provider);
-    const cal = await adapter.fetchCalendar(selected.externalParkId, options);
-    const msgs = adapter.normalizeToCanonicalMessages({ type: 'calendar', parkId: selected.externalParkId, items: cal });
-    const autoApplyEnabled = await this.settingRepository.getValue(SETTING_KEYS.autoApplyEnabled, { enabled: true });
-    const rows = await this.canonicalService.ingest(msgs, { autoApply: autoApplyEnabled.enabled !== false });
-
-    if (typeof adapter.fetchCrowdLevel === 'function') {
-      try {
-        const crowd = await adapter.fetchCrowdLevel(selected.externalParkId);
-        const crowdMsgs = adapter.normalizeToCanonicalMessages({
-          type: 'crowd',
-          parkId: selected.externalParkId,
-          items: crowd,
-        });
-        await this.canonicalService.ingest(crowdMsgs, { autoApply: autoApplyEnabled.enabled !== false });
-      } catch (e) {
-        logger.warn({ err: e.message, provider: selected.provider }, 'crowd sync failed');
-      }
-    }
-    return { count: rows.length, provider: selected.provider, externalParkId: selected.externalParkId };
+  syncCalendar(provider, parkId, options = {}) {
+    return this.ingestionPipeline.syncCalendar(provider, parkId, options);
   }
 
-  async syncAllParksInDestination(provider, destinationId) {
-    const parks = await this.listAvailableParks(provider, destinationId);
-    if (!parks.length) {
-      throw new AppError('No parks found for selected destination', 422, { code: 'VALIDATION_ERROR' });
-    }
-
-    const summary = {
-      provider,
-      destinationId: destinationId || null,
-      parksTotal: parks.length,
-      parksProcessed: 0,
-      entitiesMessages: 0,
-      calendarMessages: 0,
-      liveMessages: 0,
-      failedParks: [],
-    };
-
-    for (const park of parks) {
-      try {
-        const entities = await this.syncEntities(provider, park.id);
-        const calendar = await this.syncCalendar(provider, park.id);
-        const live = await this.syncLive(provider, park.id);
-        summary.parksProcessed += 1;
-        summary.entitiesMessages += entities.count || 0;
-        summary.calendarMessages += calendar.count || 0;
-        summary.liveMessages += live.count || 0;
-      } catch (error) {
-        summary.failedParks.push({
-          parkId: park.id,
-          parkName: park.name,
-          error: error?.message || 'Unknown error',
-        });
-      }
-    }
-
-    return summary;
+  syncAllParksInDestination(provider, destinationId) {
+    return this.ingestionPipeline.syncAllParksInDestination(provider, destinationId);
   }
 
   /* C3.5: removed `listCanonicalMessages`, `getCanonicalMessage`, and

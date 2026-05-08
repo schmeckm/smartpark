@@ -1,25 +1,13 @@
 {
   "$schema": "./README.md#orchestrator-provider-branches-baseline",
-  "description": "Phase C3.0 lock-in: counts hard-coded `provider === '<key>'` control-flow branches in the integration orchestrator. The Phase C3.7 commit replaces these branches with a post-ingest hook registry; until then, the count must match this baseline so a new branch cannot slip in unnoticed during decomposition.",
+  "description": "Phase C3.7: the orchestrator and its extracted ingestion-pipeline service must contain ZERO hard-coded `provider === '<key>'` control-flow branches. Provider-specific work runs through the post-ingest hook registry (`src/modules/integrations/orchestrator/canonical-ingestion-hooks.js`); each provider self-registers via the bootstrap entry point. Adding a new branch in either of the scanned files requires writing a hook in the provider module instead and is rejected by the gate.",
   "scannedFiles": [
-    "src/services/integration-orchestrator.service.js"
+    "src/services/integration-orchestrator.service.js",
+    "src/modules/integrations/orchestrator/canonical-ingestion-pipeline.service.js"
   ],
-  "matches": [
-    {
-      "file": "src/services/integration-orchestrator.service.js",
-      "line": 277,
-      "text": "if (String(selected.provider || '').toLowerCase() === 'themeparks_wiki' && selected.externalParkId) {",
-      "context": "syncEntities() — calls themeparks-sync.service.syncParkFromThemeParks for platform master-data sync after ingest. Slated for replacement by post-ingest hook registry in C3.7. Line shifted in C3.6 (uns-topic-suggestion extraction)."
-    },
-    {
-      "file": "src/services/integration-orchestrator.service.js",
-      "line": 331,
-      "text": "if (String(selected.provider || '').toLowerCase() === 'themeparks_wiki' && selected.externalParkId) {",
-      "context": "syncLive() — calls themeparks-sync.service.syncThemeParksLiveOnly for platform live observations after ingest. Slated for replacement by post-ingest hook registry in C3.7. Line shifted in C3.6 (uns-topic-suggestion extraction)."
-    }
-  ],
-  "matchCount": 2,
+  "matches": [],
+  "matchCount": 0,
   "rules": {
-    "newBranchesNotAllowed": "Adding a new `if (provider === '<key>')` branch in the orchestrator (or its successor modules in src/modules/integrations/orchestrator/) requires (a) writing a post-ingest hook in the adapter package and (b) updating this baseline with an explicit reason. Drive-by additions fail the governance gate."
+    "newBranchesNotAllowed": "Adding a new `if (provider === '<key>')` branch in any scanned file requires (a) writing a post-ingest hook in the adapter module and registering it via `canonicalIngestionHooks.registerAfterEntities` / `registerAfterLive` and (b) explicit justification in the PR description. Drive-by additions fail the governance gate. The baseline is empty as of C3.7 because the orchestrator no longer needs to know about any provider key."
   }
 }

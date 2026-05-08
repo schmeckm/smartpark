@@ -1,7 +1,7 @@
 # Express route inventory (generated)
 
-- **Generated:** 2026-05-07T18:04:41.037Z
-- **Route count:** 330
+- **Generated:** 2026-05-08T09:07:36.312Z
+- **Route count:** 336
 
 | Method | Path | Mount origin | In OpenAPI |
 |--------|------|--------------|------------|
@@ -54,6 +54,11 @@
 | PATCH | `/api/v1/ai/ml-profiles/:id` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/ai/ml-profiles` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/ai/ml-profiles` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/ai/ml/dataset/rides` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/ai/ml/predict/park-summary` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/ai/ml/predict/rides/:rideId` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/ai/ml/train/wait-time/global` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/ai/ml/train/wait-time/rides/:rideId` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/ai/parks/:externalParkId/entities/forecast/summary` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/ai/parks/:externalParkId/forecast/explanation` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/ai/parks/:externalParkId/forecast/series` | src/routes/v1/index.js | yes |
@@ -150,6 +155,7 @@
 | PATCH | `/api/v1/integrations/installed-adapters/:id` | src/app.js | yes |
 | POST | `/api/v1/integrations/installed-adapters/install-local` | src/app.js | yes |
 | GET | `/api/v1/integrations/installed-adapters` | src/app.js | yes |
+| GET | `/api/v1/integrations/logs` | src/routes/v1/index.js | yes |
 | PATCH | `/api/v1/integrations/mappings/:id` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/integrations/mappings` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/integrations/output/emit` | src/routes/v1/index.js | yes |
