@@ -1,4 +1,4 @@
-const { QUALITY_TIERS } = require('../utils/adapter-manifest-ui');
+const { QUALITY_TIERS } = require('../../../utils/adapter-manifest-ui');
 
 /**
  * Home Assistant–style manifest validation for local adapter packages.

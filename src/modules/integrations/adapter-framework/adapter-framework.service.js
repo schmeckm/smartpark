@@ -1,13 +1,13 @@
-const { AdapterPackageRepository } = require('../repositories/adapter-package.repository');
+const { AdapterPackageRepository } = require('../../../repositories/adapter-package.repository');
 const {
   AdapterInstallConfigRepository,
   defaultInstallDocument,
-} = require('../repositories/adapter-install-config.repository');
-const { AdapterPackageLoaderService } = require('../services/adapter-package-loader.service');
-const { extractManifestUi } = require('../utils/adapter-manifest-ui');
-const { AppError } = require('../utils/app-error');
-const { DEFAULT_INSTALL_OUTPUT_PROFILES } = require('../services/adapter-output-profile-names');
-const { mergeAdapterInstallConfig } = require('../utils/adapter-install-config-merge');
+} = require('../../../repositories/adapter-install-config.repository');
+const { AdapterPackageLoaderService } = require('./adapter-package-loader.service');
+const { extractManifestUi } = require('../../../utils/adapter-manifest-ui');
+const { AppError } = require('../../../utils/app-error');
+const { DEFAULT_INSTALL_OUTPUT_PROFILES } = require('./adapter-output-profile-names');
+const { mergeAdapterInstallConfig } = require('../../../utils/adapter-install-config-merge');
 
 function resolveInstallOutputProfiles(list) {
   return Array.isArray(list) && list.length ? list : [...DEFAULT_INSTALL_OUTPUT_PROFILES];

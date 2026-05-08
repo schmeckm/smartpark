@@ -95,7 +95,7 @@ function loadManifestFromDisk(adapterKey) {
   if (!k) return null;
   try {
     if (!_adapterPackageLoader) {
-      const { AdapterPackageLoaderService } = require('../services/adapter-package-loader.service');
+      const { AdapterPackageLoaderService } = require('../modules/integrations/adapter-framework/adapter-package-loader.service');
       _adapterPackageLoader = new AdapterPackageLoaderService();
     }
     const loaded = _adapterPackageLoader.loadByAdapterKey(k);

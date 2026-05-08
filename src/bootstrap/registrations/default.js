@@ -28,7 +28,7 @@ const { initSocket } = require('../../sockets');
 const { startMqtt, stopMqtt } = require('../../services/mqtt-connector.service');
 const { AiOrchestratorService } = require('../../services/ai-orchestrator.service');
 const { IntegrationOrchestratorService } = require('../../services/integration-orchestrator.service');
-const { AdapterInstalledSchedulerService } = require('../../services/adapter-installed-scheduler.service');
+const { AdapterInstalledSchedulerService } = require('../../modules/integrations/adapter-framework/adapter-installed-scheduler.service');
 const { WeatherOpenMeteoSchedulerService } = require('../../services/weather-open-meteo-scheduler.service');
 const { MlTrainingSchedulerService } = require('../../services/ml/ml-training-scheduler.service');
 const {

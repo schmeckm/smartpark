@@ -5,9 +5,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { AdapterPackageLoaderService } = require('../../services/adapter-package-loader.service');
-const { AdapterManifestValidatorService } = require('../../services/adapter-manifest-validator.service');
-const { assertRuntimeContract } = require('../../adapter-framework/adapter-runtime-contract');
+const { AdapterPackageLoaderService } = require('../../modules/integrations/adapter-framework/adapter-package-loader.service');
+const { AdapterManifestValidatorService } = require('../../modules/integrations/adapter-framework/adapter-manifest-validator.service');
+const { assertRuntimeContract } = require('../../modules/integrations/adapter-framework/adapter-runtime-contract');
 
 const ROOT = path.resolve(__dirname, '..', '..', '..');
 const BASELINE_PATH = path.join(ROOT, 'docs', 'governance', 'adapter-keys-baseline.json');

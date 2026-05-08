@@ -13,7 +13,7 @@ function assertRuntimeContract(runtime) {
   }
 }
 
-const { AdapterManifestValidatorService } = require('../services/adapter-manifest-validator.service');
+const { AdapterManifestValidatorService } = require('./adapter-manifest-validator.service');
 
 function assertManifest(manifest) {
   const v = new AdapterManifestValidatorService().validateManifest(manifest);

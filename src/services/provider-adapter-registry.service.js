@@ -1,6 +1,6 @@
 const { ProviderAdapterRegistry } = require('../integrations/adapters/provider-adapter-registry');
 const { ProviderAdapterConfigRepository } = require('../repositories/provider-adapter-config.repository');
-const { AdapterFrameworkService } = require('../adapter-framework/adapter-framework.service');
+const { AdapterFrameworkService } = require('../modules/integrations/adapter-framework/adapter-framework.service');
 
 class ProviderAdapterRegistryService {
   constructor() {

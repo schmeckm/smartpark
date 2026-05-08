@@ -1,7 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const env = require('../config/env');
-const { logger } = require('../utils/logger');
+const env = require('../../../config/env');
+const { logger } = require('../../../utils/logger');
 
 const MAX_BYTES = Number(process.env.ADAPTER_PIPELINE_LOG_MAX_BYTES) || 5 * 1024 * 1024;
 

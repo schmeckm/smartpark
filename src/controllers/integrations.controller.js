@@ -4,10 +4,10 @@ const { asyncHandler } = require('../utils/async-handler');
 const { AppError } = require('../utils/app-error');
 const { IntegrationOrchestratorService } = require('../services/integration-orchestrator.service');
 const { OutputRouterService } = require('../services/output-router.service');
-const { AdapterRuntimeService } = require('../services/adapter-runtime.service');
-const { AdapterInventoryService } = require('../services/adapter-inventory.service');
+const { AdapterRuntimeService } = require('../modules/integrations/adapter-framework/adapter-runtime.service');
+const { AdapterInventoryService } = require('../modules/integrations/adapter-framework/adapter-inventory.service');
 const { enrichPackagesResponsePayload } = require('../utils/adapter-manifest-ui');
-const { readRecentAdapterPipelineLog } = require('../services/adapter-pipeline-log.service');
+const { readRecentAdapterPipelineLog } = require('../modules/integrations/adapter-framework/adapter-pipeline-log.service');
 
 const integrationService = new IntegrationOrchestratorService();
 const outputRouter = new OutputRouterService();

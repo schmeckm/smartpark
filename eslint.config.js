@@ -51,7 +51,7 @@ const MAX_LINES_ALLOW_LIST = [
   'src/modules/uns/uns.service.js', // 809
   'src/services/registry-publisher.service.js', // 801
   'src/services/ride-signal-capability.service.js', // 696
-  'src/services/adapter-runtime.service.js', // 640
+  'src/modules/integrations/adapter-framework/adapter-runtime.service.js', // 640
   'src/services/operations-facts.service.js', // 587
   'src/services/registry-preview.service.js', // 508
   'src/services/addon-board.service.js', // 502

@@ -33,7 +33,7 @@ Service facade
    │
    ▼ legacy framework (HTTP clients) ──┬─►  ▼ new framework (runtime contract)
 
-src/integrations/adapters/                         src/adapter-framework/
+src/integrations/adapters/                         src/modules/integrations/adapter-framework/
 ├── provider-adapter.interface.js                  ├── adapter-framework.service.js   (DB + install + lifecycle)
 ├── provider-adapter-registry.js                   └── adapter-runtime-contract.js    (assertRuntimeContract)
 ├── http-client.js
@@ -174,7 +174,7 @@ to sync a park from themeparks.wiki.
 ```
 src/modules/integrations/                                # consolidated module (DDD-lite)
 ├── adapter-framework/                                    # the runtime contract layer
-│   ├── adapter-framework.service.js                      # was src/adapter-framework/
+│   ├── adapter-framework.service.js                      # was src/adapter-framework/ (moved in C5)
 │   ├── adapter-runtime-contract.js
 │   ├── adapter-runtime.service.js                        # was src/services/
 │   ├── adapter-package-loader.service.js                 # was src/services/
@@ -236,7 +236,7 @@ sequenced tickets are:
 | **C2** | Build legacy registry FROM packages | low | `ProviderAdapterRegistry.constructor` scans `adapter-packages/<key>/manifest.json` and instantiates the class declared by `manifest.providerAdapterClient`. Removes hard-coded `new XAdapter()` calls. Manifest validator gained an optional `providerAdapterClient` string field; baseline gained a `providerAdapterManifestField` key. **Done.** |
 | **C3** | Decompose `IntegrationOrchestratorService` | high | Split the 1,091-line god service into 6 per-context services under `src/modules/integrations/`. Largest ticket. |
 | **C4** | Fold `src/modules/adapters/themeparks` into the canonical sync path | medium | Replace per-park direct sync calls with `IntegrationOrchestratorService.syncLive(themeparks_wiki, parkId)`. |
-| **C5** | Move `src/adapter-framework/` and `src/services/adapter-*` under `src/modules/integrations/adapter-framework/` | medium | Pure file relocation; no behaviour change. Updates many imports. |
+| **C5** | Move `src/adapter-framework/` and `src/services/adapter-*` under `src/modules/integrations/adapter-framework/` | low | Pure file relocation; no behaviour change. 12 files moved via `git mv` (96–100% similarity), 10 external importers updated, internal cross-refs collapsed to siblings, `path.join(__dirname,...)` depth corrected. **Done.** |
 
 **Recommended next step (C1)**: provider-class co-location, because:
 - Deletes one of the audit's flagged "two roots" without touching adapter keys, DB, install YAML, or

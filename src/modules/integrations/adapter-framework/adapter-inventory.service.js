@@ -1,5 +1,5 @@
-const { AppSettingRepository } = require('../repositories/app-setting.repository');
-const { ExternalEntityMappingRepository } = require('../repositories/external-entity-mapping.repository');
+const { AppSettingRepository } = require('../../../repositories/app-setting.repository');
+const { ExternalEntityMappingRepository } = require('../../../repositories/external-entity-mapping.repository');
 
 const SELECTED_PARK_SETTING_KEY = 'externalParkData.selectedPark';
 const THEMEPARKS_FALLBACK_ENTITY_ESTIMATE = 120;

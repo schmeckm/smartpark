@@ -8,10 +8,15 @@
  */
 const fs = require('node:fs');
 const path = require('node:path');
-const { assertRuntimeContract } = require('../adapter-framework/adapter-runtime-contract');
+const { assertRuntimeContract } = require('./adapter-runtime-contract');
 const { AdapterManifestValidatorService } = require('./adapter-manifest-validator.service');
 
-const INTEGRATIONS_ADAPTER_PACKAGES = path.join(__dirname, '..', 'integrations', 'adapter-packages');
+// Phase C5: file moved from src/services/ to src/modules/integrations/adapter-framework/.
+// The runtime location of the on-disk adapter packages did NOT change — they still
+// live at src/integrations/adapter-packages/ — but this loader is now 3 levels
+// deeper, so the relative climb is `..`/`..`/`..` to reach `src/`, then down into
+// `integrations/adapter-packages/`.
+const INTEGRATIONS_ADAPTER_PACKAGES = path.join(__dirname, '..', '..', '..', 'integrations', 'adapter-packages');
 
 function _normRel(p) {
   return String(p || '')

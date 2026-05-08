@@ -6,7 +6,7 @@ This document describes the **local adapter package** contract, how observations
 
 Each package lives in a directory named after `adapterKey` (or any folder whose `manifest.json` contains that key). On load, the runtime asserts:
 
-- **Manifest** (`AdapterManifestValidatorService` + `assertManifest` in `src/adapter-framework/adapter-runtime-contract.js`): `adapterKey`, `version`, `runtime: NODE`, `entrypoint` (defaults to `index.js`), `name`, `adapterType`, `capabilities`; optional Home Assistant–style fields such as `iotClass`, `providedDomains`, `providedMetrics`.
+- **Manifest** (`AdapterManifestValidatorService` + `assertManifest` in `src/modules/integrations/adapter-framework/adapter-runtime-contract.js`): `adapterKey`, `version`, `runtime: NODE`, `entrypoint` (defaults to `index.js`), `name`, `adapterType`, `capabilities`; optional Home Assistant–style fields such as `iotClass`, `providedDomains`, `providedMetrics`.
 - **Runtime** (`assertRuntimeContract`): exported async functions:
 
 | Function | Role |
@@ -18,7 +18,7 @@ Each package lives in a directory named after `adapterKey` (or any folder whose 
 
 ## Normalized observation schema
 
-Observations from `poll()` are validated with Joi in `src/services/adapter-observation.schema.js` (via `AdapterObservationValidatorService`). Required core fields include:
+Observations from `poll()` are validated with Joi in `src/modules/integrations/adapter-framework/adapter-observation.schema.js` (via `AdapterObservationValidatorService`). Required core fields include:
 
 `eventType`, `domain`, `assetSlug`, `metric`, `value`, `eventTime` (ISO-8601), `source`
 
@@ -36,7 +36,7 @@ Extra keys are stripped. See the schema file for the exact rules.
 | `sparkplug_json` | `src/output-encoders/sparkplug-json.encoder.js` — `spBv1.0/.../DDATA/...` (JSON MVP) |
 | `canonical_historian` | `src/output-encoders/canonical-historian.encoder.js` — rows for `CanonicalInboundMessageService.ingest()` |
 
-HTTP bodies may use **aliases** (`UNS_JSON`, `SPARKPLUG_JSON`, `CANONICAL_HISTORIAN`); they are normalized in `src/services/adapter-output-profile-names.js`.
+HTTP bodies may use **aliases** (`UNS_JSON`, `SPARKPLUG_JSON`, `CANONICAL_HISTORIAN`); they are normalized in `src/modules/integrations/adapter-framework/adapter-output-profile-names.js`.
 
 Default profile list when omitted comes from env `OUTPUT_PROFILES` (comma-separated internal keys). Sparkplug topic defaults use `SPARKPLUG_GROUP_ID` and `SPARKPLUG_EDGE_NODE` in `src/config/env.js`.
 
@@ -54,7 +54,7 @@ src/integrations/adapter-packages/<adapterKey>/
     banner.png      # optional; or banner.jpg / .webp / .svg, or manifest.bannerPath
 ```
 
-Loader: `src/services/adapter-package-loader.service.js` — `scanPackages()` walks the integrations tree only. It also discovers `readmePath` (`README.md` or `manifest.readmePath`) and `bannerPath` (manifest or `assets/banner.{png,jpg,webp,svg}`). Same-origin **relative** paths are returned on the adapters API as `readmeAssetUrl` / `bannerAssetUrl` / `logoAssetUrl` (e.g. `/api/v1/integrations/adapters/packages/:adapterKey/asset?path=…`) so browsers behind Vite/Docker are not given internal hostnames like `http://api:3000/…`. That GET is mounted on the root Express app **without** JWT so `img` tags work (`src/app.js`).
+Loader: `src/modules/integrations/adapter-framework/adapter-package-loader.service.js` — `scanPackages()` walks the integrations tree only. It also discovers `readmePath` (`README.md` or `manifest.readmePath`) and `bannerPath` (manifest or `assets/banner.{png,jpg,webp,svg}`). Same-origin **relative** paths are returned on the adapters API as `readmeAssetUrl` / `bannerAssetUrl` / `logoAssetUrl` (e.g. `/api/v1/integrations/adapters/packages/:adapterKey/asset?path=…`) so browsers behind Vite/Docker are not given internal hostnames like `http://api:3000/…`. That GET is mounted on the root Express app **without** JWT so `img` tags work (`src/app.js`).
 
 ## Unified `runAdapter()`
 
@@ -119,9 +119,9 @@ Keep **one observation per metric event** (or batch in adapter, then split in ru
 
 ## Related files
 
-- `src/services/adapter-manifest-validator.service.js` — manifest rules.
-- `src/services/adapter-runtime.service.js` — orchestration.
-- `src/services/adapter-observation-validator.service.js`
+- `src/modules/integrations/adapter-framework/adapter-manifest-validator.service.js` — manifest rules.
+- `src/modules/integrations/adapter-framework/adapter-runtime.service.js` — orchestration.
+- `src/modules/integrations/adapter-framework/adapter-observation-validator.service.js`
 - `src/services/output-router.service.js`
 - `src/services/mqtt-connector.service.js` — `publishMqtt`
 - `src/services/canonical-inbound-message.service.js` — `ingest`

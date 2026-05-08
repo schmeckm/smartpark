@@ -1,11 +1,11 @@
-const { AppError } = require('../utils/app-error');
-const { OutputRouterService } = require('./output-router.service');
+const { AppError } = require('../../../utils/app-error');
+const { OutputRouterService } = require('../../../services/output-router.service');
 const { AdapterPackageLoaderService } = require('./adapter-package-loader.service');
 const { AdapterObservationValidatorService } = require('./adapter-observation-validator.service');
-const { AdapterRunLogRepository } = require('../repositories/adapter-run-log.repository');
+const { AdapterRunLogRepository } = require('../../../repositories/adapter-run-log.repository');
 const { normalizeOutputProfiles } = require('./adapter-output-profile-names');
 const { logAdapterPipeline } = require('./adapter-pipeline-log.service');
-const { mergeAdapterInstallConfig } = require('../utils/adapter-install-config-merge');
+const { mergeAdapterInstallConfig } = require('../../../utils/adapter-install-config-merge');
 
 const DEMO_STATIC_ADAPTER_KEY = 'demo_static_adapter';
 

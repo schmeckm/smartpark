@@ -1,10 +1,10 @@
-const { logger } = require('../utils/logger');
-const { getPlatformSettingsService } = require('./platform-settings.service');
+const { logger } = require('../../../utils/logger');
+const { getPlatformSettingsService } = require('../../../services/platform-settings.service');
 const { logAdapterPipeline } = require('./adapter-pipeline-log.service');
-const { ProviderAdapterRegistryService } = require('./provider-adapter-registry.service');
+const { ProviderAdapterRegistryService } = require('../../../services/provider-adapter-registry.service');
 const { AdapterRuntimeService } = require('./adapter-runtime.service');
 const { DEFAULT_INSTALL_OUTPUT_PROFILES } = require('./adapter-output-profile-names');
-const { ensureContextParkSlug } = require('../utils/adapter-install-config-merge');
+const { ensureContextParkSlug } = require('../../../utils/adapter-install-config-merge');
 
 function parseIntSafe(s) {
   const n = Number(String(s).trim());
