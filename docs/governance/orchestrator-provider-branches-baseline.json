@@ -1,0 +1,25 @@
+{
+  "$schema": "./README.md#orchestrator-provider-branches-baseline",
+  "description": "Phase C3.0 lock-in: counts hard-coded `provider === '<key>'` control-flow branches in the integration orchestrator. The Phase C3.7 commit replaces these branches with a post-ingest hook registry; until then, the count must match this baseline so a new branch cannot slip in unnoticed during decomposition.",
+  "scannedFiles": [
+    "src/services/integration-orchestrator.service.js"
+  ],
+  "matches": [
+    {
+      "file": "src/services/integration-orchestrator.service.js",
+      "line": 545,
+      "text": "if (String(selected.provider || '').toLowerCase() === 'themeparks_wiki' && selected.externalParkId) {",
+      "context": "syncEntities() — calls themeparks-sync.service.syncParkFromThemeParks for platform master-data sync after ingest. Slated for replacement by post-ingest hook registry in C3.7."
+    },
+    {
+      "file": "src/services/integration-orchestrator.service.js",
+      "line": 599,
+      "text": "if (String(selected.provider || '').toLowerCase() === 'themeparks_wiki' && selected.externalParkId) {",
+      "context": "syncLive() — calls themeparks-sync.service.syncThemeParksLiveOnly for platform live observations after ingest. Slated for replacement by post-ingest hook registry in C3.7."
+    }
+  ],
+  "matchCount": 2,
+  "rules": {
+    "newBranchesNotAllowed": "Adding a new `if (provider === '<key>')` branch in the orchestrator (or its successor modules in src/modules/integrations/orchestrator/) requires (a) writing a post-ingest hook in the adapter package and (b) updating this baseline with an explicit reason. Drive-by additions fail the governance gate."
+  }
+}
