@@ -5,6 +5,7 @@ const { CanonicalInboundMessageService } = require('./canonical-inbound-message.
 const { AppSettingRepository } = require('../repositories/app-setting.repository');
 const { ExternalEntityMappingService } = require('./external-entity-mapping.service');
 const { ManualUnsNodeService } = require('../modules/integrations/orchestrator/manual-uns-node.service');
+const { ProviderBrowserService } = require('../modules/integrations/orchestrator/provider-browser.service');
 const { emitExternalMappingUpdated, emitExternalParkDataUpdated } = require('../sockets');
 const { DEFAULT_AI_FACTOR_CONFIGS } = require('../constants/ai-factor-config');
 const env = require('../config/env');
@@ -36,129 +37,10 @@ function resolveUnsDomainForEntity(entityName, entityType) {
   return resolveThemeParksPublicationDomain(entityName, entityType);
 }
 
-function listFromProviderPayload(payload, keys = []) {
-  if (Array.isArray(payload)) return payload;
-  if (!payload || typeof payload !== 'object') return [];
-  for (const key of keys) {
-    if (Array.isArray(payload[key])) return payload[key];
-  }
-  return [];
-}
-
-function normalizedEntityType(row) {
-  return String(row?.entityType || row?.type || '')
-    .trim()
-    .toUpperCase();
-}
-
-function isParkEntity(row) {
-  return normalizedEntityType(row) === 'PARK';
-}
-
-function isDestinationEntity(row) {
-  return normalizedEntityType(row) === 'DESTINATION';
-}
-
-function asArray(input) {
-  if (Array.isArray(input)) return input;
-  if (!input || typeof input !== 'object') return [];
-  for (const key of ['data', 'items', 'destinations', 'children', 'parks']) {
-    if (Array.isArray(input[key])) return input[key];
-  }
-  return [];
-}
-
-function normalizeDestinationAndParkRows(raw) {
-  const destinationById = new Map();
-  const parkById = new Map();
-  const seen = new WeakSet();
-  const roots = asArray(raw);
-  const queue = roots.length ? roots.map((row) => ({ row, destinationCtx: null })) : [{ row: raw, destinationCtx: null }];
-
-  const upsertDestination = (row) => {
-    const id = String(row?.id || row?.destinationId || '').trim();
-    if (!id) return null;
-    const prev = destinationById.get(id);
-    const next = {
-      id,
-      name: row?.name || prev?.name || 'Unknown destination',
-      slug: row?.slug || prev?.slug || null,
-      parentId: row?.parentId || prev?.parentId || null,
-      destinationId: row?.destinationId || prev?.destinationId || null,
-      parkId: row?.parkId || prev?.parkId || null,
-      entityType: row?.entityType || row?.type || prev?.entityType || 'DESTINATION',
-      timezone: row?.timezone || prev?.timezone || null,
-      location: row?.location || prev?.location || null,
-      tags: Array.isArray(row?.tags) ? row.tags : prev?.tags || [],
-      parks: Array.isArray(prev?.parks) ? prev.parks : [],
-    };
-    destinationById.set(id, next);
-    return next;
-  };
-
-  while (queue.length) {
-    const { row, destinationCtx } = queue.shift();
-    if (!row || typeof row !== 'object') continue;
-    if (seen.has(row)) continue;
-    seen.add(row);
-
-    let nextDestinationCtx = destinationCtx;
-    if (isDestinationEntity(row) || (!isParkEntity(row) && (Array.isArray(row.parks) || Array.isArray(row.children)))) {
-      const dest = upsertDestination(row);
-      if (dest) nextDestinationCtx = { id: dest.id, name: dest.name };
-    } else if (row?.destinationId && destinationById.has(String(row.destinationId))) {
-      const d = destinationById.get(String(row.destinationId));
-      nextDestinationCtx = d ? { id: d.id, name: d.name } : nextDestinationCtx;
-    }
-
-    if (isParkEntity(row)) {
-      const id = String(row?.id || '').trim();
-      if (id) {
-        const resolvedDestinationId =
-          (nextDestinationCtx?.id && String(nextDestinationCtx.id)) ||
-          (row?.destinationId != null ? String(row.destinationId) : null);
-        const resolvedDestinationName =
-          (nextDestinationCtx?.name && String(nextDestinationCtx.name)) || null;
-        parkById.set(id, {
-          id,
-          name: row?.name || parkById.get(id)?.name || 'Unknown park',
-          slug: row?.slug || parkById.get(id)?.slug || null,
-          entityType: 'PARK',
-          timezone: row?.timezone || parkById.get(id)?.timezone || null,
-          destinationId: resolvedDestinationId,
-          destinationName: resolvedDestinationName,
-        });
-      }
-    }
-
-    for (const key of ['destinations', 'parks', 'children', 'entities', 'items', 'data']) {
-      const arr = row[key];
-      if (!Array.isArray(arr)) continue;
-      for (const child of arr) queue.push({ row: child, destinationCtx: nextDestinationCtx });
-    }
-  }
-
-  for (const park of parkById.values()) {
-    if (park.destinationId && !park.destinationName && destinationById.has(park.destinationId)) {
-      park.destinationName = destinationById.get(park.destinationId)?.name || null;
-    }
-  }
-
-  for (const park of parkById.values()) {
-    if (!park.destinationId) continue;
-    const dest = destinationById.get(park.destinationId);
-    if (!dest) continue;
-    if (!Array.isArray(dest.parks)) dest.parks = [];
-    if (!dest.parks.some((p) => String(p.id) === park.id)) {
-      dest.parks.push({ id: park.id, name: park.name });
-    }
-  }
-
-  return {
-    destinations: [...destinationById.values()],
-    parks: [...parkById.values()],
-  };
-}
+/* Phase C3.2: provider-browsing helpers (listFromProviderPayload,
+ * normalizedEntityType, isParkEntity, isDestinationEntity, asArray,
+ * normalizeDestinationAndParkRows) moved to
+ * `src/modules/integrations/orchestrator/provider-browser.service.js`. */
 
 class IntegrationOrchestratorService {
   constructor() {
@@ -166,10 +48,14 @@ class IntegrationOrchestratorService {
     this.canonicalService = new CanonicalInboundMessageService();
     this.settingRepository = new AppSettingRepository();
     this.mappingService = new ExternalEntityMappingService();
-    // Phase C3.1 — extracted bounded contexts. Each is a thin domain
+    // Phase C3.x — extracted bounded contexts. Each is a thin domain
     // service composed here so the orchestrator can delegate without
     // changing its public API.
     this.manualUnsNodeService = new ManualUnsNodeService({
+      settingRepository: this.settingRepository,
+    });
+    this.providerBrowser = new ProviderBrowserService({
+      registryService: this.registryService,
       settingRepository: this.settingRepository,
     });
   }
@@ -200,15 +86,15 @@ class IntegrationOrchestratorService {
   }
 
   listProviders() {
-    return this.registryService.listProviderInfos();
+    return this.providerBrowser.listProviders();
   }
 
   getProviderConfig(provider) {
-    return this.registryService.getConfig(provider);
+    return this.providerBrowser.getProviderConfig(provider);
   }
 
   patchProviderConfig(provider, patch) {
-    return this.registryService.patchConfig(provider, patch);
+    return this.providerBrowser.patchProviderConfig(provider, patch);
   }
 
   /**
@@ -301,140 +187,35 @@ class IntegrationOrchestratorService {
     return this.getSettings();
   }
 
-  async resolveProvider(provider) {
-    const p = provider || (await this.settingRepository.getValue(SETTING_KEYS.selectedProvider, { provider: 'themeparks_wiki' })).provider;
-    return this.registryService.getAdapter(p);
+  resolveProvider(provider) {
+    return this.providerBrowser.resolveProvider(provider);
   }
 
-  async listAvailableDestinations(provider) {
-    const adapter = await this.resolveProvider(provider);
-    const raw = await adapter.fetchDestinations();
-    const normalized = normalizeDestinationAndParkRows(raw);
-    if (normalized.destinations.length) return normalized.destinations;
-    const rows = listFromProviderPayload(raw, ['destinations', 'data', 'items']);
-    return rows
-      .filter((d) => {
-        const id = String(d?.id || d?.destinationId || '').trim();
-        return Boolean(id);
-      })
-      .map((d) => ({
-        id: String(d.id || d.destinationId || ''),
-        name: d.name || 'Unknown destination',
-        slug: d.slug || null,
-        parentId: d.parentId || null,
-        destinationId: d.destinationId || null,
-        parkId: d.parkId || null,
-        entityType: d.entityType || d.type || 'DESTINATION',
-        timezone: d.timezone || null,
-        location: d.location || null,
-        tags: Array.isArray(d.tags) ? d.tags : [],
-        parks: Array.isArray(d.parks) ? d.parks : [],
-      }));
+  listAvailableDestinations(provider) {
+    return this.providerBrowser.listAvailableDestinations(provider);
   }
 
-  async listAvailableParks(provider, destinationId) {
-    const adapter = await this.resolveProvider(provider);
-    const rawDestinations = await adapter.fetchDestinations();
-    const normalized = normalizeDestinationAndParkRows(rawDestinations);
-    const destinations = normalized.destinations.length ? normalized.destinations : await this.listAvailableDestinations(provider);
-    let resolvedDestinationId = destinationId;
-    if (!resolvedDestinationId) {
-      const selectedDestination = await this.settingRepository.getValue(SETTING_KEYS.selectedDestination, null);
-      if (selectedDestination?.provider === adapter.getProviderInfo().provider) {
-        resolvedDestinationId = selectedDestination.externalDestinationId;
-      }
-    }
-
-    if (normalized.parks.length) {
-      return normalized.parks
-        .filter((p) => !resolvedDestinationId || String(p.destinationId || '') === String(resolvedDestinationId))
-        .map((p) => ({
-          id: String(p.id || ''),
-          name: p.name || 'Unknown park',
-          slug: p.slug || null,
-          entityType: 'PARK',
-          timezone: p.timezone || null,
-          destinationId: p.destinationId || null,
-          destinationName: p.destinationName || null,
-        }));
-    }
-
-    const destination = destinations.find((d) => d.id === resolvedDestinationId);
-    if (destination?.parks?.length) {
-      return destination.parks.map((p) => ({
-        id: String(p.id || ''),
-        name: p.name || 'Unknown park',
-        slug: p.slug || null,
-        entityType: 'PARK',
-        timezone: p.timezone || null,
-        destinationId: resolvedDestinationId || null,
-        destinationName: destination.name || null,
-      }));
-    }
-
-    if (!resolvedDestinationId) return [];
-    const raw = await adapter.fetchParks(resolvedDestinationId);
-    const rows = listFromProviderPayload(raw, ['parks', 'data', 'items', 'children']);
-    return rows
-      .filter((p) => isParkEntity(p))
-      .map((p) => ({
-        id: String(p.id || ''),
-        name: p.name || 'Unknown park',
-        slug: p.slug || null,
-        entityType: 'PARK',
-        timezone: p.timezone || null,
-        destinationId: resolvedDestinationId,
-        destinationName: destination?.name || null,
-      }));
+  listAvailableParks(provider, destinationId) {
+    return this.providerBrowser.listAvailableParks(provider, destinationId);
   }
 
-  async getProviderEntity(provider, entityId) {
-    const adapter = await this.resolveProvider(provider);
-    const row = await adapter.fetchEntity(entityId);
-    if (!row || typeof row !== 'object') return null;
-    return {
-      id: String(row.id || entityId),
-      name: row.name || null,
-      slug: row.slug || null,
-      entityType: row.entityType || row.type || null,
-      parentId: row.parentId || null,
-      destinationId: row.destinationId || null,
-      parkId: row.parkId || null,
-      timezone: row.timezone || null,
-      externalId: row.externalId || null,
-      location: row.location || null,
-      raw: row,
-    };
+  getProviderEntity(provider, entityId) {
+    return this.providerBrowser.getProviderEntity(provider, entityId);
   }
 
   /**
-   * GET /v1/entity/{id}/children via provider adapter (ThemeParks.wiki, …).
+   * GET /v1/entity/{id}/children via provider adapter (themeparks.wiki, …).
    */
-  async listProviderEntityChildren(provider, entityId) {
-    const adapter = await this.resolveProvider(provider);
-    if (typeof adapter.fetchEntities !== 'function') {
-      throw new AppError('Entity children not supported for this provider', 501, { code: 'NOT_SUPPORTED' });
-    }
-    const raw = await adapter.fetchEntities(entityId);
-    if (Array.isArray(raw)) return raw;
-    if (raw && typeof raw === 'object') {
-      if (Array.isArray(raw.children)) return raw.children;
-      if (Array.isArray(raw.data)) return raw.data;
-      if (Array.isArray(raw.items)) return raw.items;
-    }
-    return [];
+  listProviderEntityChildren(provider, entityId) {
+    return this.providerBrowser.listProviderEntityChildren(provider, entityId);
   }
 
-  async getProviderEntityLive(provider, entityId) {
-    const adapter = await this.resolveProvider(provider);
-    const row = await adapter.fetchEntityLive(entityId);
-    return row || null;
+  getProviderEntityLive(provider, entityId) {
+    return this.providerBrowser.getProviderEntityLive(provider, entityId);
   }
 
-  async getProviderEntitySchedule(provider, entityId, options = {}) {
-    const adapter = await this.resolveProvider(provider);
-    const row = await adapter.fetchEntitySchedule(entityId, options);
-    return row || null;
+  getProviderEntitySchedule(provider, entityId, options = {}) {
+    return this.providerBrowser.getProviderEntitySchedule(provider, entityId, options);
   }
 
   async syncDestinations(provider) {
