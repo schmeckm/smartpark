@@ -160,12 +160,40 @@ new location.
 nodes. Its dependency on `provider-adapter-registry.service` is one input among many; decomposing the
 orchestrator is a Phase C3 task, not strictly part of the framework consolidation.
 
-### 5.3 `themeparks` sync module duplicates orchestrator paths
-`src/modules/adapters/themeparks/themeparks-sync.service.js` has its own per-park sync that the
-orchestrator also exposes via the generic provider sync (`/integrations/<provider>/sync/*`). The
-sync module is a single-provider wrapper; the orchestrator is the generic path. **C4 candidate**:
-fold the sync module into the orchestrator's themeparks-specific code path so there's exactly one way
-to sync a park from themeparks.wiki.
+### 5.3 `themeparks-sync` is **not** a duplicate of orchestrator paths — scope correction
+
+The original audit (and an earlier draft of this document) claimed that
+`src/modules/adapters/themeparks/themeparks-sync.service.js` duplicates the orchestrator's generic
+provider sync. **A re-read of the actual code (Phase C4 reconnaissance, 2026-05-08) refuted that
+claim.** The two paths are complementary, not duplicate:
+
+| Layer | Owner | Writes to |
+|---|---|---|
+| UNS / canonical messages (generic, all providers) | `IntegrationOrchestratorService.syncEntities` / `syncLive` | `external_canonical_messages` table; Sparkplug topics |
+| Platform master data (provider-specific) | `themeparks-sync.service.{syncParkFromThemeParks,syncThemeParksLiveOnly}` | `park_assets`, `asset_observations`, `ride_master_data`, `show_master_data`, `restaurant_master_data` |
+
+The orchestrator **explicitly invokes** `themeparks-sync` as a complementary platform-layer hook
+(see `src/services/integration-orchestrator.service.js` lines 544-562 and 597-616). It is not an
+alternative implementation; it runs *after* the canonical-messages step is complete and is wrapped
+in its own try/catch so its failure does not bring down the canonical pipeline.
+
+**The real smells around `themeparks-sync` are different from the audit's claim:**
+
+1. **Hard-coded `if (provider === 'themeparks_wiki')`** in the orchestrator (lines 545, 599) violates
+   open/closed. A second provider with a similar platform master-data layer would force an
+   orchestrator edit.
+2. **Mid-function `require()`** at the same lines (already in the ESLint `MID_FN_MODELS_ALLOW_LIST`
+   as known debt because the orchestrator pulls in `../models` at the same site).
+3. **HTTP backdoor** at `/api/v1/themeparks-sync/*` (`themeparks-sync.routes.js` +
+   `themeparks-sync.controller.js`): a second entry point that runs the master-data layer **without**
+   the canonical-messages layer. Two doors to a closely-related operation.
+4. **Provider-specific code outside the adapter package**: logically this code belongs under
+   `src/integrations/adapter-packages/themeparks_wiki/`, not in a parallel
+   `src/modules/adapters/themeparks/` root that mirrors no other adapter-package convention.
+
+The C4 ticket in §7 has been reframed accordingly with four scoping options. The original
+"fold into the orchestrator's code path" formulation is no longer pursued because it would have
+deleted the platform master-data layer entirely.
 
 ---
 
@@ -235,7 +263,7 @@ sequenced tickets are:
 | **C1** | Provider-class co-location | low | `git mv src/integrations/adapters/{themeparks-wiki,wartezeiten-app}.adapter.js src/integrations/adapter-packages/{themeparks_wiki,wartezeiten_app}/client.js`. Update 4 importers (package `index.js` × 2, legacy registry, themeparks-sync service). NO logic change, NO key change, NO migration. **Done.** |
 | **C2** | Build legacy registry FROM packages | low | `ProviderAdapterRegistry.constructor` scans `adapter-packages/<key>/manifest.json` and instantiates the class declared by `manifest.providerAdapterClient`. Removes hard-coded `new XAdapter()` calls. Manifest validator gained an optional `providerAdapterClient` string field; baseline gained a `providerAdapterManifestField` key. **Done.** |
 | **C3** | Decompose `IntegrationOrchestratorService` | high | Split the 1,091-line god service into 6 per-context services under `src/modules/integrations/`. Largest ticket. |
-| **C4** | Fold `src/modules/adapters/themeparks` into the canonical sync path | medium | Replace per-park direct sync calls with `IntegrationOrchestratorService.syncLive(themeparks_wiki, parkId)`. |
+| **C4** | ~~Fold `src/modules/adapters/themeparks` into the canonical sync path~~ — **scope corrected; see §5.3 + §7.1.** Phase C4-A applied (audit error documented, no code change). C4-B/C/D remain as future work. | varies | See §7.1 |
 | **C5** | Move `src/adapter-framework/` and `src/services/adapter-*` under `src/modules/integrations/adapter-framework/` | low | Pure file relocation; no behaviour change. 12 files moved via `git mv` (96–100% similarity), 10 external importers updated, internal cross-refs collapsed to siblings, `path.join(__dirname,...)` depth corrected. **Done.** |
 
 **Recommended next step (C1)**: provider-class co-location, because:
@@ -245,6 +273,30 @@ sequenced tickets are:
 - Shrinks `src/integrations/adapters/` to one file (`provider-adapter.interface.js` +
   `http-client.js`) which can be moved to a shared location in C2.
 - Keeps the PR small (~6 files moved, ~10 imports updated).
+
+### 7.1 C4 scoping options (after audit-error correction)
+
+The original audit framing of C4 was wrong (see §5.3). The actual problems around
+`src/modules/adapters/themeparks/` lead to four distinct refactor scopes, in increasing order of
+ambition:
+
+| # | Option | Risk | Effort | What it actually changes |
+|---|---|---|---|---|
+| **C4-A** | Document the audit error; no code change | none | ~30 min | Inventory doc + open-PR description corrected. **Applied in this commit.** |
+| **C4-B** | Platform-sync hook registry | medium | 2-3 h | New `platformSyncHooks[provider] = { syncFull, syncLive }`. Orchestrator `syncEntities/syncLive` calls `platformSyncHooks[selected.provider]?.syncFull?.(...)` instead of the hard-coded `if (provider === 'themeparks_wiki')` branch. `themeparks-sync` registers itself as a hook at boot. Eliminates open/closed violation and removes the mid-fn `require()`. |
+| **C4-C** | Move into the adapter package | low | 1-2 h | `git mv src/modules/adapters/themeparks/` → `src/integrations/adapter-packages/themeparks_wiki/platform-sync/`. Updates the orchestrator import path, controller import path, route registration. Pure relocation, no behaviour change. Leaves the orchestrator's hard-coded `if` in place for now. |
+| **C4-D** | C4-B + C4-C combined | medium-high | 3-4 h | Hook registry **and** co-location into the adapter package. Optionally also load the hook dynamically from `manifest.platformSyncModule` (C2-style discovery). Removes hard-coded `if`, removes mid-fn require, removes provider-specific code from `src/modules/adapters/`, and makes the master-data layer truly pluggable. Cleanest end-state. |
+
+C4-A is the only option applied in this PR, because:
+- The audit-error documentation is genuinely separable from any code change.
+- C4-B/C/D each merit their own PR with a focused review loop.
+- C4-D in particular interacts with the orchestrator's `syncEntities/syncLive` paths that C3 also
+  needs to touch — sequencing C4-D after C3 lets it use the per-context services produced by C3
+  rather than the current god-class.
+
+Recommended order if C4-D is chosen later: C3 first (orchestrator decompose), then C4-D as a small
+follow-up that adds a new contract method to the resulting per-provider context service. If C3 is
+deferred and forward motion is wanted, C4-C is the safest standalone (pure file move, low risk).
 
 ---
 
