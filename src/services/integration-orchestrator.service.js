@@ -6,8 +6,11 @@ const { AppSettingRepository } = require('../repositories/app-setting.repository
 const { ExternalEntityMappingService } = require('./external-entity-mapping.service');
 const { ManualUnsNodeService } = require('../modules/integrations/orchestrator/manual-uns-node.service');
 const { ProviderBrowserService } = require('../modules/integrations/orchestrator/provider-browser.service');
+const {
+  IntegrationSettingsService,
+  INTEGRATION_SETTING_KEYS,
+} = require('../modules/integrations/orchestrator/integration-settings.service');
 const { emitExternalMappingUpdated, emitExternalParkDataUpdated } = require('../sockets');
-const { DEFAULT_AI_FACTOR_CONFIGS } = require('../constants/ai-factor-config');
 const env = require('../config/env');
 const { getPlatformSettingsService } = require('./platform-settings.service');
 const { generateTopicPath, buildCanonicalUnsTopic } = require('../modules/uns/uns-topic-generator.service');
@@ -15,23 +18,18 @@ const { enrichRowsWithSparkplug } = require('../modules/uns/sparkplug-topic-buil
 const { getCanonicalToSparkplugPublisher } = require('./canonicalToSparkplugPublisher');
 const {
   resolveThemeParksPublicationDomain,
-  loadEntityDomainRegistry,
   mergeThemeParksEntityRegistryFromMessages,
   mergeThemeParksEntityRegistryFromLiveMessages,
 } = require('../modules/uns/theme-parks-entity-domain.service');
 const { slugifyName } = require('../utils/slugify.util');
 
-const SETTING_KEYS = {
-  selectedProvider: 'externalParkData.selectedProvider',
-  selectedDestination: 'externalParkData.selectedDestination',
-  selectedPark: 'externalParkData.selectedPark',
-  autoApplyEnabled: 'externalParkData.autoApplyEnabled',
-  pollingEnabled: 'externalParkData.pollingEnabled',
-  pollingIntervalSeconds: 'externalParkData.pollingIntervalSeconds',
-  aiForecastFactors: 'ai.forecast.factorConfigs',
-  unsManualNodes: 'uns.manualNodes',
-  unsSparkplugSchemaOverride: 'uns.sparkplugTopicSchema',
-};
+/**
+ * Phase C3.3 — `SETTING_KEYS` is now owned by the extracted
+ * IntegrationSettingsService as `INTEGRATION_SETTING_KEYS`. Re-exported
+ * here under its historical name for backward compatibility with
+ * downstream callers that imported it from this module.
+ */
+const SETTING_KEYS = INTEGRATION_SETTING_KEYS;
 
 function resolveUnsDomainForEntity(entityName, entityType) {
   return resolveThemeParksPublicationDomain(entityName, entityType);
@@ -58,31 +56,15 @@ class IntegrationOrchestratorService {
       registryService: this.registryService,
       settingRepository: this.settingRepository,
     });
+    this.integrationSettings = new IntegrationSettingsService({
+      settingRepository: this.settingRepository,
+      registryService: this.registryService,
+      unsParkKeyResolver: async () => this.resolveUnsParkKey(),
+    });
   }
 
-  async bootstrap() {
-    const ps = getPlatformSettingsService();
-    await this.registryService.ensureSeedConfigs();
-    await this.settingRepository.upsertValue(SETTING_KEYS.selectedProvider, {
-      provider: await ps.getString('EXTERNAL_PARK_DATA_DEFAULT_PROVIDER', 'themeparks_wiki'),
-    });
-    await this.settingRepository.upsertValue(SETTING_KEYS.autoApplyEnabled, { enabled: true });
-    // Do not overwrite polling flags on every restart — users enable them in Integration settings.
-    if (!(await this.settingRepository.findByKey(SETTING_KEYS.pollingEnabled))) {
-      await this.settingRepository.upsertValue(SETTING_KEYS.pollingEnabled, {
-        enabled: await ps.getBoolean('EXTERNAL_PARK_DATA_ENABLED', true),
-      });
-    }
-    if (!(await this.settingRepository.findByKey(SETTING_KEYS.pollingIntervalSeconds))) {
-      await this.settingRepository.upsertValue(SETTING_KEYS.pollingIntervalSeconds, {
-        seconds: await ps.getNumber('EXTERNAL_PARK_DATA_POLL_INTERVAL_SECONDS', 300),
-      });
-    }
-    const existingFactors = await this.settingRepository.getValue(SETTING_KEYS.aiForecastFactors, null);
-    if (!Array.isArray(existingFactors) || !existingFactors.length) {
-      await this.settingRepository.upsertValue(SETTING_KEYS.aiForecastFactors, DEFAULT_AI_FACTOR_CONFIGS);
-    }
-    await loadEntityDomainRegistry(this.settingRepository);
+  bootstrap() {
+    return this.integrationSettings.seedDefaults();
   }
 
   listProviders() {
@@ -118,73 +100,12 @@ class IntegrationOrchestratorService {
     }
   }
 
-  async getSettings() {
-    const unsParkKey = await this.resolveUnsParkKey();
-    const selectedPark = await this.settingRepository.getValue(SETTING_KEYS.selectedPark, null);
-    const overrideSnap = await this.settingRepository.getValue(SETTING_KEYS.unsSparkplugSchemaOverride, null);
-    const overrideActive = Boolean(
-      overrideSnap?.entries?.length &&
-        selectedPark?.provider &&
-        selectedPark?.externalParkId &&
-        overrideSnap.provider === selectedPark.provider &&
-        overrideSnap.externalParkId === selectedPark.externalParkId
-    );
-    return {
-      selectedProvider: await this.settingRepository.getValue(SETTING_KEYS.selectedProvider, { provider: 'themeparks_wiki' }),
-      selectedDestination: await this.settingRepository.getValue(SETTING_KEYS.selectedDestination, null),
-      selectedPark,
-      unsParkKey,
-      unsTopicSchemaOverrideSummary: {
-        active: overrideActive,
-        entryCount: overrideActive ? overrideSnap.entries.length : 0,
-        updatedAt: overrideSnap?.updatedAt || null,
-      },
-      autoApplyEnabled: await this.settingRepository.getValue(SETTING_KEYS.autoApplyEnabled, { enabled: true }),
-      pollingEnabled: await this.settingRepository.getValue(SETTING_KEYS.pollingEnabled, { enabled: false }),
-      pollingIntervalSeconds: await this.settingRepository.getValue(SETTING_KEYS.pollingIntervalSeconds, { seconds: 300 }),
-      aiForecastFactors: await this.settingRepository.getValue(SETTING_KEYS.aiForecastFactors, DEFAULT_AI_FACTOR_CONFIGS),
-    };
+  getSettings() {
+    return this.integrationSettings.get();
   }
 
-  async patchSettings(input) {
-    const settings = await this.getSettings();
-    if (Object.hasOwn(input, 'selectedProvider')) {
-      await this.settingRepository.upsertValue(SETTING_KEYS.selectedProvider, input.selectedProvider);
-      settings.selectedProvider = input.selectedProvider;
-    }
-    if (Object.hasOwn(input, 'selectedDestination')) {
-      if (input.selectedDestination == null) {
-        await this.settingRepository.deleteByKey(SETTING_KEYS.selectedDestination);
-      } else {
-        await this.settingRepository.upsertValue(SETTING_KEYS.selectedDestination, input.selectedDestination);
-      }
-      settings.selectedDestination = input.selectedDestination;
-    }
-    if (Object.hasOwn(input, 'selectedPark')) {
-      if (input.selectedPark == null) {
-        await this.settingRepository.deleteByKey(SETTING_KEYS.selectedPark);
-      } else {
-        await this.settingRepository.upsertValue(SETTING_KEYS.selectedPark, input.selectedPark);
-      }
-      settings.selectedPark = input.selectedPark;
-    }
-    if (Object.hasOwn(input, 'autoApplyEnabled')) {
-      await this.settingRepository.upsertValue(SETTING_KEYS.autoApplyEnabled, input.autoApplyEnabled);
-      settings.autoApplyEnabled = input.autoApplyEnabled;
-    }
-    if (Object.hasOwn(input, 'pollingEnabled')) {
-      await this.settingRepository.upsertValue(SETTING_KEYS.pollingEnabled, input.pollingEnabled);
-      settings.pollingEnabled = input.pollingEnabled;
-    }
-    if (Object.hasOwn(input, 'pollingIntervalSeconds')) {
-      await this.settingRepository.upsertValue(SETTING_KEYS.pollingIntervalSeconds, input.pollingIntervalSeconds);
-      settings.pollingIntervalSeconds = input.pollingIntervalSeconds;
-    }
-    if (Object.hasOwn(input, 'aiForecastFactors')) {
-      await this.settingRepository.upsertValue(SETTING_KEYS.aiForecastFactors, input.aiForecastFactors);
-      settings.aiForecastFactors = input.aiForecastFactors;
-    }
-    return this.getSettings();
+  patchSettings(input) {
+    return this.integrationSettings.patch(input);
   }
 
   resolveProvider(provider) {
