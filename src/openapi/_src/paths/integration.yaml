@@ -1,0 +1,28 @@
+/integration/logs:
+  get:
+    tags:
+      - Wave2
+    summary: 'Integration / ingestion log'
+    deprecated: true
+    description: |
+      **Deprecated (Phase B3)** — the singular `/integration/*` namespace is being
+      consolidated into `/integrations/*`. Use the canonical `GET /integrations/logs`
+      instead; it returns the same `integration_event_log` rows from the same
+      handler. The legacy path stays live so existing dashboards keep working
+      and will be removed in a future major version.
+    parameters:
+      -
+        in: query
+        name: limit
+        schema:
+          type: integer
+          default: 100
+      -
+        in: query
+        name: offset
+        schema:
+          type: integer
+          default: 0
+    responses:
+      '200':
+        description: OK

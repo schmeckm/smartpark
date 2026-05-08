@@ -1,0 +1,3961 @@
+components:
+  schemas:
+    MqttStatus:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        connected:
+          type: boolean
+        lastError:
+          type: string
+          nullable: true
+        broker:
+          type: string
+          nullable: true
+        clientId:
+          type: string
+        topics:
+          type: array
+          items:
+            type: string
+    WeatherCreate:
+      type: object
+      required:
+        - condition
+      properties:
+        condition:
+          type: string
+        temperatureC:
+          type: number
+          nullable: true
+        rainMm:
+          type: number
+          nullable: true
+        windKmh:
+          type: number
+          nullable: true
+        source:
+          type: string
+        parkId:
+          type: string
+        observedAt:
+          type: string
+          format: date-time
+        timestamp:
+          type: string
+          format: date-time
+    ErrorBody:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+        code:
+          type: string
+        requestId:
+          type: string
+        details: {}
+    HealthResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            status:
+              type: string
+            service:
+              type: string
+            timestamp:
+              type: string
+              format: date-time
+            version:
+              type: string
+              description: 'Semver from root package.json'
+            apiVersion:
+              type: string
+              example: v1
+              description: 'URL-mounted API generation'
+            gitCommit:
+              type: string
+              nullable: true
+              description: 'Present when GIT_COMMIT or SOURCE_COMMIT is set at runtime'
+    HealthDbResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            status:
+              type: string
+            database:
+              type: string
+            latencyMs:
+              type: integer
+    HealthReadyResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            status:
+              type: string
+              example: ready
+            database:
+              type: string
+              example: connected
+            latencyMs:
+              type: integer
+            version:
+              type: string
+            apiVersion:
+              type: string
+    HealthReadyFailureResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        data:
+          type: object
+          properties:
+            status:
+              type: string
+              example: not_ready
+            database:
+              type: string
+              example: unavailable
+            version:
+              type: string
+            apiVersion:
+              type: string
+    EnvelopeGenericData:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          additionalProperties: true
+    UserSettingsPatchBody:
+      type: object
+      description: 'Partial user settings; at least one field required (see `patchMyUserSettingsSchema`).'
+      minProperties: 1
+      properties:
+        languageCode:
+          type: string
+          enum:
+            - en
+            - de
+            - fr
+            - es
+        displayName:
+          type: string
+          maxLength: 255
+          nullable: true
+        timezone:
+          type: string
+          maxLength: 64
+          nullable: true
+          description: 'IANA time zone'
+        dateFormat:
+          type: string
+          enum:
+            - DD.MM.YYYY
+            - YYYY-MM-DD
+            - MM/DD/YYYY
+        timeFormat:
+          type: string
+          enum:
+            - 24h
+            - 12h
+        locale:
+          type: string
+          enum:
+            - de-DE
+            - en-US
+            - fr-FR
+            - es-ES
+          nullable: true
+        uiPreferences:
+          type: object
+          additionalProperties: true
+          description: 'e.g. nested `parkMapFreqThresholds`'
+    StaffImportItem:
+      type: object
+      required:
+        - firstName
+        - lastName
+        - role
+      properties:
+        id:
+          type: string
+          format: uuid
+        employeeNumber:
+          type: string
+          maxLength: 64
+          nullable: true
+        firstName:
+          type: string
+          maxLength: 80
+        lastName:
+          type: string
+          maxLength: 80
+        role:
+          type: string
+          enum:
+            - FOOD_SERVICE
+            - RIDE_OPERATOR
+            - CLEANING
+            - SECURITY
+            - GUEST_SERVICE
+        currentZoneId:
+          type: string
+          format: uuid
+          nullable: true
+        supervisorId:
+          type: string
+          format: uuid
+          nullable: true
+        available:
+          type: boolean
+        skillLevel:
+          type: integer
+          minimum: 1
+          maximum: 5
+      additionalProperties: true
+    StaffImportBundle:
+      type: object
+      required:
+        - items
+      properties:
+        schemaVersion:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffImportItem'
+    StaffExportBundle:
+      type: object
+      properties:
+        schemaVersion:
+          type: integer
+          example: 1
+        entityType:
+          type: string
+          example: staff
+        generatedAt:
+          type: string
+          format: date-time
+        totalExported:
+          type: integer
+        items:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    EnvelopeStaffExportBundle:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/StaffExportBundle'
+    StaffImportFailedRow:
+      type: object
+      properties:
+        id:
+          type: string
+        error:
+          type: string
+        code:
+          type: string
+    StaffImportResult:
+      type: object
+      properties:
+        entityType:
+          type: string
+          example: staff
+        appliedCount:
+          type: integer
+        appliedIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        failedCount:
+          type: integer
+        failed:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffImportFailedRow'
+    EnvelopeStaffImportResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/StaffImportResult'
+    GeoPressureSimulateBody:
+      type: object
+      description: 'Optional map of asset key → `{ waitMin?, downtime? }` overrides.'
+      properties:
+        overrides:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              waitMin:
+                type: number
+                minimum: 0
+                maximum: 400
+              downtime:
+                type: boolean
+    GeoFlowEventItem:
+      type: object
+      required:
+        - caseId
+        - assetId
+        - occurredAt
+      properties:
+        caseId:
+          type: string
+          minLength: 1
+          maxLength: 160
+        assetId:
+          type: string
+          format: uuid
+        occurredAt:
+          type: string
+          format: date-time
+        eventType:
+          type: string
+          maxLength: 40
+        source:
+          type: string
+          maxLength: 64
+        payload:
+          type: object
+          additionalProperties: true
+    GeoFlowEventsBatchBody:
+      type: object
+      required:
+        - events
+      properties:
+        events:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items:
+            $ref: '#/components/schemas/GeoFlowEventItem'
+    GeoFlowBatchAppendResult:
+      type: object
+      properties:
+        inserted:
+          type: integer
+          minimum: 0
+    EnvelopeGeoFlowBatchAppend:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/GeoFlowBatchAppendResult'
+    EnvelopeGeoPressurePayload:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          additionalProperties: true
+          description: 'Pressure engine payload (park'
+          'layers,': 'metrics — shape varies by mode)'
+    EnvelopeGeoEntities:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          additionalProperties: true
+    EnvelopeGeoHotspots:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          additionalProperties: true
+          description: 'Subset of live pressure including `hotspots` slice'
+    EnvelopeGeoFlowSimulation:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          additionalProperties: true
+          description: 'Flow graph / simulation DTO from `GeoFlowSimulatorService`'
+    AttractionOeeCandidateRow:
+      type: object
+      properties:
+        assetId:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        name:
+          type: string
+        parkId:
+          type: string
+          format: uuid
+        rideMaster:
+          type: object
+          additionalProperties: true
+    EnvelopeAttractionOeeCandidates:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AttractionOeeCandidateRow'
+    AttractionOeeStartBody:
+      type: object
+      properties:
+        parkSlug:
+          type: string
+          maxLength: 128
+        parkId:
+          type: string
+          format: uuid
+        edgeNodeId:
+          type: string
+          maxLength: 120
+          nullable: true
+        publishMs:
+          type: integer
+          minimum: 500
+          maximum: 120000
+        scenario:
+          type: string
+          description: 'One of `AttractionOeeScenarioName`'
+        randomSeed:
+          type: integer
+          minimum: 0
+          maximum: 4294967295
+        attractions:
+          oneOf:
+            -
+              type: array
+              items:
+                type: string
+                maxLength: 160
+            -
+              type: string
+              maxLength: 2000
+        assetIds:
+          type: array
+          maxItems: 32
+          items:
+            type: string
+            format: uuid
+    AttractionOeeScenarioName:
+      type: string
+      enum:
+        - NORMAL_OPERATION
+        - HIGH_DEMAND
+        - LOW_STAFF
+        - TRAIN_REMOVED
+        - TECHNICAL_STOP
+        - WEATHER_DELAY
+        - SLOW_LOADING
+        - FAST_DISPATCH
+        - PARK_OPENING
+        - PARK_CLOSING
+        - NIGHT_MODE
+    AttractionOeeScenarioBody:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          $ref: '#/components/schemas/AttractionOeeScenarioName'
+    EnvelopeAttractionOeeStartResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          additionalProperties: true
+          description: '`{ ok, config?, error?, alreadyRunning? }` from simulator start'
+    RideEnrichTemplateBody:
+      type: object
+      properties:
+        templateCode:
+          type: string
+          maxLength: 64
+          default: RIDE_DEFAULT
+          description: 'When omitted, server defaults to `RIDE_DEFAULT` (see `enrichTemplateBody` validator).'
+    DowntimeReasonParetoRow:
+      type: object
+      properties:
+        reasonCode:
+          type: string
+        durationMs:
+          type: integer
+        durationMinutes:
+          type: integer
+        sharePct:
+          type: number
+        cumulativeSharePct:
+          type: number
+        labelDe:
+          type: string
+    DowntimeReasonParetoData:
+      type: object
+      properties:
+        assetId:
+          type: string
+          format: uuid
+        window:
+          type: object
+          properties:
+            from:
+              type: string
+              format: date-time
+            to:
+              type: string
+              format: date-time
+        plannedScope:
+          type: string
+          enum:
+            - all
+            - planned
+            - unplanned
+        totalDowntimeMinutes:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DowntimeReasonParetoRow'
+    EnvelopeDowntimeReasonPareto:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/DowntimeReasonParetoData'
+    EnvelopePlatformAssetEnrich:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/PlatformAsset'
+        meta:
+          type: object
+          additionalProperties: true
+          description: 'Template merge diagnostics from `enrichRideFromTemplate`'
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+    RefreshRequest:
+      type: object
+      required:
+        - refreshToken
+      properties:
+        refreshToken:
+          type: string
+    LogoutRequest:
+      type: object
+      properties:
+        refreshToken:
+          type: string
+    AuthTokensResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            accessToken:
+              type: string
+            refreshToken:
+              type: string
+            expiresIn:
+              type: string
+            user:
+              $ref: '#/components/schemas/UserPublic'
+    UserPublic:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        role:
+          type: string
+          enum:
+            - ADMIN
+            - OPERATIONS_MANAGER
+            - SECURITY_MANAGER
+            - OPERATOR
+            - VIEWER
+        active:
+          type: boolean
+        lastLoginAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    Zone:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          type: string
+        currentCrowdLevel:
+          type: integer
+        forecastCrowdLevel:
+          type: integer
+        maxCapacity:
+          type: integer
+        status:
+          type: string
+          enum:
+            - ACTIVE
+            - LIMITED
+            - CLOSED
+            - EVACUATION
+        adjacentZoneIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        rides:
+          type: array
+          items:
+            $ref: '#/components/schemas/Ride'
+        staffMembers:
+          type: array
+          items:
+            $ref: '#/components/schemas/Staff'
+    ZoneCreate:
+      type: object
+      required:
+        - name
+        - type
+        - maxCapacity
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        currentCrowdLevel:
+          type: integer
+        forecastCrowdLevel:
+          type: integer
+        maxCapacity:
+          type: integer
+        status:
+          type: string
+          enum:
+            - ACTIVE
+            - LIMITED
+            - CLOSED
+            - EVACUATION
+        adjacentZoneIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+    ZoneUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        currentCrowdLevel:
+          type: integer
+        forecastCrowdLevel:
+          type: integer
+        maxCapacity:
+          type: integer
+        status:
+          type: string
+          enum:
+            - ACTIVE
+            - LIMITED
+            - CLOSED
+            - EVACUATION
+        adjacentZoneIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+    Ride:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        zoneId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - OPEN
+            - CLOSED
+            - MAINTENANCE
+        waitTime:
+          type: integer
+        capacityPerHour:
+          type: integer
+        criticality:
+          type: integer
+    RideCreate:
+      type: object
+      required:
+        - name
+        - zoneId
+      properties:
+        name:
+          type: string
+        zoneId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - OPEN
+            - CLOSED
+            - MAINTENANCE
+        waitTime:
+          type: integer
+        capacityPerHour:
+          type: integer
+        criticality:
+          type: integer
+    RideUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        zoneId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - OPEN
+            - CLOSED
+            - MAINTENANCE
+        waitTime:
+          type: integer
+        capacityPerHour:
+          type: integer
+        criticality:
+          type: integer
+    Staff:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
+        role:
+          type: string
+          enum:
+            - FOOD_SERVICE
+            - RIDE_OPERATOR
+            - CLEANING
+            - SECURITY
+            - GUEST_SERVICE
+        currentZoneId:
+          type: string
+          format: uuid
+          nullable: true
+        available:
+          type: boolean
+        skillLevel:
+          type: integer
+    StaffCreate:
+      type: object
+      required:
+        - firstName
+        - lastName
+        - role
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        role:
+          type: string
+          enum:
+            - FOOD_SERVICE
+            - RIDE_OPERATOR
+            - CLEANING
+            - SECURITY
+            - GUEST_SERVICE
+        currentZoneId:
+          type: string
+          format: uuid
+        available:
+          type: boolean
+        skillLevel:
+          type: integer
+    StaffUpdate:
+      type: object
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        role:
+          type: string
+          enum:
+            - FOOD_SERVICE
+            - RIDE_OPERATOR
+            - CLEANING
+            - SECURITY
+            - GUEST_SERVICE
+        currentZoneId:
+          type: string
+          format: uuid
+          nullable: true
+        available:
+          type: boolean
+        skillLevel:
+          type: integer
+    CrowdEvent:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        zoneId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          enum:
+            - CROWD_SPIKE
+            - CROWD_DROP
+            - RIDE_CLOSURE
+            - WEATHER_IMPACT
+        crowdLevel:
+          type: integer
+        severity:
+          type: integer
+        source:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    CrowdEventCreate:
+      type: object
+      required:
+        - zoneId
+        - eventType
+        - crowdLevel
+      properties:
+        zoneId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          enum:
+            - CROWD_SPIKE
+            - CROWD_DROP
+            - RIDE_CLOSURE
+            - WEATHER_IMPACT
+        crowdLevel:
+          type: integer
+        severity:
+          type: integer
+        source:
+          type: string
+        syncZone:
+          type: boolean
+          default: true
+        weatherCondition:
+          type: string
+          description: 'For WEATHER_IMPACT'
+    Recommendation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        eventId:
+          type: string
+          format: uuid
+        recommendationType:
+          type: string
+          enum:
+            - REALLOCATE_STAFF
+            - OPEN_SERVICE_POINT
+            - SEND_SECURITY
+            - CLEANING_SUPPORT
+            - GUEST_ROUTING
+        priority:
+          type: string
+          enum:
+            - LOW
+            - MEDIUM
+            - HIGH
+            - CRITICAL
+        message:
+          type: string
+        status:
+          type: string
+          enum:
+            - OPEN
+            - ACCEPTED
+            - REJECTED
+            - COMPLETED
+    DashboardSummary:
+      type: object
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        zones:
+          type: object
+          properties:
+            total:
+              type: integer
+            nearCapacityCount:
+              type: integer
+        rides:
+          type: object
+          properties:
+            total:
+              type: integer
+            open:
+              type: integer
+        staff:
+          type: object
+          properties:
+            total:
+              type: integer
+            available:
+              type: integer
+        recommendations:
+          type: object
+          properties:
+            open:
+              type: integer
+            openByPriority:
+              type: object
+              additionalProperties:
+                type: integer
+        events:
+          type: object
+          properties:
+            last24Hours:
+              type: integer
+            recentSample:
+              type: array
+              items:
+                $ref: '#/components/schemas/CrowdEvent'
+    EnvelopeAiHealth:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            status:
+              type: string
+              example: ok
+            sampling:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                intervalSeconds:
+                  type: integer
+            modelName:
+              type: string
+    EnvelopeAiRefresh:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            sampledZones:
+              type: integer
+            forecastsCreated:
+              type: integer
+            recommendationsScored:
+              type: integer
+              description: 'OPEN recommendations rescored after forecast'
+            generatedAt:
+              type: string
+              format: date-time
+    EnvelopeForecasts:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Forecast'
+    Forecast:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        subjectType:
+          type: string
+          enum:
+            - PARK
+            - ZONE
+            - RIDE
+        subjectId:
+          type: string
+          format: uuid
+          nullable: true
+        targetMetric:
+          type: string
+          enum:
+            - CROWD_LEVEL
+            - WAIT_TIME
+            - STAFF_DEMAND
+        horizonMinutes:
+          type: integer
+        predictedValue:
+          type: number
+        confidence:
+          type: number
+          nullable: true
+        predictionBand:
+          type: object
+          nullable: true
+        modelVersionId:
+          type: string
+          format: uuid
+          nullable: true
+        features:
+          type: object
+          nullable: true
+        producedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        zoneName:
+          type: string
+          nullable: true
+    EnvelopeAiInsights:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            topHotspotZones:
+              type: array
+              items:
+                type: object
+                properties:
+                  zoneId:
+                    type: string
+                    format: uuid
+                  zoneName:
+                    type: string
+                  maxCapacity:
+                    type: integer
+                  predictedCrowdLevel:
+                    type: number
+                  crowdRatio:
+                    type: number
+                  confidence:
+                    type: number
+                    nullable: true
+            highestPredictedCrowdRatio:
+              type: number
+            forecastHorizonMinutes:
+              type: integer
+              example: 60
+            averageConfidence:
+              type: number
+              nullable: true
+            confidence:
+              type: number
+              nullable: true
+              description: 'Alias of averageConfidence for top hotspot rows'
+            generatedAt:
+              type: string
+              format: date-time
+    MlFactorCurrentResolution:
+      type: object
+      description: "One dynamic L1 factor after mergeMlEnterpriseLayer. JSON responses strip internal `meta` (e.g. rain mm used for bump magnitude); clients must not expect `meta`.\n"
+      properties:
+        current:
+          type: number
+          description: 'Effective multiplier [0'
+          '1.5]': 'after priority chain'
+        currentSource:
+          type: string
+          description: 'API, CALCULATED, L1_CURRENT, L1_DEFAULT, or L2_* (park row override)'
+        calculatedCurrent:
+          type: number
+          nullable: true
+        manualCurrentOverride:
+          type: number
+          nullable: true
+        l1ApiCurrent:
+          type: number
+          nullable: true
+    ParkForecastSummary:
+      type: object
+      additionalProperties: true
+      description: 'AI park/entity forecast summary (`data` in envelope). Fields are additive across versions.'
+      properties:
+        externalParkId:
+          type: string
+        externalEntityId:
+          type: string
+          nullable: true
+        provider:
+          type: string
+        asOf:
+          type: string
+          nullable: true
+          format: date-time
+        crowdLevelPercent:
+          type: number
+          nullable: true
+        currentAvgWaitMinutes:
+          type: number
+          nullable: true
+        forecast15Minutes:
+          type: number
+          nullable: true
+        forecast60Minutes:
+          type: number
+          nullable: true
+        trend:
+          type: string
+        confidence:
+          type: number
+        forecastSource:
+          type: string
+          nullable: true
+        topInfluencingFactors:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        mlFactorCurrents:
+          type: object
+          description: 'Map factor_code → resolution; always present (may be empty object)'
+          additionalProperties:
+            $ref: '#/components/schemas/MlFactorCurrentResolution'
+        factors:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        model:
+          type: object
+          additionalProperties: true
+        degraded:
+          type: boolean
+        basis:
+          type: string
+    EnvelopeParkForecastSummary:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/ParkForecastSummary'
+    EnvelopeParkForecastSummaryList:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ParkForecastSummary'
+    RecommendationScore:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        recommendationId:
+          type: string
+          format: uuid
+        score:
+          type: number
+        urgency:
+          type: string
+          enum:
+            - LOW
+            - MEDIUM
+            - HIGH
+            - CRITICAL
+        impact:
+          type: string
+          enum:
+            - LOW
+            - MEDIUM
+            - HIGH
+            - CRITICAL
+        confidence:
+          type: number
+        expectedBenefit:
+          type: object
+          nullable: true
+        explanation:
+          type: object
+          properties:
+            summary:
+              type: string
+            reasons:
+              type: array
+              items:
+                type: string
+        factors:
+          type: object
+        modelVersionId:
+          type: string
+          format: uuid
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    EnvelopeRecommendationsScored:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            allOf:
+              -
+                $ref: '#/components/schemas/Recommendation'
+              -
+                type: object
+                properties:
+                  score:
+                    $ref: '#/components/schemas/RecommendationScore'
+    EnvelopeRecommendationScoringSummary:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            topRiskyRecommendations:
+              type: array
+              items:
+                type: object
+                properties:
+                  recommendation:
+                    $ref: '#/components/schemas/Recommendation'
+                  score:
+                    $ref: '#/components/schemas/RecommendationScore'
+            criticalRecommendationsCount:
+              type: integer
+            averageConfidence:
+              type: number
+              nullable: true
+            generatedAt:
+              type: string
+              format: date-time
+    EnvelopeScoreAllResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            scored:
+              type: integer
+    EnvelopeScoreOneResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            recommendation:
+              $ref: '#/components/schemas/Recommendation'
+            score:
+              $ref: '#/components/schemas/RecommendationScore'
+    EnvelopeRecommendationExplanation:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            recommendationId:
+              type: string
+              format: uuid
+            explanation:
+              type: object
+            factors:
+              type: object
+            score:
+              type: number
+            urgency:
+              type: string
+            impact:
+              type: string
+            confidence:
+              type: number
+            expectedBenefit:
+              type: object
+              nullable: true
+    EnvelopeMlRidePredict:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          additionalProperties: true
+    EnvelopeMlParkForecastSummary:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          additionalProperties: true
+    EnvelopeMlRideDataset:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          additionalProperties: true
+    EnvelopeMlTrainResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          additionalProperties: true
+    EnvelopeMlTrainRideResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          additionalProperties: true
+    AiStudioTrainRequest:
+      type: object
+      description: 'Mirrors `trainBody` in `ai-studio.validators.js` (dataset FEATURE_STORE \| SANDBOX, entityType, features, targetVariable, strategy, algorithm, horizonMinutes rules). Additional server-side constraints apply.'
+      additionalProperties: true
+      properties:
+        dataset:
+          type: string
+          enum:
+            - FEATURE_STORE
+            - SANDBOX
+          default: SANDBOX
+        entityType:
+          type: string
+        entityId:
+          type: string
+          format: uuid
+          nullable: true
+        targetVariable:
+          type: string
+        features:
+          type: array
+          items:
+            type: string
+        strategy:
+          type: string
+          enum:
+            - AUTO
+            - MANUAL
+          default: MANUAL
+        algorithm:
+          type: string
+          nullable: true
+        horizonMinutes:
+          type: integer
+    AiStudioPredictRequest:
+      type: object
+      description: 'Mirrors `predictBody` — entityType, targetVariable, featureSource, optional entityId, features map.'
+      additionalProperties: true
+      required:
+        - entityType
+        - targetVariable
+      properties:
+        entityType:
+          type: string
+        entityId:
+          type: string
+          format: uuid
+          nullable: true
+        targetVariable:
+          type: string
+        featureSource:
+          type: string
+          enum:
+            - manual
+            - latest_snapshot
+          default: manual
+        features:
+          type: object
+          additionalProperties:
+            type: number
+    AiParkCalendarUpsertBody:
+      type: object
+      required:
+        - contextDate
+      properties:
+        contextDate:
+          type: string
+          pattern: '^\\d{4}-\\d{2}-\\d{2}$'
+        isPublicHoliday:
+          type: boolean
+          default: false
+        isSchoolBreak:
+          type: boolean
+          default: false
+        holidayName:
+          type: string
+          maxLength: 200
+          nullable: true
+        regionCode:
+          type: string
+          maxLength: 32
+          nullable: true
+        source:
+          type: string
+          maxLength: 64
+          default: manual
+        extra:
+          type: object
+          additionalProperties: true
+          default: {}
+    AiGlobalFactorCreateBody:
+      type: object
+      required:
+        - factorCode
+        - factorName
+      properties:
+        factorCode:
+          type: string
+          maxLength: 80
+        factorName:
+          type: string
+          maxLength: 200
+        factorGroup:
+          type: string
+          maxLength: 80
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        activeFlag:
+          type: boolean
+          default: true
+        weight:
+          type: number
+          default: 1
+        lagMinutes:
+          type: integer
+          minimum: 0
+          default: 0
+        defaultValue:
+          type: number
+          nullable: true
+        currentValue:
+          type: number
+          nullable: true
+        sourceType:
+          type: string
+          enum:
+            - MANUAL
+            - API
+            - DERIVED
+            - CALCULATED
+          default: MANUAL
+        unit:
+          type: string
+          maxLength: 40
+          nullable: true
+        validFrom:
+          type: string
+          nullable: true
+        validTo:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+    AiGlobalFactorPatchBody:
+      type: object
+      description: 'Partial update; at least one property required (server Joi `.min(1)`).'
+      minProperties: 1
+      properties:
+        factorName:
+          type: string
+        factorGroup:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        activeFlag:
+          type: boolean
+        weight:
+          type: number
+        lagMinutes:
+          type: integer
+          minimum: 0
+        defaultValue:
+          type: number
+          nullable: true
+        currentValue:
+          type: number
+          nullable: true
+        sourceType:
+          type: string
+          enum:
+            - MANUAL
+            - API
+            - DERIVED
+            - CALCULATED
+        unit:
+          type: string
+          nullable: true
+        validFrom:
+          type: string
+          nullable: true
+        validTo:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+    AiParkFactorsPatchBody:
+      type: object
+      required:
+        - factors
+      properties:
+        factors:
+          type: array
+          items:
+            type: object
+            required:
+              - factorCode
+            properties:
+              factorCode:
+                type: string
+                maxLength: 80
+              weightOverride:
+                type: number
+                nullable: true
+              currentValue:
+                type: number
+                nullable: true
+              activeFlag:
+                type: boolean
+              notes:
+                type: string
+                nullable: true
+              sourceType:
+                type: string
+                maxLength: 24
+    AiMlProfileCreateBody:
+      type: object
+      required:
+        - profileCode
+        - profileName
+        - entityType
+      properties:
+        profileCode:
+          type: string
+          maxLength: 80
+          pattern: '^[A-Z0-9_]+$'
+        profileName:
+          type: string
+          maxLength: 200
+        entityType:
+          type: string
+          maxLength: 32
+        category:
+          type: string
+          maxLength: 80
+          nullable: true
+        activeFlag:
+          type: boolean
+          default: true
+        weatherSensitive:
+          type: boolean
+          default: false
+        rainSensitive:
+          type: boolean
+          default: false
+        windSensitive:
+          type: boolean
+          default: false
+        heatSensitive:
+          type: boolean
+          default: false
+        modelType:
+          type: string
+          maxLength: 40
+          default: BASELINE
+        featureSetCode:
+          type: string
+          maxLength: 64
+          default: DEFAULT_V1
+        notes:
+          type: string
+          maxLength: 20000
+          nullable: true
+    AiMlProfilePatchBody:
+      type: object
+      description: 'Partial profile update; at least one field (server `.min(1)`).'
+      minProperties: 1
+      additionalProperties: true
+    AiAssetMlOverridesPatchBody:
+      type: object
+      required:
+        - ops
+      properties:
+        ops:
+          type: array
+          items:
+            type: object
+            required:
+              - overrideKey
+              - overrideValueJson
+            properties:
+              overrideKey:
+                type: string
+                maxLength: 120
+              overrideValueJson:
+                type: object
+                additionalProperties: true
+              overrideReason:
+                type: string
+                nullable: true
+              activeFlag:
+                type: boolean
+                default: true
+    AiStudioFeatureDraft:
+      type: object
+      required:
+        - entityType
+        - entityId
+        - datasetScope
+        - selectedSignalKeys
+      properties:
+        entityType:
+          type: string
+          enum:
+            - ride
+            - park_asset
+        entityId:
+          type: string
+          format: uuid
+        datasetScope:
+          type: string
+          enum:
+            - single_asset
+        selectedSignalKeys:
+          type: array
+          items:
+            type: string
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+    AiStudioFeatureDraftPut:
+      type: object
+      required:
+        - entityType
+        - entityId
+      properties:
+        entityType:
+          type: string
+          enum:
+            - ride
+            - park_asset
+        entityId:
+          type: string
+          format: uuid
+        datasetScope:
+          type: string
+          enum:
+            - single_asset
+          default: single_asset
+        selectedSignalKeys:
+          type: array
+          items:
+            type: string
+          default: []
+    EnvelopeAiStudioFeatureDraft:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/AiStudioFeatureDraft'
+    EnvelopeAiStudioFeatureDraftNullable:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          description: 'Persisted draft or null when none saved'
+          nullable: true
+          type: object
+          additionalProperties: true
+    EnvelopeAddonBoardParkSummary:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          additionalProperties: true
+    EnvelopeAddonBoardRides:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          additionalProperties: true
+    EnvelopeAddonBoardZone:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          additionalProperties: true
+    EnvelopeAddonBoardRideDetail:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          additionalProperties: true
+    EnvelopeAddonBoardZoneList:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          additionalProperties: true
+    EnvelopeAddonBoardHeatmap:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          additionalProperties: true
+    EnvelopeAddonBoardTemplatesIndex:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          additionalProperties: true
+    EnvelopeAddonBoardTemplateDoc:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          additionalProperties: true
+    EnvelopeAddonBoardLayout:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          additionalProperties: true
+    AddonBoardWidgetSourceDraft:
+      type: object
+      required:
+        - sourceType
+        - entityType
+        - entityId
+        - signalKey
+      properties:
+        sourceType:
+          type: string
+          enum:
+            - SIGNAL_METADATA
+        entityType:
+          type: string
+          enum:
+            - park_asset
+        entityId:
+          type: string
+          format: uuid
+        signalKey:
+          type: string
+          description: 'Must match `domain.metric` with a supported domain; must be enabled and board-eligible on the asset.'
+    AddonBoardWidgetSourceResolved:
+      type: object
+      required:
+        - valid
+        - domain
+        - metric
+        - enabled
+        - boardEligible
+      properties:
+        valid:
+          type: boolean
+          description: 'True when current extensions still mark the signal enabled and board-eligible.'
+        domain:
+          type: string
+        metric:
+          type: string
+        enabled:
+          type: boolean
+        boardEligible:
+          type: boolean
+    SignalRuntimePreview:
+      type: object
+      description: "Unified read-only signal preview (consolidation phase). Normalized metadata + eligibility + `status` + optional\n`latestValue` from the same persistence layers as Phase I (`uns_latest_states`, canonical inbound, ride feature snapshot).\nAdditive on Add-on Board APIs; not a KPI engine, not ML training routing, not browser MQTT.\n"
+      required:
+        - signalKey
+        - domain
+        - metric
+        - eligibility
+        - status
+        - latestValue
+      properties:
+        signalKey:
+          type: string
+        domain:
+          type: string
+        metric:
+          type: string
+        entityType:
+          type: string
+          description: 'Resolver input echo (e.g. `park_asset`).'
+        entityId:
+          type: string
+          format: uuid
+        eligibility:
+          type: object
+          required:
+            - enabled
+            - boardEligible
+            - mlEligible
+          properties:
+            enabled:
+              type: boolean
+            boardEligible:
+              type: boolean
+            mlEligible:
+              type: boolean
+        status:
+          type: string
+          enum:
+            - valid
+            - disabled
+            - missing_signal
+            - not_board_eligible
+            - not_ml_eligible
+            - entity_mismatch
+            - no_live_value
+        latestValue:
+          nullable: true
+          allOf:
+            -
+              $ref: '#/components/schemas/AddonBoardWidgetSourceLatestValue'
+    AddonBoardWidgetSourceLatestValue:
+      type: object
+      required:
+        - value
+        - unit
+        - ts
+        - quality
+        - source
+      description: "Read-only live scalar preview for a valid widget source draft (Phase I). Not used for Add-on Board KPI computation.\n"
+      properties:
+        value:
+          nullable: true
+          description: 'Latest known value (number, string, boolean, or JSON-serializable object).'
+        unit:
+          type: string
+          nullable: true
+        ts:
+          type: string
+          format: date-time
+          description: 'Event or observation time for the chosen source layer.'
+        quality:
+          type: string
+          description: 'Data quality hint (e.g. GOOD, ESTIMATED).'
+        source:
+          type: string
+          description: "Resolution layer, e.g. `uns_live_state` (from `uns_latest_states`), `canonical_inbound`, `ride_feature_snapshot`.\n"
+    AddonBoardWidgetSourcePreview:
+      type: object
+      required:
+        - draft
+        - resolved
+        - latestValue
+      properties:
+        draft:
+          $ref: '#/components/schemas/AddonBoardWidgetSourceDraft'
+        resolved:
+          $ref: '#/components/schemas/AddonBoardWidgetSourceResolved'
+        latestValue:
+          nullable: true
+          allOf:
+            -
+              $ref: '#/components/schemas/AddonBoardWidgetSourceLatestValue'
+          description: "Present only when `resolved.valid` is true; `null` when no matching persisted value. When `resolved.valid`\nis false, the field is `null` and no live lookup is performed.\n"
+        signalPreview:
+          allOf:
+            -
+              $ref: '#/components/schemas/SignalRuntimePreview'
+          description: "Optional normalized preview (`status`, `eligibility`, echo fields). Same latest-value chain as `latestValue`;\nclients may ignore this field; `resolved` / `latestValue` remain the stable contract.\n"
+    EnvelopeAddonBoardWidgetSourceDraft:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/AddonBoardWidgetSourceDraft'
+    EnvelopeAddonBoardWidgetSourceDraftNullable:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          nullable: true
+          description: 'Null when no draft; otherwise draft plus resolved preview for L3 UI.'
+          allOf:
+            -
+              $ref: '#/components/schemas/AddonBoardWidgetSourcePreview'
+    AddonBoardRideCustomWidgetSource:
+      type: object
+      required:
+        - sourceType
+        - entityType
+        - entityId
+        - signalKey
+      properties:
+        sourceType:
+          type: string
+          enum:
+            - SIGNAL_METADATA
+        entityType:
+          type: string
+          enum:
+            - park_asset
+        entityId:
+          type: string
+          format: uuid
+        signalKey:
+          type: string
+    AddonBoardRideCustomWidgetDisplay:
+      type: object
+      required:
+        - type
+        - unitMode
+        - refreshMode
+      properties:
+        type:
+          type: string
+          enum:
+            - latest_value
+        unitMode:
+          type: string
+          enum:
+            - fromSource
+        refreshMode:
+          type: string
+          enum:
+            - manual_or_existing_board_refresh
+    AddonBoardCustomWidgetPatch:
+      type: object
+      description: 'At least one property required. `source` / `display` are not accepted in this phase.'
+      minProperties: 1
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        enabled:
+          type: boolean
+    AddonBoardRideCustomWidget:
+      type: object
+      required:
+        - widgetId
+        - title
+        - source
+        - display
+        - enabled
+      properties:
+        widgetId:
+          type: string
+          description: 'Stable id derived from signal key (e.g. `signal_queue_wait_time_min`).'
+        title:
+          type: string
+        source:
+          $ref: '#/components/schemas/AddonBoardRideCustomWidgetSource'
+        display:
+          $ref: '#/components/schemas/AddonBoardRideCustomWidgetDisplay'
+        enabled:
+          type: boolean
+        resolved:
+          nullable: true
+          description: "Phase K — set when the widget is enabled, `SIGNAL_METADATA`, and `display.type` is `latest_value`;\notherwise `null`. Reflects **current** extensions vs `source.signalKey` (same as draft preview).\n"
+          allOf:
+            -
+              $ref: '#/components/schemas/AddonBoardWidgetSourceResolved'
+        latestValue:
+          nullable: true
+          description: "Phase K — read-only scalar when `resolved.valid` is true; `null` when invalid, no row, or lookup failure.\n"
+          allOf:
+            -
+              $ref: '#/components/schemas/AddonBoardWidgetSourceLatestValue'
+        sourceEntityMismatch:
+          type: boolean
+          description: 'True when persisted `source.entityId` ≠ path `rideId` (no live lookup).'
+        health:
+          type: string
+          enum:
+            - ok
+            - invalid_source
+            - disabled
+            - no_live_value
+            - entity_mismatch
+          description: "Phase M — derived from `enabled`, `sourceEntityMismatch`, `resolved.valid`, and `latestValue` presence;\nno additional persistence or KPI logic.\n"
+        signalPreview:
+          allOf:
+            -
+              $ref: '#/components/schemas/SignalRuntimePreview'
+          description: 'Optional normalized preview for the widget source signal (additive; UI may ignore).'
+    EnvelopeAddonBoardCustomWidgets:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          required:
+            - widgets
+          properties:
+            widgets:
+              type: array
+              items:
+                $ref: '#/components/schemas/AddonBoardRideCustomWidget'
+    EnvelopeAddonBoardPromotedWidget:
+      type: object
+      description: "Used for **POST** `.../widgets/from-source-draft` (**201**) and **PATCH** `.../custom-widgets/:widgetId` (**200**).\n**POST** returns a **base** widget only (required fields of `AddonBoardRideCustomWidget`). **PATCH** returns the same\nschema with optional preview fields populated like **GET** `.../custom-widgets` (including optional **`signalPreview`**).\n"
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          required:
+            - widget
+          properties:
+            widget:
+              allOf:
+                -
+                  $ref: '#/components/schemas/AddonBoardRideCustomWidget'
+              description: "**POST promote:** base persisted widget (`widgetId`, `title`, `source`, `display`, `enabled`) — omit `resolved`, `latestValue`, `health`, `signalPreview`.\n**PATCH:** enriched row; optional `signalPreview` when preview applies.\n"
+    OperationsFactMetric:
+      type: object
+      description: "Normalized KPI cell. `status` is a traffic-light style hint (GREEN/YELLOW/RED/UNKNOWN) for UI rings;\n`quality` describes data confidence (GOOD, ESTIMATED, MISSING). `source` identifies the winning input\nafter priority rules (see architecture doc).\n"
+      properties:
+        value:
+          nullable: true
+          description: 'Resolved KPI value or null when unavailable'
+        unit:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum:
+            - GREEN
+            - YELLOW
+            - RED
+            - UNKNOWN
+          description: 'Traffic-light hint; may vary by KPI type.'
+        quality:
+          type: string
+          enum:
+            - GOOD
+            - ESTIMATED
+            - MISSING
+        source:
+          type: string
+          description: 'e.g. MQTT_LIVE_STATE, RIDE_FEATURE_SNAPSHOT, CANONICAL_WAIT_TIME_UPDATED'
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+    OperationsRideFactsFacts:
+      type: object
+      properties:
+        currentWaitTimeMinutes:
+          $ref: '#/components/schemas/OperationsFactMetric'
+        rideOperationalStatus:
+          $ref: '#/components/schemas/OperationsFactMetric'
+        safetyStatus:
+          $ref: '#/components/schemas/OperationsFactMetric'
+        openIncidentCount:
+          $ref: '#/components/schemas/OperationsFactMetric'
+        actualThroughputPph:
+          $ref: '#/components/schemas/OperationsFactMetric'
+        theoreticalCapacityPph:
+          $ref: '#/components/schemas/OperationsFactMetric'
+        throughputGapPercent:
+          $ref: '#/components/schemas/OperationsFactMetric'
+        availabilityPercent:
+          $ref: '#/components/schemas/OperationsFactMetric'
+        performancePercent:
+          $ref: '#/components/schemas/OperationsFactMetric'
+        rideOeePercent:
+          $ref: '#/components/schemas/OperationsFactMetric'
+        plannedCrew:
+          $ref: '#/components/schemas/OperationsFactMetric'
+        actualCrew:
+          $ref: '#/components/schemas/OperationsFactMetric'
+        crewGap:
+          $ref: '#/components/schemas/OperationsFactMetric'
+        forecastWaitTime15:
+          $ref: '#/components/schemas/OperationsFactMetric'
+        forecastWaitTime30:
+          $ref: '#/components/schemas/OperationsFactMetric'
+        forecastWaitTime60:
+          $ref: '#/components/schemas/OperationsFactMetric'
+    OperationsRideFactsPublic:
+      type: object
+      properties:
+        parkId:
+          type: string
+          format: uuid
+        rideId:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+        facts:
+          $ref: '#/components/schemas/OperationsRideFactsFacts'
+    EnvelopeOperationsFactsRide:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/OperationsRideFactsPublic'
+    EnvelopeOperationsFactsPark:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            parkId:
+              type: string
+              format: uuid
+            timestamp:
+              type: string
+              format: date-time
+            rides:
+              type: array
+              items:
+                $ref: '#/components/schemas/OperationsRideFactsPublic'
+    EnvelopeOperationsFactsZone:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            parkId:
+              type: string
+              format: uuid
+            zoneId:
+              type: string
+              format: uuid
+            timestamp:
+              type: string
+              format: date-time
+            rides:
+              type: array
+              items:
+                $ref: '#/components/schemas/OperationsRideFactsPublic'
+    UnsNodeCreate:
+      type: object
+      required:
+        - name
+      properties:
+        parentId:
+          type: string
+          format: uuid
+          nullable: true
+        name:
+          type: string
+        slug:
+          type: string
+          nullable: true
+        nodeType:
+          type: string
+          nullable: true
+        domain:
+          type: string
+          nullable: true
+        metric:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        isLeaf:
+          type: boolean
+        isActive:
+          type: boolean
+        parkSlug:
+          type: string
+          nullable: true
+        assetSlug:
+          type: string
+          nullable: true
+    UnsNodeUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        nodeType:
+          type: string
+        domain:
+          type: string
+        metric:
+          type: string
+        description:
+          type: string
+          nullable: true
+        isLeaf:
+          type: boolean
+        isActive:
+          type: boolean
+    UnsTreeNode:
+      type: object
+      description: "UNS node in hierarchy form (`children` nested). Responses may include extra Sequelize fields and Sparkplug hints (`sparkplugTopic`, `sparkplugMessageType`, `sparkplug`) on leaf nodes after tree enrichment.\n"
+      properties:
+        id:
+          type: string
+          format: uuid
+        parkId:
+          type: string
+        parentId:
+          type: string
+          format: uuid
+          nullable: true
+        name:
+          type: string
+        slug:
+          type: string
+        nodeType:
+          type: string
+        domain:
+          type: string
+          nullable: true
+        metric:
+          type: string
+          nullable: true
+        topicPath:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        isLeaf:
+          type: boolean
+        isActive:
+          type: boolean
+        entityKind:
+          type: string
+          nullable: true
+        sparkplugEnabled:
+          type: boolean
+        isStructureLocked:
+          type: boolean
+        sortOrder:
+          type: integer
+        children:
+          type: array
+          items:
+            $ref: '#/components/schemas/UnsTreeNode'
+      additionalProperties: true
+    EnvelopeUnsTree:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          description: 'Root UNS nodes for the park (nested `children`).'
+          items:
+            $ref: '#/components/schemas/UnsTreeNode'
+    EnvelopeUnsNodeMutation:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          additionalProperties: true
+          description: 'Created or updated UNS node row (`UnsNode` Sequelize JSON).'
+    UnsLatestStateRow:
+      type: object
+      description: 'One row from `uns_latest_states` (latest known payload per `topicPath` for a park).'
+      properties:
+        id:
+          type: string
+          format: uuid
+        parkId:
+          type: string
+        topicPath:
+          type: string
+        payloadJson:
+          type: object
+          additionalProperties: true
+        eventTime:
+          type: string
+          format: date-time
+        quality:
+          type: string
+          nullable: true
+        source:
+          type: string
+          nullable: true
+      additionalProperties: true
+    EnvelopeUnsLatestStateList:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/UnsLatestStateRow'
+    UnsTopicExplorerRow:
+      type: object
+      description: "Topic explorer projection for an active leaf (identifiers, `topicPath`, derived Sparkplug topic, etc.). Shape follows `UnsService.listTopicsByPark` runtime objects.\n"
+      additionalProperties: true
+    EnvelopeUnsTopicsList:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/UnsTopicExplorerRow'
+    UnsTestPublishRequest:
+      type: object
+      required:
+        - topic
+        - payload
+      properties:
+        topic:
+          type: string
+          description: 'Topic string validated by UNS topic rules before publish.'
+        payload:
+          type: object
+          additionalProperties: true
+    EnvelopeUnsTestPublish:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          required:
+            - published
+            - topic
+          properties:
+            published:
+              type: boolean
+              enum:
+                - true
+            topic:
+              type: string
+    AdapterInstallMetadata:
+      type: object
+      description: 'Hydrated install block under metadata.install (YAML file, legacy DB row, or defaults)'
+      properties:
+        storage:
+          type: string
+          enum:
+            - yaml
+            - legacy_db
+            - none
+        configFile:
+          type: string
+          nullable: true
+          description: 'Basename of YAML when storage is yaml'
+        configJson:
+          type: object
+          additionalProperties: true
+        contextJson:
+          type: object
+          additionalProperties: true
+        outputProfiles:
+          type: array
+          items:
+            type: string
+        emitEnabled:
+          type: boolean
+        ingestCanonicalEnabled:
+          type: boolean
+        scheduleCron:
+          type: string
+          nullable: true
+        installedAt:
+          type: string
+          format: date-time
+          nullable: true
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+      additionalProperties: true
+    AdapterPackageDto:
+      type: object
+      description: 'Enriched adapter package (DB row + filesystem scan + asset URLs)'
+      properties:
+        id:
+          type: string
+          format: uuid
+        adapterKey:
+          type: string
+        name:
+          type: string
+        version:
+          type: string
+        runtime:
+          type: string
+        adapterType:
+          type: string
+        iotClass:
+          type: string
+          nullable: true
+        status:
+          type: string
+          nullable: true
+        sourceType:
+          type: string
+          nullable: true
+        sourcePath:
+          type: string
+          nullable: true
+        capabilities:
+          type: array
+          items:
+            type: string
+        configSchema:
+          type: object
+          additionalProperties: true
+        permissions:
+          type: object
+          additionalProperties: true
+        metadata:
+          type: object
+          additionalProperties: true
+          properties:
+            install:
+              $ref: '#/components/schemas/AdapterInstallMetadata'
+        ui:
+          type: object
+          additionalProperties: true
+        logoAssetUrl:
+          type: string
+          nullable: true
+        readmeAssetUrl:
+          type: string
+          nullable: true
+        bannerAssetUrl:
+          type: string
+          nullable: true
+      additionalProperties: true
+    IntegrationProviderSyncBody:
+      type: object
+      description: 'Optional scope for ThemeParks / calendar provider sync operations.'
+      properties:
+        destinationId:
+          type: string
+          nullable: true
+        parkId:
+          type: string
+          nullable: true
+        year:
+          type: integer
+          minimum: 2000
+          maximum: 2100
+        month:
+          type: integer
+          minimum: 1
+          maximum: 12
+    IntegrationManualUnsNodeCreate:
+      type: object
+      required:
+        - domain
+        - metric
+      properties:
+        domain:
+          type: string
+        metric:
+          type: string
+        assetSlug:
+          type: string
+          nullable: true
+        assetName:
+          type: string
+          nullable: true
+        entityType:
+          type: string
+          nullable: true
+    IntegrationUnsSparkplugSchemaUpload:
+      type: object
+      required:
+        - entries
+      properties:
+        schemaVersion:
+          type: integer
+          enum:
+            - 1
+          default: 1
+        kind:
+          type: string
+          enum:
+            - smartpark.uns.sparkplug_topics
+          default: smartpark.uns.sparkplug_topics
+        provider:
+          type: string
+          nullable: true
+        externalParkId:
+          type: string
+          nullable: true
+        parkSlug:
+          type: string
+          nullable: true
+        sparkplug:
+          type: object
+          properties:
+            groupId:
+              type: string
+              nullable: true
+            edgeNodeId:
+              type: string
+              nullable: true
+        entries:
+          type: array
+          minItems: 1
+          maxItems: 5000
+          items:
+            type: object
+            required:
+              - domain
+              - assetSlug
+              - metric
+            properties:
+              domain:
+                type: string
+              assetSlug:
+                type: string
+              metric:
+                type: string
+              entityName:
+                type: string
+                nullable: true
+              externalEntityId:
+                type: string
+                nullable: true
+              entityType:
+                type: string
+                nullable: true
+              topicPath:
+                type: string
+                nullable: true
+              sparkplugTopic:
+                type: string
+                nullable: true
+            additionalProperties: true
+    InstallLocalAdapterRequest:
+      type: object
+      required:
+        - adapterKey
+      properties:
+        adapterKey:
+          type: string
+          example: weather_open_meteo
+        name:
+          type: string
+        configJson:
+          type: object
+          additionalProperties: true
+        contextJson:
+          type: object
+          additionalProperties: true
+        outputProfiles:
+          type: array
+          items:
+            type: string
+          example:
+            - SPARKPLUG_JSON
+            - CANONICAL_HISTORIAN
+          description: 'When omitted, server defaults to SPARKPLUG_JSON + CANONICAL_HISTORIAN (Sparkplug MQTT + historian).'
+        emitEnabled:
+          type: boolean
+          default: false
+        ingestCanonicalEnabled:
+          type: boolean
+          default: false
+        scheduleCron:
+          type: string
+          nullable: true
+    PatchInstalledAdapterRequest:
+      type: object
+      description: 'API requires at least one of configJson, contextJson, outputProfiles, emitEnabled, ingestCanonicalEnabled, or scheduleCron (Joi .or).'
+      properties:
+        configJson:
+          type: object
+          additionalProperties: true
+        contextJson:
+          type: object
+          additionalProperties: true
+        outputProfiles:
+          type: array
+          items:
+            type: string
+        emitEnabled:
+          type: boolean
+        ingestCanonicalEnabled:
+          type: boolean
+        scheduleCron:
+          type: string
+          nullable: true
+      minProperties: 1
+    AdapterUninstallResult:
+      type: object
+      properties:
+        adapterKey:
+          type: string
+        removed:
+          type: boolean
+    EnvelopeAdapterPackageOne:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/AdapterPackageDto'
+    EnvelopeInstalledAdapterList:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdapterPackageDto'
+        meta:
+          type: object
+          properties:
+            localIntegrationPackages:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+          additionalProperties: true
+    EnvelopeAdapterUninstall:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/AdapterUninstallResult'
+    MdmJsonObject:
+      type: object
+      additionalProperties: true
+    MdmPark:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        timezone:
+          type: string
+          nullable: true
+        activeFlag:
+          type: boolean
+        futureHints:
+          $ref: '#/components/schemas/MdmJsonObject'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    MdmParkZone:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        parkId:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        sortOrder:
+          type: integer
+        legacyZoneId:
+          type: string
+          format: uuid
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    MdmRideType:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+    MdmRideTemplate:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        rideTypeId:
+          type: string
+          format: uuid
+        code:
+          type: string
+        displayName:
+          type: string
+        defaultProfile:
+          $ref: '#/components/schemas/MdmJsonObject'
+        isSystem:
+          type: boolean
+        rideType:
+          $ref: '#/components/schemas/MdmRideType'
+    MdmRideMaster:
+      type: object
+      description: 'MDM ride with nested operations, capacity, staffing, safety, guest rules, integration, KPIs'
+      properties:
+        id:
+          type: string
+          format: uuid
+        parkId:
+          type: string
+          format: uuid
+        parkZoneId:
+          type: string
+          format: uuid
+        rideTypeId:
+          type: string
+          format: uuid
+        internalRideId:
+          type: string
+          format: uuid
+          nullable: true
+        externalId:
+          type: string
+          nullable: true
+        name:
+          type: string
+        shortName:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        manufacturer:
+          type: string
+          nullable: true
+        model:
+          type: string
+          nullable: true
+        buildYear:
+          type: integer
+          nullable: true
+        commissioningDate:
+          type: string
+          format: date
+          nullable: true
+        lifecycleStatus:
+          type: string
+        activeFlag:
+          type: boolean
+        park:
+          $ref: '#/components/schemas/MdmPark'
+        parkZone:
+          $ref: '#/components/schemas/MdmParkZone'
+        rideType:
+          $ref: '#/components/schemas/MdmRideType'
+        operations:
+          $ref: '#/components/schemas/MdmJsonObject'
+        capacity:
+          $ref: '#/components/schemas/MdmJsonObject'
+        staffing:
+          $ref: '#/components/schemas/MdmJsonObject'
+        safety:
+          $ref: '#/components/schemas/MdmJsonObject'
+        guestRules:
+          $ref: '#/components/schemas/MdmJsonObject'
+        integration:
+          $ref: '#/components/schemas/MdmJsonObject'
+        kpiTargets:
+          $ref: '#/components/schemas/MdmJsonObject'
+        staffRoles:
+          type: array
+          items:
+            $ref: '#/components/schemas/MdmJsonObject'
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/MdmJsonObject'
+      additionalProperties: true
+    MdmParkCreate:
+      type: object
+      required:
+        - code
+        - name
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        timezone:
+          type: string
+          nullable: true
+        activeFlag:
+          type: boolean
+        futureHints:
+          $ref: '#/components/schemas/MdmJsonObject'
+    MdmZoneCreate:
+      type: object
+      required:
+        - code
+        - name
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        sortOrder:
+          type: integer
+        legacyZoneId:
+          type: string
+          format: uuid
+          nullable: true
+    MdmRideTemplateCreate:
+      type: object
+      required:
+        - rideTypeId
+        - code
+        - displayName
+      properties:
+        rideTypeId:
+          type: string
+          format: uuid
+        code:
+          type: string
+        displayName:
+          type: string
+        defaultProfile:
+          $ref: '#/components/schemas/MdmJsonObject'
+        isSystem:
+          type: boolean
+    MdmRideTemplateUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        displayName:
+          type: string
+        defaultProfile:
+          $ref: '#/components/schemas/MdmJsonObject'
+        isSystem:
+          type: boolean
+        rideTypeId:
+          type: string
+          format: uuid
+        code:
+          type: string
+    MdmRideCreate:
+      type: object
+      required:
+        - parkId
+        - parkZoneId
+        - rideTypeId
+        - name
+      properties:
+        parkId:
+          type: string
+          format: uuid
+        parkZoneId:
+          type: string
+          format: uuid
+        rideTypeId:
+          type: string
+          format: uuid
+        internalRideId:
+          type: string
+          format: uuid
+          nullable: true
+        externalId:
+          type: string
+          nullable: true
+        name:
+          type: string
+        shortName:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        manufacturer:
+          type: string
+          nullable: true
+        model:
+          type: string
+          nullable: true
+        buildYear:
+          type: integer
+          nullable: true
+        commissioningDate:
+          type: string
+          format: date
+          nullable: true
+        lifecycleStatus:
+          type: string
+        activeFlag:
+          type: boolean
+        profile:
+          $ref: '#/components/schemas/MdmJsonObject'
+    MdmRideUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        parkId:
+          type: string
+          format: uuid
+        parkZoneId:
+          type: string
+          format: uuid
+        rideTypeId:
+          type: string
+          format: uuid
+        internalRideId:
+          type: string
+          format: uuid
+          nullable: true
+        externalId:
+          type: string
+          nullable: true
+        name:
+          type: string
+        shortName:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        manufacturer:
+          type: string
+          nullable: true
+        model:
+          type: string
+          nullable: true
+        buildYear:
+          type: integer
+          nullable: true
+        commissioningDate:
+          type: string
+          format: date
+          nullable: true
+        lifecycleStatus:
+          type: string
+        activeFlag:
+          type: boolean
+        lifecycleReason:
+          type: string
+          nullable: true
+        operations:
+          $ref: '#/components/schemas/MdmJsonObject'
+        capacity:
+          $ref: '#/components/schemas/MdmJsonObject'
+        staffing:
+          $ref: '#/components/schemas/MdmJsonObject'
+        safety:
+          $ref: '#/components/schemas/MdmJsonObject'
+        guestRules:
+          $ref: '#/components/schemas/MdmJsonObject'
+        integration:
+          $ref: '#/components/schemas/MdmJsonObject'
+        kpi:
+          $ref: '#/components/schemas/MdmJsonObject'
+        kpiTargets:
+          $ref: '#/components/schemas/MdmJsonObject'
+    MdmCloneFromTemplateBody:
+      type: object
+      required:
+        - parkZoneId
+        - name
+      properties:
+        parkZoneId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        externalId:
+          type: string
+          nullable: true
+        shortName:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+    EnvelopeMdmParks:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/MdmPark'
+    EnvelopeMdmParkOne:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/MdmPark'
+    EnvelopeMdmZones:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/MdmParkZone'
+    EnvelopeMdmZoneOne:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/MdmParkZone'
+    EnvelopeMdmRideTypes:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/MdmRideType'
+    EnvelopeMdmRideTemplates:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/MdmRideTemplate'
+    EnvelopeMdmRideTemplateOne:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/MdmRideTemplate'
+    EnvelopeMdmRideList:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/MdmRideMaster'
+    EnvelopeMdmRideDetail:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/MdmRideMaster'
+    EnvelopeMdmCapacityModel:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/MdmJsonObject'
+    EnvelopeMdmStaffingModel:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/MdmJsonObject'
+    RideMasterExtensionsSignalEntry:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        mlEligible:
+          type: boolean
+        boardEligible:
+          type: boolean
+    RideMasterExtensionsPatch:
+      type: object
+      description: 'Partial extensions update (merged server-side). At least one property required.'
+      minProperties: 1
+      properties:
+        schemaVersion:
+          type: integer
+          minimum: 1
+        domains:
+          type: array
+          items:
+            type: string
+            enum:
+              - operations
+              - queue
+              - green
+              - maintenance
+              - weather
+              - guestflow
+              - staffing
+              - safety
+        capabilities:
+          type: object
+          properties:
+            hasQueueSignal:
+              type: boolean
+            hasCycleSignal:
+              type: boolean
+            hasEnergyMetering:
+              type: boolean
+            supportsGreenOptimization:
+              type: boolean
+        signals:
+          type: object
+          additionalProperties: true
+          description: 'Signal entries keyed by domain.metric; null removes a key when not using replaceSignals'
+        replaceSignals:
+          type: boolean
+    RideMasterExtensionsRead:
+      type: object
+      properties:
+        entityType:
+          type: string
+          description: 'MDM ride vs platform park asset'
+          enum:
+            - ride
+            - park_asset
+        entityId:
+          type: string
+          format: uuid
+        domains:
+          type: array
+          items:
+            type: string
+        signals:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/RideMasterExtensionsSignalEntry'
+        capabilities:
+          type: object
+          properties:
+            hasQueueSignal:
+              type: boolean
+            hasCycleSignal:
+              type: boolean
+            hasEnergyMetering:
+              type: boolean
+            supportsGreenOptimization:
+              type: boolean
+    EnvelopeRideMasterExtensionsRead:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/RideMasterExtensionsRead'
+    PlatformPark:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        timezone:
+          type: string
+          nullable: true
+        externalSource:
+          type: string
+        externalEntityId:
+          type: string
+          nullable: true
+    PlatformAsset:
+      type: object
+      additionalProperties: true
+    PlatformObservation:
+      type: object
+      additionalProperties: true
+    RideMasterDataPatch:
+      type: object
+      minProperties: 1
+      properties:
+        capacityPph:
+          type: integer
+          nullable: true
+        theoreticalCapacityPph:
+          type: integer
+          nullable: true
+        dispatchIntervalSec:
+          type: integer
+          nullable: true
+        cycleTimeSec:
+          type: integer
+          nullable: true
+        seatsPerCycle:
+          type: integer
+          nullable: true
+        trainsCount:
+          type: integer
+          nullable: true
+        rideCategory:
+          type: string
+          nullable: true
+        minStaff:
+          type: integer
+          nullable: true
+        normalStaff:
+          type: integer
+          nullable: true
+        peakStaff:
+          type: integer
+          nullable: true
+        operatorMin:
+          type: integer
+          nullable: true
+          description: 'Legacy alias → minStaff'
+        operatorStandard:
+          type: integer
+          nullable: true
+          description: 'Legacy alias → normalStaff'
+        operatorPeak:
+          type: integer
+          nullable: true
+          description: 'Legacy alias → peakStaff'
+        weatherSensitive:
+          type: boolean
+        rainSensitive:
+          type: boolean
+        windLimitKmh:
+          type: number
+          nullable: true
+        minHeightCm:
+          type: integer
+          nullable: true
+        maxHeightCm:
+          type: integer
+          nullable: true
+        thrillLevel:
+          type: integer
+          nullable: true
+        manufacturer:
+          type: string
+          nullable: true
+        buildYear:
+          type: integer
+          nullable: true
+        plcType:
+          type: string
+          nullable: true
+        maintenanceClass:
+          type: string
+          nullable: true
+        targets:
+          type: object
+          nullable: true
+          properties:
+            targetAvailabilityPct:
+              type: number
+              nullable: true
+            targetWaitTimeMin:
+              type: integer
+              nullable: true
+            targetUtilizationPct:
+              type: number
+              nullable: true
+            targetOeePct:
+              type: number
+              nullable: true
+            revenuePriority:
+              type: string
+              nullable: true
+    ThemeParksSyncResult:
+      type: object
+      properties:
+        parkId:
+          type: string
+          format: uuid
+        zoneId:
+          type: string
+          format: uuid
+        assetsUpserted:
+          type: integer
+        parentsLinked:
+          type: integer
+        observationsInserted:
+          type: integer
+        mqttPublishes:
+          type: integer
+        externalParkId:
+          type: string
+          description: 'ThemeParks.wiki park UUID when sync used Integration settings'
+    EnvelopePlatformParks:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlatformPark'
+    EnvelopePlatformAssets:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlatformAsset'
+    EnvelopePlatformAssetOne:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/PlatformAsset'
+    AssetRuntimeOverride:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        assetId:
+          type: string
+          format: uuid
+        payload:
+          type: object
+          additionalProperties: true
+        validFrom:
+          type: string
+          format: date-time
+          nullable: true
+        validTo:
+          type: string
+          format: date-time
+          nullable: true
+        active:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    AssetRuntimeOverrideCreate:
+      type: object
+      required:
+        - payload
+      properties:
+        payload:
+          type: object
+          additionalProperties: true
+        validFrom:
+          type: string
+          format: date-time
+          nullable: true
+        validTo:
+          type: string
+          format: date-time
+          nullable: true
+        active:
+          type: boolean
+          default: true
+    AssetRuntimeOverridePatch:
+      type: object
+      minProperties: 1
+      properties:
+        payload:
+          type: object
+          additionalProperties: true
+        validFrom:
+          type: string
+          format: date-time
+          nullable: true
+        validTo:
+          type: string
+          format: date-time
+          nullable: true
+        active:
+          type: boolean
+    EnvelopeAssetRuntimeOverrides:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssetRuntimeOverride'
+    EnvelopeAssetRuntimeOverrideOne:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/AssetRuntimeOverride'
+    EnvelopePlatformObservations:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlatformObservation'
+    IntegrationFeatureFlags:
+      type: object
+      properties:
+        adapterDiscoverySpyEnabled:
+          type: boolean
+          description: 'Mirrors env ADAPTER_DISCOVERY_SPY_ENABLED'
+        mqttEnforceCapabilities:
+          type: boolean
+          description: 'Mirrors env MQTT_ENFORCE_CAPABILITIES (reserved)'
+        mqttCapabilityGuardMode:
+          type: string
+          enum:
+            - off
+            - warn_only
+            - enforce
+          description: 'Mirrors env MQTT_CAPABILITY_GUARD_MODE (Phase 13)'
+    EnvelopeIntegrationFeatureFlags:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/IntegrationFeatureFlags'
+    UnsSpyDiscoveryEvent:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        classification:
+          type: string
+        topicPath:
+          type: string
+        mqttInboundMessageId:
+          type: string
+          format: uuid
+          nullable: true
+        details:
+          type: object
+          additionalProperties: true
+          description: 'Adapter rows include `source=adapter`, `externalEntityId`, `reviewStatus`, etc.'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    EnvelopeUnsSpyDiscoveryEvents:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            total:
+              type: integer
+            limit:
+              type: integer
+            offset:
+              type: integer
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/UnsSpyDiscoveryEvent'
+    UnsPagedListEnvelopeData:
+      type: object
+      description: 'Common pagination wrapper for UNS registry, MQTT unknown inbox, and UNS topic proposals.'
+      properties:
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+        items:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    EnvelopeUnsPagedObjects:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/UnsPagedListEnvelopeData'
+    UnsRegistryMirrorSummary:
+      type: object
+      properties:
+        registrySource:
+          type: string
+          example: MIRRORED_FROM_LEGACY
+        counts:
+          type: object
+          additionalProperties: true
+          description: 'Typical keys include `entities`, `mappings`, `topics`, `metadata`, `signalCatalog`, `rideSignalCapabilities`, `sparkplugMetricDefinitions`.'
+        lastMirroredAt:
+          type: string
+          format: date-time
+          nullable: true
+    EnvelopeUnsRegistryMirrorSummary:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/UnsRegistryMirrorSummary'
+    UnsHierarchyImportBody:
+      type: object
+      required:
+        - schemaVersion
+        - kind
+      properties:
+        schemaVersion:
+          type: integer
+          enum:
+            - 1
+        kind:
+          type: string
+          enum:
+            - smartpark.uns.hierarchy
+        parkId:
+          type: string
+          nullable: true
+        exportedAt:
+          type: string
+          nullable: true
+        roots:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    UnsHierarchyExportDocument:
+      allOf:
+        -
+          $ref: '#/components/schemas/UnsHierarchyImportBody'
+        -
+          type: object
+          properties:
+            exportedAt:
+              type: string
+              format: date-time
+    EnvelopeUnsHierarchyImportSummary:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          additionalProperties: true
+          description: 'Import or dry-run summary (`mode`, `created`, `updated`, `skippedLocked`; preview paths may include `dryRun`, `preview`).'
+    EnvelopeUnsMqttLiveEvents:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            events:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+    EnvelopeUnsMqttLiveStatus:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            mqtt:
+              type: object
+              additionalProperties: true
+            buffer:
+              type: object
+              additionalProperties: true
+            adapterSimulationActive:
+              type: boolean
+    EnvelopeUnsMqttLiveTestPublish:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          additionalProperties: true
+    UnsSpyDiscoveryApproveRequest:
+      type: object
+      required:
+        - mapToExistingEntityId
+      properties:
+        createEntity:
+          type: boolean
+          description: 'Phase 12 — unsupported when true (returns 422)'
+        mapToExistingEntityId:
+          type: string
+          format: uuid
+          description: 'Target `park_assets.asset_id` for a ride asset'
+        applyTemplateKey:
+          type: string
+          nullable: true
+          example: RIDE_DEFAULT_V1
+        createMapping:
+          type: boolean
+          default: true
+          description: 'Upsert `external_entity_mappings` row'
+    EnvelopeUnsSpyDiscoveryApproveResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            eventId:
+              type: string
+              format: uuid
+            mappedEntityId:
+              type: string
+              format: uuid
+            templateApplied:
+              type: boolean
+            preparedUnsTopics:
+              type: object
+              properties:
+                created:
+                  type: integer
+                updated:
+                  type: integer
+    EnvelopeUnsSpyDiscoveryActionResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            eventId:
+              type: string
+              format: uuid
+            reviewStatus:
+              type: string
+              enum:
+                - REJECTED
+                - IGNORED
+    UnsSpyMqttProposalApproveRequest:
+      type: object
+      required:
+        - rideAssetId
+        - signalCatalogId
+        - signalSource
+      properties:
+        rideAssetId:
+          type: string
+          format: uuid
+          description: 'Target ride `park_assets.asset_id`'
+        signalCatalogId:
+          type: string
+          format: uuid
+          description: '`signal_catalog.id` for the metric (must match TPUNS metric segment when proposal is TPUNS)'
+        signalSource:
+          type: string
+          enum:
+            - NOT_AVAILABLE
+            - MASTER_DATA
+            - MANUAL
+            - ADAPTER
+            - MQTT_EDGE
+            - SIMULATION
+            - ML
+          description: 'Stored on `ride_signal_capabilities.capability_json.signalSource`'
+        valueType:
+          type: string
+          maxLength: 64
+          description: 'Optional value type hint (default number)'
+        activatePrepared:
+          type: boolean
+          default: true
+          description: 'When true, activates prepared UNS registry topics and Sparkplug metrics eligible for the capability sources'
+    UnsSpyMqttProposalRejectRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          nullable: true
+          description: 'Optional operator note stored on proposal payload snapshot'
+    EnvelopeUnsSpyMqttProposalApproveResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            proposalId:
+              type: string
+              format: uuid
+            discoveryEventId:
+              type: string
+              format: uuid
+            rideAssetId:
+              type: string
+              format: uuid
+            signalCatalogId:
+              type: string
+              format: uuid
+            signalSource:
+              type: string
+            canonicalTopicPath:
+              type: string
+            registryTopicId:
+              type: string
+              format: uuid
+              nullable: true
+            registryTopicActive:
+              type: boolean
+            prepareUnsTopics:
+              type: object
+              additionalProperties: true
+            prepareSparkplug:
+              type: object
+              additionalProperties: true
+            activatedUns:
+              type: object
+              additionalProperties: true
+            activatedSpark:
+              type: object
+              additionalProperties: true
+    EnvelopeUnsSpyMqttProposalRejectResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            proposalId:
+              type: string
+              format: uuid
+            discoveryEventId:
+              type: string
+              format: uuid
+            reviewStatus:
+              type: string
+              enum:
+                - REJECTED
+    EnvelopeAdapterDiscoveryScanResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            created:
+              type: integer
+            updated:
+              type: integer
+            skipped:
+              type: boolean
+            items:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+    EnvelopeThemeParksSyncResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/ThemeParksSyncResult'
+    EnvelopeRideTemplates:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/MdmJsonObject'
+    EnvelopeStaffingTemplates:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/MdmJsonObject'
+    EnvelopeMaintenanceTemplates:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/MdmJsonObject'

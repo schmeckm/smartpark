@@ -1,0 +1,140 @@
+/registry-publisher/status:
+  get:
+    tags:
+      - Admin
+    summary: 'Registry publisher pipeline status'
+    description: 'Requires **`integrations.read`** or **`rides.read`**.'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+/registry-publisher/health:
+  get:
+    tags:
+      - Admin
+    summary: 'Registry publisher health snapshot'
+    description: 'Requires **`integrations.read`** or **`rides.read`**.'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+/registry-publisher/events:
+  get:
+    tags:
+      - Admin
+    summary: 'List registry publisher events'
+    description: 'Requires **`integrations.read`** or **`rides.read`**. Optional **`rideAssetId`**, **`limit`** (1–200).'
+    parameters:
+      -
+        in: query
+        name: rideAssetId
+        schema:
+          type: string
+          format: uuid
+      -
+        in: query
+        name: limit
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+'/registry-publisher/rides/{id}/dry-run':
+  post:
+    tags:
+      - Admin
+    summary: 'Dry-run registry publish for one ride asset'
+    description: 'Requires **`integrations.read`** or **`rides.read`**.'
+    parameters:
+      -
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+'/registry-publisher/rides/{id}/publish-once':
+  post:
+    tags:
+      - Admin
+    summary: 'One-shot registry publish for one ride asset'
+    description: 'Requires **`integrations.manage`** or **`rides.update`**.'
+    parameters:
+      -
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+'/registry-publisher/rides/{id}/disable-pilot':
+  post:
+    tags:
+      - Admin
+    summary: 'Disable registry publisher pilot for one ride asset'
+    description: 'Requires **`integrations.manage`** or **`rides.update`**.'
+    parameters:
+      -
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden

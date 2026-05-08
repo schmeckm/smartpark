@@ -1,0 +1,21 @@
+/weather/current:
+  get:
+    tags:
+      - Wave2
+    summary: 'Latest weather observation'
+    responses:
+      '200':
+        description: OK
+/weather/observations:
+  post:
+    tags:
+      - Wave2
+    summary: 'Ingest a weather observation (API)'
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/WeatherCreate'
+    responses:
+      '201':
+        description: Created

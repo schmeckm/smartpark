@@ -32,9 +32,16 @@
     "validate:openapi:parse": "node scripts/validate-openapi-parse.mjs",
     "validate:openapi:route-drift": "node scripts/check-openapi-route-drift.mjs",
     "check:openapi-drift": "node scripts/check-openapi-drift.mjs",
-    "governance:ci": "npm run check:openapi-drift",
-    "test": "node scripts/verify-rbac-sync.js && node --test src/modules/uns/topic-layout/topic-layout.test.js src/services/ride-master-extensions.service.test.js src/services/addon-board-widget-source.service.test.js src/services/signal-preview.service.test.js src/services/addon-board-ride-custom-widgets.service.test.js src/controllers/addon-board.controller.test.js src/controllers/ride-master-extensions.controller.test.js src/validators/ride-master-extensions-patch.validator.test.js src/validators/addon-board-widget-source.validator.test.js src/validators/addon-board-custom-widget-lifecycle.validator.test.js src/modules/uns/theme-parks-entity-domain.service.test.js src/services/platform-settings.service.test.js src/services/ml-factor-current-resolver.service.test.js src/services/ml-forecast-layer.service.test.js src/services/ml/ml-ride-wait-prediction.service.test.js src/services/ml/addon-board-ml-bridge.service.test.js src/services/operations/operations-facts.service.test.js src/services/ai-studio-feature-draft.service.test.js scripts/list-express-routes.test.mjs src/services/attraction-oee-simulator.service.test.js src/services/geo-pressure-scoring.test.js src/services/geo-flow-simulator.service.test.js src/services/sqdc-board.service.test.js src/utils/app-release.util.test.js src/services/uns-spy.service.test.js src/services/mqtt-capability-guard.service.test.js src/services/approved-operational-signal.service.test.js src/services/ride-signal-capability.sparkplug-scope.test.js src/services/ride-signal-capability.activation.test.js src/services/ride-signal-capability.service.test.js src/services/uns-mqtt-proposal-approval.service.test.js src/services/registry-publisher.service.test.js src/services/sparkplug-payload-builder.unit.test.js src/services/operations-facts.service.test.js src/services/registry-signal-deprecation.service.test.js src/services/uns-governance-safety.static.test.js",
-    "test:integration": "node --test src/integration-tests/uns/uns-api.integration.test.js src/integration-tests/uns/uns-mqtt-spy.integration.test.js src/integration-tests/uns-spy/uns-spy-adapter-discovery.integration.test.js src/integration-tests/ride-master-extensions/ride-master-extensions-http.integration.test.js",
+    "check:route-duplicates": "node scripts/check-route-duplicates.mjs",
+    "check:root-mount-baseline": "node scripts/check-root-mount-baseline.mjs",
+    "check:adapter-keys-baseline": "node scripts/check-adapter-keys-baseline.mjs",
+    "build:openapi": "node scripts/build-openapi.mjs",
+    "check:openapi-build": "node scripts/build-openapi.mjs --check",
+    "governance:ci": "npm run check:openapi-drift && npm run check:route-duplicates && npm run check:root-mount-baseline && npm run check:adapter-keys-baseline && npm run check:openapi-build",
+    "test": "node scripts/verify-rbac-sync.js && node --test --test-reporter=spec \"src/!(integration-tests)/**/*.test.js\" \"scripts/**/*.test.mjs\" \"tools/**/*.test.js\"",
+    "test:integration": "node --test --test-reporter=spec \"src/integration-tests/**/*.test.js\"",
+    "test:watch": "node --test --watch \"src/!(integration-tests)/**/*.test.js\"",
+    "lint": "eslint .",
     "test:e2e": "npm run test:e2e --prefix admin-dashboard"
   },
   "engines": {
@@ -43,6 +50,7 @@
   "dependencies": {
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
+    "csv-parse": "^5.5.6",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "helmet": "^8.0.0",
@@ -51,8 +59,6 @@
     "jsonwebtoken": "^9.0.3",
     "mqtt": "^5.10.3",
     "multer": "^1.4.5-lts.1",
-    "csv-parse": "^5.5.6",
-    "xlsx": "^0.18.5",
     "pg": "^8.13.1",
     "pg-hstore": "^2.3.4",
     "pino": "^9.6.0",
@@ -61,9 +67,12 @@
     "sequelize-cli": "^6.6.2",
     "socket.io": "^4.8.1",
     "swagger-ui-express": "^5.0.1",
+    "xlsx": "^0.18.5",
     "yamljs": "^0.3.0"
   },
   "devDependencies": {
+    "eslint": "^9.39.4",
+    "globals": "^17.6.0",
     "nodemon": "^3.1.9",
     "proxyquire": "^2.1.3",
     "supertest": "^7.1.0"

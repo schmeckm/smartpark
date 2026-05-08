@@ -17,7 +17,7 @@ Scope: API-JSON, Raw/Ingest, Canonical, Platform Master Data, Live State, MQTT, 
 - optional monatlich: `GET /v1/entity/{id}/schedule/{year}/{month}`
 
 Code-Referenzen:  
-`src/integrations/adapters/themeparks-wiki.adapter.js`,  
+`src/integrations/adapter-packages/themeparks_wiki/client.js`,  
 `src/modules/adapters/themeparks/themeparks-sync.service.js`
 
 ### 9.2 Park-/Entity-Struktur (erwartet)
@@ -518,7 +518,7 @@ Payload:
 ## Relevante Code-Referenzen
 
 - Adapter/API Normalisierung:  
-  `src/integrations/adapters/themeparks-wiki.adapter.js`
+  `src/integrations/adapter-packages/themeparks_wiki/client.js`
 - Platform Sync (Master + Live + MQTT):  
   `src/modules/adapters/themeparks/themeparks-sync.service.js`  
   `src/modules/adapters/themeparks/themeparks-mapper.js`  

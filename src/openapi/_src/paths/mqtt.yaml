@@ -1,0 +1,158 @@
+/mqtt/status:
+  get:
+    tags:
+      - Wave2
+    summary: 'MQTT connector status'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                  example: true
+                data:
+                  $ref: '#/components/schemas/MqttStatus'
+/mqtt/capability-guard/status:
+  get:
+    tags:
+      - Wave2
+    summary: 'MQTT capability guard status (Phase 13)'
+    description: 'Requires **integrations.read** OR **rides.read**. Returns mode, pilot allow-list size, and inbound decision counts (24h).'
+    security:
+      -
+        bearerAuth: []
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                data:
+                  type: object
+                  properties:
+                    mode:
+                      type: string
+                      enum:
+                        - off
+                        - warn_only
+                        - enforce
+                    allowedRideCount:
+                      type: integer
+                    lastBlockedAt:
+                      type: string
+                      format: date-time
+                      nullable: true
+                    blockedLast24h:
+                      type: integer
+                    warnedLast24h:
+                      type: integer
+                    allowedLast24h:
+                      type: integer
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+/mqtt/inbound:
+  get:
+    tags:
+      - Wave2
+    summary: 'List raw inbound MQTT rows'
+    description: 'Requires **integrations.read** OR **rides.read**.'
+    security:
+      -
+        bearerAuth: []
+    parameters:
+      -
+        in: query
+        name: limit
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+      -
+        in: query
+        name: offset
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+      -
+        in: query
+        name: topicPrefix
+        schema:
+          type: string
+          maxLength: 500
+      -
+        in: query
+        name: spyClassification
+        schema:
+          type: string
+          maxLength: 40
+      -
+        in: query
+        name: capabilityDecision
+        schema:
+          type: string
+          enum:
+            - ALLOW
+            - WARN
+            - BLOCK
+            - SKIP
+    responses:
+      '200':
+        description: OK
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+/mqtt/inbound/unknown:
+  get:
+    tags:
+      - UNS
+    summary: 'List UNS Spy discovery rows for unknown / conflict classifications'
+    description: 'Requires **integrations.read** OR **rides.read**. Returns paged `uns_discovery_events` where `classification` is unknown-topic, unknown-signal, or conflict (same store as UNS Spy), optionally including linked `mqtt_inbound_message` rows.'
+    security:
+      -
+        bearerAuth: []
+    parameters:
+      -
+        in: query
+        name: limit
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+      -
+        in: query
+        name: offset
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+      -
+        in: query
+        name: topicPrefix
+        schema:
+          type: string
+          maxLength: 500
+    responses:
+      '200':
+        description: 'Paged discovery events (UNS Spy store)'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeUnsPagedObjects'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden

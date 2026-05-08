@@ -1,5 +1,5 @@
 const Joi = require('joi');
-const { DEFAULT_INSTALL_OUTPUT_PROFILES } = require('../services/adapter-output-profile-names');
+const { DEFAULT_INSTALL_OUTPUT_PROFILES } = require('../modules/integrations/adapter-framework/adapter-output-profile-names');
 
 const providerParamsSchema = Joi.object({
   provider: Joi.string().required(),

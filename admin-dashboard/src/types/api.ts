@@ -151,7 +151,7 @@ export interface ProviderAdapterInfo {
   baseUrl: string
   capabilities: Record<string, boolean>
   config?: Record<string, unknown> | null
-  /** True when `src/integrations/adapter-packages` (or legacy `src/adapters/packages`) exposes a package runtime for this provider key (poll/health/emit path). Core integration lists/sync may still work via the built-in registry adapter. */
+  /** True when `src/integrations/adapter-packages` exposes a package runtime for this provider key (poll/health/emit path). Core integration lists/sync may still work via the built-in registry adapter. */
   runtimePackageAvailable?: boolean
 }
 

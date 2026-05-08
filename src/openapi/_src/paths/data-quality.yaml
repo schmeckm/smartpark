@@ -1,0 +1,24 @@
+/data-quality/issues:
+  get:
+    tags:
+      - Wave2
+    summary: 'List data quality issues'
+    responses:
+      '200':
+        description: OK
+'/data-quality/issues/{id}/resolve':
+  parameters:
+    -
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+        format: uuid
+  patch:
+    tags:
+      - Wave2
+    summary: 'Mark issue resolved'
+    responses:
+      '200':
+        description: OK

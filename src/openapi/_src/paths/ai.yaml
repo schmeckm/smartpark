@@ -1,0 +1,1649 @@
+/ai/health:
+  get:
+    tags:
+      - AI
+    summary: 'AI module health'
+    description: 'Liveness and sampling config (unauthenticated, no RBAC)'
+    security: []
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeAiHealth'
+/ai/pipeline-health:
+  get:
+    tags:
+      - AI
+    summary: 'Last AI full-pipeline run and scheduler config'
+    description: 'Needs `ai.read`. Optional smoke hints from `data/ai-smoke-status.json` when present.'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                data:
+                  type: object
+                  additionalProperties: true
+/ai/forecasts/refresh:
+  post:
+    tags:
+      - AI
+    summary: 'Sample zones and regenerate baseline crowd forecasts'
+    description: 'Needs permission `ai.refresh`'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeAiRefresh'
+/ai/forecasts:
+  get:
+    tags:
+      - AI
+    summary: 'List current forecasts'
+    description: 'Optional filters; needs `ai.read`'
+    parameters:
+      -
+        in: query
+        name: horizonMinutes
+        schema:
+          type: integer
+          minimum: 1
+      -
+        in: query
+        name: subjectType
+        schema:
+          type: string
+          enum:
+            - PARK
+            - ZONE
+            - RIDE
+      -
+        in: query
+        name: targetMetric
+        schema:
+          type: string
+          enum:
+            - CROWD_LEVEL
+            - WAIT_TIME
+            - STAFF_DEMAND
+      -
+        in: query
+        name: limit
+        schema:
+          type: integer
+          default: 100
+          minimum: 1
+          maximum: 200
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeForecasts'
+/ai/insights/summary:
+  get:
+    tags:
+      - AI
+    summary: 'Top hotspot summary (60 min baseline)'
+    description: 'Needs `ai.read`'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeAiInsights'
+/ai/pipeline-runs:
+  get:
+    tags:
+      - AI
+    summary: 'Recent AI pipeline / ingestion runs (admin diagnostics)'
+    description: 'Needs **`ai.read`**. Optional **`limit`** (1–100, default 25).'
+    parameters:
+      -
+        in: query
+        name: limit
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 25
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+/ai/studio/catalog:
+  get:
+    tags:
+      - AI
+    summary: 'ML Studio catalog (features, targets, algorithms)'
+    description: 'Needs **`ai.read`**.'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+/ai/studio/dataset-stats:
+  get:
+    tags:
+      - AI
+    summary: 'ML Studio dataset statistics for an entity'
+    description: 'Needs **`ai.read`**, **`X-Park-Id`**, and merged query validation (`entityType`, optional `entityId`, `dataset`).'
+    parameters:
+      -
+        in: query
+        name: entityType
+        required: true
+        schema:
+          type: string
+          description: 'e.g. RIDE'
+          park_asset: 'per server allowlist'
+      -
+        in: query
+        name: entityId
+        schema:
+          type: string
+          format: uuid
+      -
+        in: query
+        name: dataset
+        schema:
+          type: string
+          enum:
+            - FEATURE_STORE
+            - SANDBOX
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '422':
+        description: 'Validation error'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+/ai/studio/models:
+  get:
+    tags:
+      - AI
+    summary: 'List ML Studio trained model rows (park-scoped)'
+    description: 'Needs **`ai.read`** and **`X-Park-Id`**. Supports filters `entityType`, `targetVariable`, `modelScope`, `activeOnly`, `limit`.'
+    parameters:
+      -
+        in: query
+        name: entityType
+        schema:
+          type: string
+      -
+        in: query
+        name: targetVariable
+        schema:
+          type: string
+      -
+        in: query
+        name: modelScope
+        schema:
+          type: string
+          enum:
+            - entity
+            - category
+            - park
+      -
+        in: query
+        name: activeOnly
+        schema:
+          type: string
+          enum:
+            - 'true'
+            - 'false'
+      -
+        in: query
+        name: limit
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 500
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+'/ai/studio/models/{id}':
+  get:
+    tags:
+      - AI
+    summary: 'Get one ML Studio model by id'
+    description: 'Needs **`ai.read`** and **`X-Park-Id`**.'
+    parameters:
+      -
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '404':
+        description: 'Not found'
+/ai/studio/models/train:
+  post:
+    tags:
+      - AI
+    summary: 'Train an ML Studio model (sandbox or feature-store dataset)'
+    description: 'Needs **`ai.refresh`** and **`X-Park-Id`**. Body is validated server-side (dataset, entityType, targetVariable, features, strategy, algorithm). See `ai-studio.validators.js`.'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AiStudioTrainRequest'
+    responses:
+      '200':
+        description: 'OK (or 201 depending on implementation)'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '422':
+        description: 'Validation / business rules'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+'/ai/studio/models/{id}/activate':
+  patch:
+    tags:
+      - AI
+    summary: 'Activate or deactivate one ML Studio model'
+    description: 'Needs **`ai.refresh`** and **`X-Park-Id`**. Path **`id`** and body **`activeFlag`** required.'
+    parameters:
+      -
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - activeFlag
+            properties:
+              activeFlag:
+                type: boolean
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '404':
+        description: 'Not found'
+      '422':
+        description: 'Validation error'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+/ai/studio/predict:
+  post:
+    tags:
+      - AI
+    summary: 'ML Studio dry-run prediction from manual features or latest snapshot'
+    description: 'Needs **`ai.read`** and **`X-Park-Id`**. Validated per `predictBody` in `ai-studio.validators.js`.'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AiStudioPredictRequest'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '422':
+        description: 'Validation error'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+/ai/forecast-accuracy/zone-crowd:
+  get:
+    tags:
+      - AI
+    summary: 'Zone crowd forecast accuracy metrics'
+    description: 'Needs **`ai.read`**. Query **`days`** (1–90), **`horizonMinutes`** (15, 60, or 180), optional **`limitForecasts`**.'
+    parameters:
+      -
+        in: query
+        name: days
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 90
+          default: 7
+      -
+        in: query
+        name: horizonMinutes
+        schema:
+          type: integer
+          enum:
+            - 15
+            - 60
+            - 180
+          default: 60
+      -
+        in: query
+        name: limitForecasts
+        schema:
+          type: integer
+          minimum: 50
+          maximum: 800
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+/ai/timeseries/rides-current:
+  get:
+    tags:
+      - AI
+    summary: 'Current ride wait snapshot series for the active park'
+    description: 'Needs **`ai.read`** and **`X-Park-Id`**. Query **`hours`** (1–168, default 24).'
+    parameters:
+      -
+        in: query
+        name: hours
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 168
+          default: 24
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+/ai/training-dataset:
+  get:
+    tags:
+      - AI
+    summary: 'Sample rows from the training feature dataset (park-scoped)'
+    description: 'Needs **`ai.read`** and **`X-Park-Id`**. Query **`target`** (`queue_time_15m` \| `queue_time_60m` \| `queue_time_120m`), **`limit`** (1–2000).'
+    parameters:
+      -
+        in: query
+        name: target
+        schema:
+          type: string
+          enum:
+            - queue_time_15m
+            - queue_time_60m
+            - queue_time_120m
+          default: queue_time_15m
+      -
+        in: query
+        name: limit
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 2000
+          default: 400
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+'/ai/timeseries/rides/{assetId}':
+  get:
+    tags:
+      - AI
+    summary: 'Ride wait time series for one asset'
+    description: 'Needs **`ai.read`** and **`X-Park-Id`**. Query **`from`** / **`to`** ISO datetimes required; optional **`includeContext`** (boolean).'
+    parameters:
+      -
+        in: path
+        name: assetId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      -
+        in: query
+        name: from
+        required: true
+        schema:
+          type: string
+          format: date-time
+      -
+        in: query
+        name: to
+        required: true
+        schema:
+          type: string
+          format: date-time
+      -
+        in: query
+        name: includeContext
+        schema:
+          type: boolean
+          default: true
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '422':
+        description: 'Validation error'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+/ai/timeseries/calendar:
+  post:
+    tags:
+      - AI
+    summary: 'Upsert per-day park calendar context (holidays, school breaks)'
+    description: 'Needs **`ai.refresh`** and **`X-Park-Id`**.'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AiParkCalendarUpsertBody'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '422':
+        description: 'Validation error'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+/ai/factors/config:
+  get:
+    tags:
+      - AI
+    summary: 'AI factor configuration envelope (defaults and metadata)'
+    description: 'Needs **`ai.read`**.'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+/ai/global-factors:
+  get:
+    tags:
+      - AI
+    summary: 'List global ML factors'
+    description: 'Needs **`ai.read`**.'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+  post:
+    tags:
+      - AI
+    summary: 'Create a global ML factor'
+    description: 'Needs **`ai.refresh`**.'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AiGlobalFactorCreateBody'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '422':
+        description: 'Validation error'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+'/ai/global-factors/{id}':
+  patch:
+    tags:
+      - AI
+    summary: 'Patch one global ML factor'
+    description: 'Needs **`ai.refresh`**. At least one mutable field required.'
+    parameters:
+      -
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AiGlobalFactorPatchBody'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '404':
+        description: 'Not found'
+      '422':
+        description: 'Validation error'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+  delete:
+    tags:
+      - AI
+    summary: 'Delete one global ML factor'
+    description: 'Needs **`ai.refresh`**.'
+    parameters:
+      -
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '404':
+        description: 'Not found'
+'/ai/parks/{parkId}/factors':
+  get:
+    tags:
+      - AI
+    summary: 'List park-level factor overrides for ML'
+    description: 'Needs **`ai.read`** and **`X-Park-Id`**. `parkId` must match park context.'
+    parameters:
+      -
+        in: path
+        name: parkId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+  patch:
+    tags:
+      - AI
+    summary: 'Replace park factor weight/value overrides'
+    description: 'Needs **`ai.refresh`** and **`X-Park-Id`**. Body requires **`factors`** array.'
+    parameters:
+      -
+        in: path
+        name: parkId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AiParkFactorsPatchBody'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '422':
+        description: 'Validation error'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+/ai/ml-profiles:
+  get:
+    tags:
+      - AI
+    summary: 'List ML profile templates'
+    description: 'Needs **`ai.read`**. Optional query **`entityType`**, **`activeFlag`**, **`search`**.'
+    parameters:
+      -
+        in: query
+        name: entityType
+        schema:
+          type: string
+          maxLength: 32
+      -
+        in: query
+        name: activeFlag
+        schema:
+          type: boolean
+      -
+        in: query
+        name: search
+        schema:
+          type: string
+          maxLength: 120
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+  post:
+    tags:
+      - AI
+    summary: 'Create an ML profile template'
+    description: 'Needs **`ai.refresh`**. See `mlProfileBody` in `ml-ai.validators.js` for full field set.'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AiMlProfileCreateBody'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '422':
+        description: 'Validation error'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+'/ai/ml-profiles/{id}':
+  patch:
+    tags:
+      - AI
+    summary: 'Patch one ML profile template'
+    description: 'Needs **`ai.refresh`**. At least one field required.'
+    parameters:
+      -
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AiMlProfilePatchBody'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '404':
+        description: 'Not found'
+      '422':
+        description: 'Validation error'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+  delete:
+    tags:
+      - AI
+    summary: 'Delete one ML profile template'
+    description: 'Needs **`ai.refresh`**.'
+    parameters:
+      -
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '404':
+        description: 'Not found'
+'/ai/assets/{assetId}/effective-ml-config':
+  get:
+    tags:
+      - AI
+    summary: 'Resolved effective ML config for a platform asset'
+    description: 'Needs **`ai.read`** and **`X-Park-Id`**.'
+    parameters:
+      -
+        in: path
+        name: assetId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '404':
+        description: 'Asset not found'
+'/ai/assets/{assetId}/ml-overrides':
+  patch:
+    tags:
+      - AI
+    summary: 'Patch structured ML override ops for an asset'
+    description: 'Needs **`ai.refresh`** and **`X-Park-Id`**. Body requires **`ops`** array.'
+    parameters:
+      -
+        in: path
+        name: assetId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AiAssetMlOverridesPatchBody'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '404':
+        description: 'Not found'
+      '422':
+        description: 'Validation error'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+'/ai/assets/{assetId}/ml-profile':
+  put:
+    tags:
+      - AI
+    summary: 'Assign ML profile template to an asset'
+    description: 'Needs **`ai.refresh`** and **`X-Park-Id`**. Body **`profileId`** (UUID).'
+    parameters:
+      -
+        in: path
+        name: assetId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - profileId
+            properties:
+              profileId:
+                type: string
+                format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '404':
+        description: 'Not found'
+      '422':
+        description: 'Validation error'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+/ai/feature-store/monitor:
+  get:
+    tags:
+      - AI
+    summary: 'Feature store freshness / coverage monitor for active park'
+    description: 'Needs **`ai.read`** and **`X-Park-Id`**.'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+/ai/feature-data-quality:
+  get:
+    tags:
+      - AI
+    summary: 'Feature completeness / quality dashboard for active park'
+    description: 'Needs **`ai.read`** and **`X-Park-Id`**. Optional filters **`from`**, **`to`**, **`entityType`**, **`completenessMax`**, **`missingFeature`**, **`confidenceMax`**, **`provider`**, **`summariesLimit`** (see `featureDataQualityQuery`).'
+    parameters:
+      -
+        in: query
+        name: from
+        schema:
+          type: string
+      -
+        in: query
+        name: to
+        schema:
+          type: string
+      -
+        in: query
+        name: entityType
+        schema:
+          type: string
+          enum:
+            - RIDE
+            - SHOW
+            - RESTAURANT
+            - SHOP
+            - ""
+      -
+        in: query
+        name: completenessMax
+        schema:
+          type: number
+      -
+        in: query
+        name: missingFeature
+        schema:
+          type: string
+          enum:
+            - weather
+            - calendar
+            - traffic
+            - staffing
+            - ""
+      -
+        in: query
+        name: confidenceMax
+        schema:
+          type: number
+      -
+        in: query
+        name: provider
+        schema:
+          type: string
+      -
+        in: query
+        name: summariesLimit
+        schema:
+          type: integer
+          minimum: 10
+          maximum: 300
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+/ai/studio/feature-drafts:
+  get:
+    tags:
+      - AI
+    summary: 'Get ML Studio dataset feature draft (Phase P)'
+    description: 'Needs `ai.read` and active park context (`X-Park-Id`). Returns persisted draft or `data: null`.'
+    parameters:
+      -
+        in: query
+        name: entityType
+        required: true
+        schema:
+          type: string
+          enum:
+            - ride
+            - park_asset
+      -
+        in: query
+        name: entityId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      -
+        in: query
+        name: datasetScope
+        schema:
+          type: string
+          enum:
+            - single_asset
+          default: single_asset
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeAiStudioFeatureDraftNullable'
+  put:
+    tags:
+      - AI
+    summary: 'Save ML Studio dataset feature draft (Phase P)'
+    description: "Needs `ai.refresh` and active park. Each `selectedSignalKey` must exist on ride/asset extensions with `enabled` and `mlEligible`\n(validated via the same **`signal-preview.service`** module as Add-on Board preview gates — **no** `signalPreview` or latest-value fields in this API).\nStored in `app_settings` key `aiStudio.featureDrafts` (JSON), scoped by park.\n"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AiStudioFeatureDraftPut'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeAiStudioFeatureDraft'
+'/ai/parks/{externalParkId}/forecast/summary':
+  get:
+    tags:
+      - AI
+    summary: 'Park wait forecast summary (baseline + X + ML enterprise)'
+    description: 'Needs `ai.read`. Response `data` includes `mlFactorCurrents` (object, possibly empty).'
+    parameters:
+      -
+        in: path
+        name: externalParkId
+        required: true
+        schema:
+          type: string
+      -
+        in: query
+        name: provider
+        schema:
+          type: string
+          example: themeparks_wiki
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeParkForecastSummary'
+'/ai/parks/{externalParkId}/forecast/series':
+  get:
+    tags:
+      - AI
+    summary: 'Interpolated wait forecast points from latest summary'
+    description: 'Needs `ai.read`. Does not return `mlFactorCurrents` (series only).'
+    parameters:
+      -
+        in: path
+        name: externalParkId
+        required: true
+        schema:
+          type: string
+      -
+        in: query
+        name: provider
+        schema:
+          type: string
+      -
+        in: query
+        name: horizon
+        schema:
+          type: integer
+          default: 60
+      -
+        in: query
+        name: step
+        schema:
+          type: integer
+          default: 5
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                data:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: true
+'/ai/parks/{externalParkId}/forecast/explanation':
+  get:
+    tags:
+      - AI
+    summary: 'Short textual explanation of park forecast delta'
+    description: 'Needs `ai.read`. Does not return `mlFactorCurrents`.'
+    parameters:
+      -
+        in: path
+        name: externalParkId
+        required: true
+        schema:
+          type: string
+      -
+        in: query
+        name: provider
+        schema:
+          type: string
+      -
+        in: query
+        name: horizon
+        schema:
+          type: integer
+          default: 60
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                data:
+                  type: object
+                  additionalProperties: true
+'/ai/entities/{externalEntityId}/forecast/summary':
+  get:
+    tags:
+      - AI
+    summary: 'Entity (ride) wait forecast summary'
+    description: 'Needs `ai.read`. Query `externalParkId` required. `data` includes `mlFactorCurrents` when merge ran.'
+    parameters:
+      -
+        in: path
+        name: externalEntityId
+        required: true
+        schema:
+          type: string
+      -
+        in: query
+        name: externalParkId
+        required: true
+        schema:
+          type: string
+      -
+        in: query
+        name: provider
+        schema:
+          type: string
+      -
+        in: query
+        name: entityType
+        schema:
+          type: string
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeParkForecastSummary'
+'/ai/parks/{externalParkId}/entities/forecast/summary':
+  get:
+    tags:
+      - AI
+    summary: 'Batch entity forecast summaries for a park'
+    description: 'Needs `ai.read`. Each item includes `mlFactorCurrents` when merge ran.'
+    parameters:
+      -
+        in: path
+        name: externalParkId
+        required: true
+        schema:
+          type: string
+      -
+        in: query
+        name: provider
+        schema:
+          type: string
+      -
+        in: query
+        name: limit
+        schema:
+          type: integer
+          default: 150
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeParkForecastSummaryList'
+'/ai/feature-store/park-snapshots/{id}':
+  delete:
+    tags:
+      - AI
+    summary: 'Delete one park feature snapshot row'
+    description: 'Needs `ai.refresh` and X-Park-Id; row must belong to that park.'
+    parameters:
+      -
+        $ref: '#/components/parameters/IdPath'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                data:
+                  type: object
+                  properties:
+                    deleted:
+                      type: integer
+/ai/feature-store/park-snapshots/purge:
+  post:
+    tags:
+      - AI
+    summary: 'Bulk-delete park snapshots in a time window'
+    description: 'Needs `ai.refresh` and X-Park-Id; range max 35 days.'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - from
+              - to
+            properties:
+              from:
+                type: string
+                description: ISO8601
+              to:
+                type: string
+                description: ISO8601
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                data:
+                  type: object
+                  properties:
+                    deleted:
+                      type: integer
+/ai/feature-store/park-snapshots/bulk-delete:
+  post:
+    tags:
+      - AI
+    summary: 'Delete park snapshots by id list'
+    description: 'Needs `ai.refresh` and X-Park-Id; max 200 UUIDs; only rows for that park are deleted.'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - ids
+            properties:
+              ids:
+                type: array
+                maxItems: 200
+                items:
+                  type: string
+                  format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                data:
+                  type: object
+                  properties:
+                    deleted:
+                      type: integer
+                    requested:
+                      type: integer
+/ai/recommendations/scored:
+  get:
+    tags:
+      - AI
+    summary: 'List OPEN recommendations with AI scores (sorted by score)'
+    description: 'Needs `ai.read`'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeRecommendationsScored'
+/ai/recommendations/scoring-summary:
+  get:
+    tags:
+      - AI
+    summary: 'Top risky recommendations and aggregate scoring stats'
+    description: 'Needs `ai.read`'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeRecommendationScoringSummary'
+/ai/recommendations/score:
+  post:
+    tags:
+      - AI
+    summary: 'Score all OPEN recommendations'
+    description: 'Needs `ai.refresh` or `recommendations.update`'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeScoreAllResult'
+'/ai/recommendations/{id}/score':
+  post:
+    tags:
+      - AI
+    summary: 'Score one OPEN recommendation'
+    description: 'Needs `ai.refresh` or `recommendations.update`'
+    parameters:
+      -
+        $ref: '#/components/parameters/IdPath'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeScoreOneResult'
+'/ai/recommendations/{id}/explanation':
+  get:
+    tags:
+      - AI
+    summary: 'Explanation and factors for a scored recommendation'
+    description: 'Needs `ai.read`'
+    parameters:
+      -
+        $ref: '#/components/parameters/IdPath'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeRecommendationExplanation'
+'/ai/ml/predict/rides/{rideId}':
+  get:
+    tags:
+      - AI
+    summary: 'Predict ride wait times (15/30/60 min) from feature store + optional ridge models'
+    description: |
+      Canonical mount under `/ai/ml/*` (Phase B5). Needs `ai.read` and `X-Park-Id`. Falls back to
+      baseline when no model is trained. Identical handler to the deprecated `/ml/predict/rides/{rideId}`.
+    parameters:
+      -
+        in: path
+        name: rideId
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: 'Platform ride asset_id (park_assets.asset_id)'
+      -
+        in: query
+        name: horizon
+        schema:
+          type: string
+          example: 1530
+        description: 'Comma-separated horizons in minutes'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeMlRidePredict'
+/ai/ml/predict/park-summary:
+  get:
+    tags:
+      - AI
+    summary: 'Add-on Board L0/L1 — aggregate 60m wait forecasts across ride assets'
+    description: |
+      Canonical mount under `/ai/ml/*` (Phase B5). Needs `ai.read` and `X-Park-Id`. Loads RIDE-type
+      `park_assets`, calls the same prediction path as L3 per ride (batched), then rolls up
+      `parkDemandForecastIndex`, `averageForecastWaitTime60`, `forecastCriticalRides`, and per-zone
+      stats for L1 drill-down. Optional `zoneId` scopes the asset list to one zone (L1 board). Does
+      not throw if individual ride predictions fail. Responses are cached about **45 seconds** per
+      `(park, zone, threshold, limit, offset)` key.
+    parameters:
+      -
+        in: query
+        name: zoneId
+        schema:
+          type: string
+          format: uuid
+        description: 'When set, only rides in this zone are included (L1 scope).'
+      -
+        in: query
+        name: criticalAtMinutes
+        schema:
+          type: number
+          minimum: 15
+          maximum: 180
+          default: 55
+        description: 'Count rides at or above this forecasted wait (60 min horizon) as critical.'
+      -
+        in: query
+        name: limit
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 80
+        description: 'Max ride assets to evaluate (caps load).'
+      -
+        in: query
+        name: offset
+        schema:
+          type: integer
+          minimum: 0
+          maximum: 500
+          default: 0
+        description: 'Skip this many ride assets (stable name order) for paging large parks.'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeMlParkForecastSummary'
+/ai/ml/dataset/rides:
+  get:
+    tags:
+      - AI
+    summary: 'ML dataset stats from ride_feature_snapshots_5m (join coverage)'
+    description: |
+      Canonical mount under `/ai/ml/*` (Phase B5). Needs `ai.read` and park context.
+    parameters:
+      -
+        in: query
+        name: rideId
+        schema:
+          type: string
+          format: uuid
+      -
+        in: query
+        name: from
+        schema:
+          type: string
+          format: date-time
+      -
+        in: query
+        name: to
+        schema:
+          type: string
+          format: date-time
+      -
+        in: query
+        name: rowLimit
+        schema:
+          type: integer
+          minimum: 100
+          maximum: 50000
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeMlRideDataset'
+/ai/ml/train/wait-time/global:
+  post:
+    tags:
+      - AI
+    summary: 'Train global ridge wait-time models (15/30/60) for current park'
+    description: |
+      Canonical mount under `/ai/ml/*` (Phase B5). Needs `ai.refresh` and `X-Park-Id`.
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              rowLimit:
+                type: integer
+                minimum: 200
+                maximum: 50000
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeMlTrainResult'
+'/ai/ml/train/wait-time/rides/{rideId}':
+  post:
+    tags:
+      - AI
+    summary: 'Train ride-specific models when data criteria are met'
+    description: |
+      Canonical mount under `/ai/ml/*` (Phase B5). Needs `ai.refresh` and `X-Park-Id`.
+    parameters:
+      -
+        in: path
+        name: rideId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeMlTrainRideResult'

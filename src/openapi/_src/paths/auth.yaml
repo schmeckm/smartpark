@@ -1,0 +1,59 @@
+/auth/login:
+  post:
+    tags:
+      - Auth
+    summary: Login
+    security: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/LoginRequest'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthTokensResponse'
+/auth/refresh:
+  post:
+    tags:
+      - Auth
+    summary: 'Refresh access token'
+    security: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RefreshRequest'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthTokensResponse'
+/auth/logout:
+  post:
+    tags:
+      - Auth
+    summary: 'Logout (revoke refresh token)'
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/LogoutRequest'
+    responses:
+      '200':
+        description: OK
+/auth/me:
+  get:
+    tags:
+      - Auth
+    summary: 'Current user profile'
+    responses:
+      '200':
+        description: OK

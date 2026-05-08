@@ -1,7 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const YAML = require('yamljs');
-const { DEFAULT_INSTALL_OUTPUT_PROFILES } = require('../services/adapter-output-profile-names');
+const { DEFAULT_INSTALL_OUTPUT_PROFILES } = require('../modules/integrations/adapter-framework/adapter-output-profile-names');
 
 /**
  * Per-adapter install configuration on disk (YAML), same mechanism for all packages.

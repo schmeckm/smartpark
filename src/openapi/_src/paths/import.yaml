@@ -1,0 +1,51 @@
+/import/staff:
+  post:
+    tags:
+      - Wave2
+    summary: 'Import staff CSV/XLSX (multipart)'
+    requestBody:
+      content:
+        multipart/form-data:
+          schema:
+            type: object
+            properties:
+              file:
+                type: string
+                format: binary
+    responses:
+      '200':
+        description: OK
+/import/rides:
+  post:
+    tags:
+      - Wave2
+    summary: 'Import rides'
+    requestBody:
+      content:
+        multipart/form-data:
+          schema:
+            type: object
+            properties:
+              file:
+                type: string
+                format: binary
+    responses:
+      '200':
+        description: OK
+/import/zones:
+  post:
+    tags:
+      - Wave2
+    summary: 'Import zones'
+    requestBody:
+      content:
+        multipart/form-data:
+          schema:
+            type: object
+            properties:
+              file:
+                type: string
+                format: binary
+    responses:
+      '200':
+        description: OK

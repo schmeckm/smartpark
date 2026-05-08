@@ -9,7 +9,6 @@ let cache;
 
 function readRootVersion() {
   try {
-    // eslint-disable-next-line import/no-dynamic-require, global-require
     const pkg = require(path.join(__dirname, '..', '..', 'package.json'));
     const v = pkg && pkg.version;
     return typeof v === 'string' && v.trim() !== '' ? v.trim() : '0.0.0';

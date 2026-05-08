@@ -1,0 +1,131 @@
+/adapters/health:
+  get:
+    tags:
+      - OperationsAdapters
+    summary: 'Adapter ops health'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+/adapters/dashboard:
+  get:
+    tags:
+      - OperationsAdapters
+    summary: 'Adapter ops dashboard'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+/adapters/runs:
+  get:
+    tags:
+      - OperationsAdapters
+    summary: 'Adapter runs'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+'/adapters/{adapterKey}/status':
+  parameters:
+    -
+      in: path
+      name: adapterKey
+      required: true
+      schema:
+        type: string
+  get:
+    tags:
+      - OperationsAdapters
+    summary: 'Adapter status'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+'/adapters/{adapterKey}/run-now':
+  parameters:
+    -
+      in: path
+      name: adapterKey
+      required: true
+      schema:
+        type: string
+  post:
+    tags:
+      - OperationsAdapters
+    summary: 'Run adapter now'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+'/adapters/{adapterKey}/pause':
+  parameters:
+    -
+      in: path
+      name: adapterKey
+      required: true
+      schema:
+        type: string
+  post:
+    tags:
+      - OperationsAdapters
+    summary: 'Pause adapter'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+'/adapters/{adapterKey}/activate':
+  parameters:
+    -
+      in: path
+      name: adapterKey
+      required: true
+      schema:
+        type: string
+  post:
+    tags:
+      - OperationsAdapters
+    summary: 'Activate adapter'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+'/adapters/{adapterKey}/disable':
+  parameters:
+    -
+      in: path
+      name: adapterKey
+      required: true
+      schema:
+        type: string
+  post:
+    tags:
+      - OperationsAdapters
+    summary: 'Disable adapter'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'

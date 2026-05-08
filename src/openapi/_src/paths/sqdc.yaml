@@ -1,0 +1,143 @@
+'/sqdc/parks/{parkId}/board':
+  parameters:
+    -
+      in: path
+      name: parkId
+      required: true
+      schema:
+        type: string
+        format: uuid
+  get:
+    tags:
+      - SQDC
+    summary: 'Hierarchical SQDC board (park)'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+'/sqdc/parks/{parkId}/assets/{assetId}/board':
+  parameters:
+    -
+      in: path
+      name: parkId
+      required: true
+      schema:
+        type: string
+        format: uuid
+    -
+      in: path
+      name: assetId
+      required: true
+      schema:
+        type: string
+        format: uuid
+  get:
+    tags:
+      - SQDC
+    summary: 'Hierarchical SQDC board (asset)'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+/sqdc/board:
+  get:
+    tags:
+      - SQDC
+    summary: 'SQDC board'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+/sqdc/history:
+  get:
+    tags:
+      - SQDC
+    summary: 'SQDC history'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+/sqdc/mood:
+  post:
+    tags:
+      - SQDC
+    summary: 'Submit SQDC mood'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+/sqdc/safety-events:
+  post:
+    tags:
+      - SQDC
+    summary: 'Submit SQDC safety event'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+/sqdc/snapshots:
+  post:
+    tags:
+      - SQDC
+    summary: 'Submit SQDC snapshot'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+/sqdc/events:
+  post:
+    tags:
+      - SQDC
+    summary: 'Submit SQDC event'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+/sqdc/mood-feedback:
+  post:
+    tags:
+      - SQDC
+    summary: 'Submit SQDC mood feedback'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+/sqdc/daily-snapshots:
+  post:
+    tags:
+      - SQDC
+    summary: 'Submit SQDC daily snapshot'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'

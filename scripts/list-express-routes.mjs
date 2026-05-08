@@ -4,7 +4,7 @@
  * Does not start the HTTP server. Loads `src/app.js` (may initialize Sequelize config; no DB queries required).
  */
 import { createRequire } from 'node:module';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -13,28 +13,35 @@ const YAML = require('yamljs');
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 
+const ROOT_MOUNT_BASELINE_PATH = path.join(ROOT, 'docs', 'governance', 'root-mount-routes-baseline.json');
+
 process.chdir(ROOT);
 
 const API_PREFIX = '/api/v1';
 
-/** Prefixes mounted on `app` in `src/app.js` before `app.use('/api/v1', v1Router)` (and root `/`, `/health`). */
-const APP_JS_DIRECT_PREFIXES = [
-  '/health',
-  '/',
-  `${API_PREFIX}/ai/forecasts/refresh`,
-  `${API_PREFIX}/ai/feature-store/park-snapshots/bulk-delete`,
-  `${API_PREFIX}/ai/feature-store/park-snapshots/purge`,
-  `${API_PREFIX}/integrations/installed-adapters/install-local`,
-  `${API_PREFIX}/integrations/adapters/install-local`,
-  `${API_PREFIX}/integrations/installed-adapters`,
-  `${API_PREFIX}/integrations/adapters/packages`,
-  `${API_PREFIX}/integrations/adapters/pipeline-log`,
-  `${API_PREFIX}/master-data`,
-  `${API_PREFIX}/staff`,
-  `${API_PREFIX}/visit-plans`,
-  `${API_PREFIX}/visit-actuals`,
-  `${API_PREFIX}/adapters`,
-];
+/**
+ * Prefixes mounted on `app` in `src/app.js` before `app.use('/api/v1', v1Router)`
+ * (plus the universal root probes `/` and `/health`). Sourced from the
+ * governance baseline at `docs/governance/root-mount-routes-baseline.json`
+ * so the list lives in ONE place and CI can fail when a new prefix
+ * appears without a matching baseline edit.
+ */
+function loadRootMountBaseline() {
+  try {
+    const raw = readFileSync(ROOT_MOUNT_BASELINE_PATH, 'utf8');
+    const parsed = JSON.parse(raw);
+    const allowed = Array.isArray(parsed.allowedPrefixes) ? parsed.allowedPrefixes : [];
+    const probes = Array.isArray(parsed.policy?.rootProbes) ? parsed.policy.rootProbes : ['/', '/health'];
+    return { allowed, probes };
+  } catch (err) {
+    console.warn(
+      `[list-express-routes] failed to load root-mount baseline (${err?.message}); falling back to a minimal default.`
+    );
+    return { allowed: [], probes: ['/', '/health'] };
+  }
+}
+const { allowed: BASELINE_PREFIXES, probes: ROOT_PROBES } = loadRootMountBaseline();
+const APP_JS_DIRECT_PREFIXES = [...ROOT_PROBES, ...BASELINE_PREFIXES];
 
 function isAppJsDirectMount(fullPath) {
   const p = normalizePath(fullPath);
@@ -125,7 +132,37 @@ function collectRoutes(app) {
     }
   }
   walk(app._router?.stack || [], '', 'app');
-  return dedupeRoutes(out);
+  return out;
+}
+
+/**
+ * Find routes registered more than once at the same `(METHOD, path)` key after
+ * normalization. The Express stack is allowed to attach the same handler at
+ * the same path twice (e.g. via root `app.js` and `v1Router`), so this scan
+ * runs against the raw — pre-dedupe — collected list.
+ *
+ * @param {{ method: string, path: string, mountOrigin: string, sourceHint: string }[]} rawRows
+ */
+function findDuplicateRegistrations(rawRows) {
+  const byKey = new Map();
+  for (const r of rawRows) {
+    const k = `${r.method} ${r.path}`;
+    if (!byKey.has(k)) byKey.set(k, []);
+    byKey.get(k).push(r);
+  }
+  const dups = [];
+  for (const [key, rows] of byKey.entries()) {
+    if (rows.length < 2) continue;
+    const origins = [...new Set(rows.map((r) => r.mountOrigin))].sort();
+    dups.push({
+      key,
+      method: rows[0].method,
+      path: rows[0].path,
+      registrationCount: rows.length,
+      mountOrigins: origins,
+    });
+  }
+  return dups.sort((a, b) => a.key.localeCompare(b.key));
 }
 
 /**
@@ -231,7 +268,7 @@ function buildGapMarkdown({ routes, openapiKeys, missingInOpenapi, documentedNot
   lines.push('');
   lines.push('## Isolated / separate codebases');
   lines.push('');
-  lines.push('- **`tp-uns-mvp`** (if present in the workspace) — treat as a separate lab / MVP tree; not merged into this Express inventory unless mounted by this `app.js`.');
+  lines.push('- **`archive/tp-uns-mvp/`** — historical lab / MVP tree, archived 2026-05-07 (QW9). Frozen reference material; not part of `src/app.js`, `npm test`, `npm run lint`, or any deploy. See `archive/README.md` for the canonical production equivalents.');
   lines.push('');
   lines.push('## Live routes missing from OpenAPI (sample)');
   lines.push('');
@@ -294,7 +331,9 @@ function printTable(rows) {
 
 async function main() {
   const { app } = require(path.join(ROOT, 'src', 'app.js'));
-  const rawRoutes = applyV1Prefix(collectRoutes(app));
+  const rawCollected = applyV1Prefix(collectRoutes(app));
+  const duplicates = findDuplicateRegistrations(rawCollected);
+  const rawRoutes = dedupeRoutes(rawCollected);
   const { keys: openapiKeys } = loadOpenApiOperations();
 
   const inventory = rawRoutes.map((r) => ({
@@ -351,12 +390,29 @@ async function main() {
   });
   writeFileSync(path.join(outDir, 'openapi-gap-report.md'), gapMd, 'utf8');
 
+  const duplicatesPath = path.join(outDir, 'express-routes.duplicates.json');
+  writeFileSync(
+    duplicatesPath,
+    JSON.stringify(
+      {
+        generatedAt: new Date().toISOString(),
+        apiPrefix: API_PREFIX,
+        duplicateKeyCount: duplicates.length,
+        duplicates,
+      },
+      null,
+      2
+    ),
+    'utf8'
+  );
+
   printTable(inventory);
   console.log(`\nWrote ${path.relative(ROOT, jsonPath)}`);
   console.log(`Wrote ${path.relative(ROOT, path.join(outDir, 'express-routes.inventory.md'))}`);
   console.log(`Wrote ${path.relative(ROOT, path.join(outDir, 'openapi-gap-report.md'))}`);
+  console.log(`Wrote ${path.relative(ROOT, duplicatesPath)}`);
   console.log(
-    `\nSummary: ${inventory.length} routes, ${missingInOpenapi.length} missing from OpenAPI (template match), ${documentedNotLive.length} OpenAPI ops not found on app.\n`
+    `\nSummary: ${inventory.length} routes, ${missingInOpenapi.length} missing from OpenAPI (template match), ${documentedNotLive.length} OpenAPI ops not found on app, ${duplicates.length} duplicate (METHOD,path) keys.\n`
   );
 }
 

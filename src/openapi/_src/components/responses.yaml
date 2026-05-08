@@ -1,0 +1,8 @@
+components:
+  responses:
+    NotFound:
+      description: 'Not found'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorBody'

@@ -1,0 +1,467 @@
+/assets:
+  get:
+    tags:
+      - Platform
+    summary: 'List park assets (generic model)'
+    parameters:
+      -
+        in: query
+        name: parkId
+        schema:
+          type: string
+          format: uuid
+      -
+        in: query
+        name: assetTypeCode
+        schema:
+          type: string
+      -
+        in: query
+        name: limit
+        schema:
+          type: integer
+          default: 500
+      -
+        in: query
+        name: offset
+        schema:
+          type: integer
+          default: 0
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopePlatformAssets'
+/assets/oee/reason-codes:
+  get:
+    tags:
+      - Platform
+    summary: 'OEE MVP — downtime reason codes (planned vs unplanned via event flag)'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                data:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      labelDe:
+                        type: string
+'/assets/{assetId}/downtime-events':
+  parameters:
+    -
+      in: path
+      name: assetId
+      required: true
+      schema:
+        type: string
+        format: uuid
+    -
+      in: query
+      name: from
+      required: true
+      schema:
+        type: string
+        format: date-time
+    -
+      in: query
+      name: to
+      required: true
+      schema:
+        type: string
+        format: date-time
+    -
+      in: query
+      name: limit
+      schema:
+        type: integer
+  get:
+    tags:
+      - Platform
+    summary: 'List downtime events for an asset (OEE MVP)'
+    responses:
+      '200':
+        description: OK
+  post:
+    tags:
+      - Platform
+    summary: 'Record a planned or unplanned downtime interval'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - startedAt
+              - planned
+              - reasonCode
+            properties:
+              startedAt:
+                type: string
+                format: date-time
+              endedAt:
+                type: string
+                format: date-time
+                nullable: true
+              planned:
+                type: boolean
+              reasonCode:
+                type: string
+              notes:
+                type: string
+    responses:
+      '201':
+        description: Created
+      '409':
+        description: 'Overlapping downtime'
+'/assets/{assetId}/downtime-events/{eventId}':
+  parameters:
+    -
+      in: path
+      name: assetId
+      required: true
+      schema:
+        type: string
+        format: uuid
+    -
+      in: path
+      name: eventId
+      required: true
+      schema:
+        type: string
+        format: uuid
+  patch:
+    tags:
+      - Platform
+    summary: 'Update downtime event (times, planned, reason, notes; overlap-checked)'
+    requestBody:
+      content:
+        application/json:
+          schema:
+            type: object
+            minProperties: 1
+            properties:
+              startedAt:
+                type: string
+                format: date-time
+              endedAt:
+                type: string
+                format: date-time
+                nullable: true
+              planned:
+                type: boolean
+              reasonCode:
+                type: string
+              notes:
+                type: string
+                nullable: true
+    responses:
+      '200':
+        description: OK
+      '409':
+        description: 'Overlapping downtime'
+  delete:
+    tags:
+      - Platform
+    summary: 'Delete a downtime event'
+    responses:
+      '204':
+        description: 'No content'
+'/assets/{assetId}/oee/availability-summary':
+  parameters:
+    -
+      in: path
+      name: assetId
+      required: true
+      schema:
+        type: string
+        format: uuid
+    -
+      in: query
+      name: from
+      required: true
+      schema:
+        type: string
+        format: date-time
+    -
+      in: query
+      name: to
+      required: true
+      schema:
+        type: string
+        format: date-time
+  get:
+    tags:
+      - Platform
+    summary: 'MVP availability % vs window (excludes planned downtime from numerator penalty)'
+    responses:
+      '200':
+        description: OK
+'/assets/{assetId}/oee/downtime-reason-pareto':
+  parameters:
+    -
+      in: path
+      name: assetId
+      required: true
+      schema:
+        type: string
+        format: uuid
+    -
+      in: query
+      name: from
+      required: true
+      schema:
+        type: string
+        description: 'ISO-8601 or parseable instant'
+    -
+      in: query
+      name: to
+      required: true
+      schema:
+        type: string
+        description: 'ISO-8601 or parseable instant'
+    -
+      in: query
+      name: plannedScope
+      schema:
+        type: string
+        enum:
+          - all
+          - planned
+          - unplanned
+        default: all
+  get:
+    tags:
+      - Platform
+    summary: 'Pareto of downtime duration by OEE reason code (with German labels)'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeDowntimeReasonPareto'
+      '400':
+        description: 'Invalid time range'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+      '404':
+        $ref: '#/components/responses/NotFound'
+'/assets/{assetId}':
+  parameters:
+    -
+      in: path
+      name: assetId
+      required: true
+      schema:
+        type: string
+        format: uuid
+  get:
+    tags:
+      - Platform
+    summary: 'Get asset with specializations'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopePlatformAssetOne'
+      '404':
+        $ref: '#/components/responses/NotFound'
+'/assets/{assetId}/extensions':
+  get:
+    tags:
+      - Platform
+    summary: 'Read UNS signal extension metadata for a platform asset (read-only, Phase C)'
+    description: 'Data is read from `park_assets.master_profile.unsAssetExtensions`. Missing data returns empty structures.'
+    parameters:
+      -
+        in: path
+        name: assetId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeRideMasterExtensionsRead'
+      '404':
+        $ref: '#/components/responses/NotFound'
+  patch:
+    tags:
+      - Platform
+    summary: 'Patch UNS asset extensions metadata (Phase E)'
+    description: 'Merged with `mergeExtensions`; persists under `master_profile.unsAssetExtensions`. Requires `rides` update permission.'
+    parameters:
+      -
+        in: path
+        name: assetId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RideMasterExtensionsPatch'
+    responses:
+      '200':
+        description: 'OK — normalized read DTO'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeRideMasterExtensionsRead'
+      '400':
+        description: 'Invalid body'
+      '404':
+        $ref: '#/components/responses/NotFound'
+'/assets/{assetId}/ride-master':
+  parameters:
+    -
+      in: path
+      name: assetId
+      required: true
+      schema:
+        type: string
+        format: uuid
+  put:
+    tags:
+      - Platform
+    summary: 'Update ride master data row'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RideMasterDataPatch'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopePlatformAssetOne'
+'/assets/{assetId}/ride-master/enrich-template':
+  post:
+    tags:
+      - Platform
+    summary: 'Apply a ride master template to fill missing ride fields (transactional)'
+    parameters:
+      -
+        in: path
+        name: assetId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RideEnrichTemplateBody'
+    responses:
+      '200':
+        description: 'OK — full asset plus template merge metadata'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopePlatformAssetEnrich'
+      '404':
+        $ref: '#/components/responses/NotFound'
+'/assets/{assetId}/runtime-overrides':
+  parameters:
+    -
+      in: path
+      name: assetId
+      required: true
+      schema:
+        type: string
+        format: uuid
+  get:
+    tags:
+      - Platform
+    summary: 'List temporary runtime overrides for an asset'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeAssetRuntimeOverrides'
+      '404':
+        $ref: '#/components/responses/NotFound'
+  post:
+    tags:
+      - Platform
+    summary: 'Create a runtime override (e.g. reduced trains, cancelled show)'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AssetRuntimeOverrideCreate'
+    responses:
+      '201':
+        description: Created
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeAssetRuntimeOverrideOne'
+      '404':
+        $ref: '#/components/responses/NotFound'
+'/assets/{assetId}/runtime-overrides/{overrideId}':
+  parameters:
+    -
+      in: path
+      name: assetId
+      required: true
+      schema:
+        type: string
+        format: uuid
+    -
+      in: path
+      name: overrideId
+      required: true
+      schema:
+        type: string
+        format: uuid
+  patch:
+    tags:
+      - Platform
+    summary: 'Update or deactivate a runtime override'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AssetRuntimeOverridePatch'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeAssetRuntimeOverrideOne'
+      '404':
+        $ref: '#/components/responses/NotFound'

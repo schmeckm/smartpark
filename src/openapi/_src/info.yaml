@@ -1,0 +1,4 @@
+info:
+  title: 'Smart Park OS API'
+  description: "AI-enabled operations backend for large venues. Realtime updates are broadcast via Socket.IO\n(events `zones:updated`, `events:created`, `recommendations:created`, `recommendations:updated`,\n`ai:forecast:updated`, `ai:recommendation-scored`, `canonical:message:received`,\n`canonical:message:applied`, `canonical:message:failed`, `external:mapping:updated`, `external:parkdata:updated`).\n"
+  version: 1.7.6

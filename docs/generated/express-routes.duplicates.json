@@ -1,0 +1,61 @@
+{
+  "generatedAt": "2026-05-07T18:04:41.039Z",
+  "apiPrefix": "/api/v1",
+  "duplicateKeyCount": 6,
+  "duplicates": [
+    {
+      "key": "DELETE /api/v1/integrations/installed-adapters/:id",
+      "method": "DELETE",
+      "path": "/api/v1/integrations/installed-adapters/:id",
+      "registrationCount": 2,
+      "mountOrigins": [
+        "src/app.js"
+      ]
+    },
+    {
+      "key": "GET /api/v1/integrations/adapters/pipeline-log",
+      "method": "GET",
+      "path": "/api/v1/integrations/adapters/pipeline-log",
+      "registrationCount": 2,
+      "mountOrigins": [
+        "src/app.js"
+      ]
+    },
+    {
+      "key": "POST /api/v1/ai/feature-store/park-snapshots/bulk-delete",
+      "method": "POST",
+      "path": "/api/v1/ai/feature-store/park-snapshots/bulk-delete",
+      "registrationCount": 2,
+      "mountOrigins": [
+        "src/app.js"
+      ]
+    },
+    {
+      "key": "POST /api/v1/ai/feature-store/park-snapshots/purge",
+      "method": "POST",
+      "path": "/api/v1/ai/feature-store/park-snapshots/purge",
+      "registrationCount": 2,
+      "mountOrigins": [
+        "src/app.js"
+      ]
+    },
+    {
+      "key": "POST /api/v1/integrations/adapters/install-local",
+      "method": "POST",
+      "path": "/api/v1/integrations/adapters/install-local",
+      "registrationCount": 2,
+      "mountOrigins": [
+        "src/app.js"
+      ]
+    },
+    {
+      "key": "POST /api/v1/integrations/installed-adapters/install-local",
+      "method": "POST",
+      "path": "/api/v1/integrations/installed-adapters/install-local",
+      "registrationCount": 2,
+      "mountOrigins": [
+        "src/app.js"
+      ]
+    }
+  ]
+}

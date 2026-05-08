@@ -1,5 +1,5 @@
 const { asyncHandler } = require('../utils/async-handler');
-const { AdapterOperationsService } = require('../services/adapter-operations.service');
+const { AdapterOperationsService } = require('../modules/integrations/adapter-framework/adapter-operations.service');
 
 const ops = new AdapterOperationsService();
 

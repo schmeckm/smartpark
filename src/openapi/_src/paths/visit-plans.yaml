@@ -1,0 +1,121 @@
+/visit-plans:
+  get:
+    tags:
+      - VisitPlanning
+    summary: 'List visit plans'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+  post:
+    tags:
+      - VisitPlanning
+    summary: 'Create visit plan'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+'/visit-plans/{id}/export/xlsx':
+  parameters:
+    -
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+        format: uuid
+  get:
+    tags:
+      - VisitPlanning
+    summary: 'Export visit plan XLSX'
+    responses:
+      '200':
+        description: OK
+'/visit-plans/{id}/import/xlsx':
+  parameters:
+    -
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+        format: uuid
+  post:
+    tags:
+      - VisitPlanning
+    summary: 'Import visit plan XLSX'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+'/visit-plans/{id}/forecast':
+  parameters:
+    -
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+        format: uuid
+  post:
+    tags:
+      - VisitPlanning
+    summary: 'Forecast visit plan'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+'/visit-plans/{id}':
+  parameters:
+    -
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+        format: uuid
+  get:
+    tags:
+      - VisitPlanning
+    summary: 'Get visit plan'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+  patch:
+    tags:
+      - VisitPlanning
+    summary: 'Patch visit plan'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+  delete:
+    tags:
+      - VisitPlanning
+    summary: 'Delete visit plan'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'

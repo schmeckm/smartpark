@@ -1,0 +1,332 @@
+/addon-board/summary:
+  get:
+    tags:
+      - AI
+    summary: 'Add-on Board park summary (L0)'
+    description: 'Needs `ops.read` or `rides.read` and `X-Park-Id`'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeAddonBoardParkSummary'
+/addon-board/rides:
+  get:
+    tags:
+      - AI
+    summary: 'Add-on Board ride cards with SWDEC + ML forecasts'
+    description: 'Needs `ops.read` or `rides.read` and `X-Park-Id`'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeAddonBoardRides'
+/addon-board/critical-rides:
+  get:
+    tags:
+      - AI
+    summary: 'Critical / watch-list rides for the board'
+    parameters:
+      -
+        in: query
+        name: limit
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeAddonBoardRides'
+/addon-board/zones:
+  get:
+    tags:
+      - AI
+    summary: 'List park zones with active ride counts'
+    description: 'Needs `ops.read` or `rides.read` and `X-Park-Id`'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeAddonBoardZoneList'
+/addon-board/heatmap:
+  get:
+    tags:
+      - AI
+    summary: 'Live geo pressure payload for rides (L0/L1 heatmap context)'
+    description: 'Needs `ops.read` or `rides.read` and `X-Park-Id`'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeAddonBoardHeatmap'
+/addon-board/templates:
+  get:
+    tags:
+      - AI
+    summary: 'List add-on board template ids'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeAddonBoardTemplatesIndex'
+'/addon-board/templates/{boardId}':
+  get:
+    tags:
+      - AI
+    summary: 'Get one add-on board template JSON'
+    parameters:
+      -
+        in: path
+        name: boardId
+        required: true
+        schema:
+          type: string
+          maxLength: 120
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeAddonBoardTemplateDoc'
+      '404':
+        description: 'Not found'
+/addon-board/layout:
+  get:
+    tags:
+      - AI
+    summary: 'Effective board layout for the caller roles (widgets filtered)'
+    description: 'Returns `{ boardId, label, widgets }` only (no full template document). Use `GET /addon-board/templates/{boardId}` for the raw JSON.'
+    parameters:
+      -
+        in: query
+        name: boardId
+        schema:
+          type: string
+          maxLength: 120
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeAddonBoardLayout'
+      '404':
+        description: 'Not found'
+'/addon-board/zones/{zoneId}/summary':
+  get:
+    tags:
+      - AI
+    summary: 'Zone-level Add-on Board summary (L1)'
+    parameters:
+      -
+        in: path
+        name: zoneId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeAddonBoardZone'
+'/addon-board/rides/{rideId}/detail':
+  get:
+    tags:
+      - AI
+    summary: 'Ride-level Add-on Board detail (L3)'
+    parameters:
+      -
+        in: path
+        name: rideId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeAddonBoardRideDetail'
+'/addon-board/rides/{rideId}/widget-source-draft':
+  get:
+    tags:
+      - AI
+    summary: 'Get persisted widget source draft with resolved preview (Phases G–I)'
+    description: "Reads `park_assets.master_profile.addonBoardWidgetSourceDraft` for the ride asset (`rideId` = `asset_id`).\n`data` is `null` when no draft exists. When present, `resolved` compares the draft `signalKey` to current\nextensions (`enabled` / `boardEligible`) for a read-only preview.\n**Phase I:** when `resolved.valid` is true, `latestValue` is the latest persisted scalar for that signal\n(UNS `uns_latest_states`, then canonical inbound, then ride feature snapshot). Read-only; does not drive\nAdd-on Board KPI runtime. Omitted or `null` when invalid, unavailable, or lookup fails (HTTP 200 preserved).\n**Signal preview layer:** when a draft exists, responses may also include optional additive **`signalPreview`**\n(`status`, `eligibility`, normalized key echo) — same lookup order as `latestValue`; clients may ignore it.\n"
+    parameters:
+      -
+        in: path
+        name: rideId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: 'OK — `data` may be null'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeAddonBoardWidgetSourceDraftNullable'
+      '404':
+        description: 'Asset not in park context'
+  put:
+    tags:
+      - AI
+    summary: 'Save widget signal source draft (Phase G)'
+    description: "Persists metadata only under `park_assets.master_profile.addonBoardWidgetSourceDraft`.\n`signalKey` must exist on the asset extensions with `enabled` and `boardEligible` true.\n"
+    parameters:
+      -
+        in: path
+        name: rideId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AddonBoardWidgetSourceDraft'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeAddonBoardWidgetSourceDraft'
+      '400':
+        description: 'Invalid body or signal not eligible'
+      '404':
+        description: 'Asset not in park context'
+'/addon-board/rides/{rideId}/custom-widgets':
+  get:
+    tags:
+      - AI
+    summary: 'List persisted L3 custom widgets for a ride (Phase J + K + M)'
+    description: "Reads `park_assets.master_profile.addonBoardCustomWidgets` — metadata-only widget configs promoted from\nthe widget source draft flow. **Phase K:** each enabled `SIGNAL_METADATA` + `latest_value` row includes\n**`resolved`** and **`latestValue`** using the same read-only path as `GET .../widget-source-draft` (Phase I);\n**`sourceEntityMismatch`** when stored `source.entityId` does not match path `rideId`. **Phase M:** each row\nincludes derived **`health`** (`ok`, `invalid_source`, `disabled`, `no_live_value`, `entity_mismatch`) from those\nfields only — no extra storage or lookups. Optional additive **`signalPreview`** may be present on each row.\nDoes not alter template board JSON or standard KPI widgets.\n"
+    parameters:
+      -
+        in: path
+        name: rideId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: 'OK — may be an empty array'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeAddonBoardCustomWidgets'
+      '404':
+        description: 'Asset not in park context'
+'/addon-board/rides/{rideId}/custom-widgets/{widgetId}':
+  patch:
+    tags:
+      - AI
+    summary: 'Update persisted L3 custom widget (Phase L)'
+    description: "Lifecycle only: **`title`** and/or **`enabled`**. **`source`** and **`display`** are not editable in this phase.\nResponse **`widget`** matches **`GET .../custom-widgets`** rows (Phase K **`resolved`** / **`latestValue`**, Phase M **`health`**, and optional additive **`signalPreview`** from the shared signal preview resolver when applicable).\n"
+    parameters:
+      -
+        in: path
+        name: rideId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      -
+        in: path
+        name: widgetId
+        required: true
+        schema:
+          type: string
+          maxLength: 200
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AddonBoardCustomWidgetPatch'
+    responses:
+      '200':
+        description: 'OK — updated widget (enriched list shape)'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeAddonBoardPromotedWidget'
+      '400':
+        description: 'Invalid body (no fields, bad title or enabled type)'
+      '404':
+        description: 'Asset or widget not found'
+  delete:
+    tags:
+      - AI
+    summary: 'Remove persisted L3 custom widget (Phase L)'
+    description: 'Removes one entry from `park_assets.master_profile.addonBoardCustomWidgets`. No KPI or ML changes.'
+    parameters:
+      -
+        in: path
+        name: rideId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      -
+        in: path
+        name: widgetId
+        required: true
+        schema:
+          type: string
+          maxLength: 200
+    responses:
+      '204':
+        description: Deleted
+      '404':
+        description: 'Asset or widget not found'
+'/addon-board/rides/{rideId}/widgets/from-source-draft':
+  post:
+    tags:
+      - AI
+    summary: 'Promote saved widget source draft to a persisted custom widget (Phase J)'
+    description: "Requires a well-formed `addonBoardWidgetSourceDraft` and `resolved.valid` against current extensions.\nUpserts one entry under `park_assets.master_profile.addonBoardCustomWidgets` (same `widgetId` replaces).\nNo KPI engine, ML Studio, or MQTT subscription changes.\n**Response shape:** `data.widget` is the **persisted base** row (`widgetId`, `title`, `source`, `display`, `enabled` only).\nIt does **not** include Phase K/M enrichment (`resolved`, `latestValue`, `health`, or optional **`signalPreview`**).\nCall **`GET .../custom-widgets`** for the read model that includes preview fields.\n"
+    parameters:
+      -
+        in: path
+        name: rideId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '201':
+        description: 'Created or updated custom widget config'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeAddonBoardPromotedWidget'
+      '400':
+        description: 'No draft, draft invalid, or entity mismatch'
+      '404':
+        description: 'Asset not in park context'

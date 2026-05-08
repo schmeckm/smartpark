@@ -1,0 +1,98 @@
+/zones:
+  get:
+    tags:
+      - Zones
+    summary: 'List zones'
+    deprecated: true
+    description: "**Deprecated — legacy master data.** Use the platform asset hierarchy instead:\nlist parks via `GET /parks` and zones-as-assets via `GET /assets?type=zone`. The MDM\nlayer is the single source of truth; this endpoint reads from the legacy `zones` table\nand does not honor multi-park asset relationships.\n"
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Zone'
+  post:
+    tags:
+      - Zones
+    summary: 'Create zone'
+    deprecated: true
+    description: "**Deprecated — legacy master data.** New zones should be created via the platform\nasset endpoints (`POST /assets` with `type=zone` and a `parkId` parent). The legacy\n`zones` table is read-only for new integrations.\n"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ZoneCreate'
+    responses:
+      '201':
+        description: Created
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data:
+                  $ref: '#/components/schemas/Zone'
+'/zones/{id}':
+  parameters:
+    -
+      $ref: '#/components/parameters/IdPath'
+  get:
+    tags:
+      - Zones
+    summary: 'Get zone by id'
+    deprecated: true
+    description: "**Deprecated — legacy master data.** Use `GET /assets/{assetId}` (with `type=zone`) instead.\n"
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data:
+                  $ref: '#/components/schemas/Zone'
+      '404':
+        $ref: '#/components/responses/NotFound'
+  patch:
+    tags:
+      - Zones
+    summary: 'Update zone'
+    deprecated: true
+    description: "**Deprecated — legacy master data.** Update zones via `PATCH /assets/{assetId}` (the MDM\npath is the single source of truth).\n"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ZoneUpdate'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data:
+                  $ref: '#/components/schemas/Zone'
+      '404':
+        $ref: '#/components/responses/NotFound'
+  delete:
+    tags:
+      - Zones
+    summary: 'Delete zone'
+    deprecated: true
+    description: "**Deprecated — legacy master data.** Delete zones via `DELETE /assets/{assetId}`.\n"
+    responses:
+      '204':
+        description: 'No content'
+      '404':
+        $ref: '#/components/responses/NotFound'

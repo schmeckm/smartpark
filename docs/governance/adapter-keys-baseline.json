@@ -1,0 +1,53 @@
+{
+  "$schema": "./adapter-keys-baseline.schema.txt",
+  "description": "Closed, ordered list of adapter keys recognized by Smart Park OS. Every adapter package directory under `src/integrations/adapter-packages/<key>/` MUST appear here, and every entry here MUST have a directory + manifest.json + index.js on disk. Phase C0/C1 governance: changing this list (rename, add, remove) requires (a) updating every reference enumerated under `referencesByKey` AND (b) writing a Sequelize migration when DB rows for the renamed key exist (the `adapter_packages.adapter_key` column is unique).",
+  "adapterKeys": [
+    "calendar_school_holidays",
+    "opcua_edge",
+    "themeparks_wiki",
+    "wartezeiten_app",
+    "weather_open_meteo"
+  ],
+  "providerAdapterKeys": [
+    "themeparks_wiki",
+    "wartezeiten_app"
+  ],
+  "referencesByKey": {
+    "calendar_school_holidays": {
+      "manifest": "src/integrations/adapter-packages/calendar_school_holidays/manifest.json",
+      "runtime": "src/integrations/adapter-packages/calendar_school_holidays/index.js"
+    },
+    "opcua_edge": {
+      "manifest": "src/integrations/adapter-packages/opcua_edge/manifest.json",
+      "runtime": "src/integrations/adapter-packages/opcua_edge/index.js",
+      "installConfig": "data/adapter-install-config/opcua_edge.install.yaml"
+    },
+    "themeparks_wiki": {
+      "manifest": "src/integrations/adapter-packages/themeparks_wiki/manifest.json",
+      "runtime": "src/integrations/adapter-packages/themeparks_wiki/index.js",
+      "providerAdapter": "src/integrations/adapter-packages/themeparks_wiki/client.js",
+      "syncModule": "src/modules/adapters/themeparks/themeparks-sync.service.js",
+      "envFlags": ["EXTERNAL_PARK_DATA_DEFAULT_PROVIDER"],
+      "selectedParkService": "src/services/themeparks-wiki-selected-park.service.js"
+    },
+    "wartezeiten_app": {
+      "manifest": "src/integrations/adapter-packages/wartezeiten_app/manifest.json",
+      "runtime": "src/integrations/adapter-packages/wartezeiten_app/index.js",
+      "providerAdapter": "src/integrations/adapter-packages/wartezeiten_app/client.js"
+    },
+    "weather_open_meteo": {
+      "manifest": "src/integrations/adapter-packages/weather_open_meteo/manifest.json",
+      "runtime": "src/integrations/adapter-packages/weather_open_meteo/index.js",
+      "installConfig": "data/adapter-install-config/weather_open_meteo.install.yaml"
+    }
+  },
+  "expectedRuntimeContract": ["validateConfig", "discover", "poll", "health"],
+  "providerAdapterManifestField": "providerAdapterClient",
+  "providerAdapterRegistryClass": "src/integrations/adapters/provider-adapter-registry.js",
+  "providerAdapterServiceClass": "src/services/provider-adapter-registry.service.js",
+  "frameworkServiceClass": "src/modules/integrations/adapter-framework/adapter-framework.service.js",
+  "loaderServiceClass": "src/modules/integrations/adapter-framework/adapter-package-loader.service.js",
+  "dbTable": "adapter_packages",
+  "dbUniqueColumn": "adapter_key",
+  "dbMigration": "src/migrations/20260426100001-adapter-framework-phase1.js"
+}

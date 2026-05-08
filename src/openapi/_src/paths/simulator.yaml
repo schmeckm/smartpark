@@ -1,0 +1,139 @@
+/simulator/status:
+  get:
+    tags:
+      - Wave2
+    summary: 'Simulator status'
+    responses:
+      '200':
+        description: OK
+/simulator/start:
+  post:
+    tags:
+      - Wave2
+    summary: 'Start simulator background loop'
+    responses:
+      '200':
+        description: OK
+/simulator/stop:
+  post:
+    tags:
+      - Wave2
+    summary: 'Stop simulator'
+    responses:
+      '200':
+        description: OK
+/simulator/scenario:
+  post:
+    tags:
+      - Wave2
+    summary: 'Run one named scenario'
+    requestBody:
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - name
+            properties:
+              name:
+                type: string
+    responses:
+      '200':
+        description: OK
+/simulator/attraction-oee/candidates:
+  get:
+    tags:
+      - Wave2
+    summary: 'List ride assets eligible for attraction OEE MQTT simulation'
+    parameters:
+      -
+        in: query
+        name: parkId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeAttractionOeeCandidates'
+      '400':
+        description: 'Validation error'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+/simulator/attraction-oee/status:
+  get:
+    tags:
+      - Wave2
+    summary: 'Attraction OEE simulator status (Sparkplug-style MQTT loop)'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+/simulator/attraction-oee/start:
+  post:
+    tags:
+      - Wave2
+    summary: 'Start attraction OEE simulator publishes'
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AttractionOeeStartBody'
+    responses:
+      '200':
+        description: 'Started or already running'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeAttractionOeeStartResult'
+      '400':
+        description: 'Start rejected (`success` false, details in `data`)'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeAttractionOeeStartResult'
+/simulator/attraction-oee/stop:
+  post:
+    tags:
+      - Wave2
+    summary: 'Stop attraction OEE simulator'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+/simulator/attraction-oee/scenario:
+  post:
+    tags:
+      - Wave2
+    summary: 'Set named attraction OEE scenario (see `AttractionOeeScenarioName`)'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AttractionOeeScenarioBody'
+    responses:
+      '200':
+        description: 'Scenario applied'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '400':
+        description: 'Unknown scenario'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'

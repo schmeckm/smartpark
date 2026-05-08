@@ -1,0 +1,25 @@
+components:
+  parameters:
+    IdPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    InstalledAdapterIdPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: 'Adapter package UUID or adapterKey (slug)'
+    ParkSlugPath:
+      name: parkSlug
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+      description: 'Park internal UUID, URL slug, or external entity id (same resolution as platform master-data).'

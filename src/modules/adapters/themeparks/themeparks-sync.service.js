@@ -1,4 +1,4 @@
-const { ThemeParksWikiAdapter } = require('../../../integrations/adapters/themeparks-wiki.adapter');
+const { ThemeParksWikiAdapter } = require('../../../integrations/adapter-packages/themeparks_wiki/client');
 const { slugifyName } = require('../../uns/uns-topic-generator.service');
 const { AssetsRepository } = require('../../assets/assets.repository');
 const {

@@ -2,6 +2,12 @@ const { Router } = require('express');
 const { requirePermission } = require('../../middleware/rbac.middleware');
 const { validate } = require('../../middleware/validate.middleware');
 const controller = require('../../controllers/integrations.controller');
+// `listLogs` lives in the singular controller (paired with the deprecated
+// `/integration/logs` route). Phase B3 mounts the same handler under the
+// canonical plural namespace at `/integrations/logs` without moving code, so
+// the singular controller can be deleted in a future cleanup PR after all
+// clients migrate.
+const integrationLegacyController = require('../../controllers/integration.controller');
 const {
   canonicalMessageListQuerySchema,
   providerParamsSchema,
@@ -30,6 +36,13 @@ const {
 } = require('../../validators/integrations.schemas');
 
 const router = Router();
+
+/**
+ * Canonical `GET /integrations/logs` (Phase B3) — same handler as the
+ * deprecated `GET /integration/logs`. Both surfaces stay live until
+ * the singular `/integration/*` namespace is physically removed.
+ */
+router.get('/logs', requirePermission('integration', 'read'), integrationLegacyController.listLogs);
 
 router.get('/feature-flags', requirePermission('integrations', 'read'), controller.getFeatureFlags);
 

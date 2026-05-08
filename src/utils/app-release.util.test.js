@@ -19,7 +19,6 @@ test('getAppRelease includes gitCommit when env set', (t) => {
   });
   delete require.cache[require.resolve('./app-release.util')];
   process.env.GIT_COMMIT = 'abc1234';
-  // eslint-disable-next-line global-require
   const { getAppRelease: getAgain } = require('./app-release.util');
   assert.equal(getAgain().gitCommit, 'abc1234');
 });
