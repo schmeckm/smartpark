@@ -1,10 +1,10 @@
 const { AppError } = require('../utils/app-error');
 const { logger } = require('../utils/logger');
-const { randomUUID } = require('node:crypto');
 const { ProviderAdapterRegistryService } = require('./provider-adapter-registry.service');
 const { CanonicalInboundMessageService } = require('./canonical-inbound-message.service');
 const { AppSettingRepository } = require('../repositories/app-setting.repository');
 const { ExternalEntityMappingService } = require('./external-entity-mapping.service');
+const { ManualUnsNodeService } = require('../modules/integrations/orchestrator/manual-uns-node.service');
 const { emitExternalMappingUpdated, emitExternalParkDataUpdated } = require('../sockets');
 const { DEFAULT_AI_FACTOR_CONFIGS } = require('../constants/ai-factor-config');
 const env = require('../config/env');
@@ -166,6 +166,12 @@ class IntegrationOrchestratorService {
     this.canonicalService = new CanonicalInboundMessageService();
     this.settingRepository = new AppSettingRepository();
     this.mappingService = new ExternalEntityMappingService();
+    // Phase C3.1 — extracted bounded contexts. Each is a thin domain
+    // service composed here so the orchestrator can delegate without
+    // changing its public API.
+    this.manualUnsNodeService = new ManualUnsNodeService({
+      settingRepository: this.settingRepository,
+    });
   }
 
   async bootstrap() {
@@ -701,47 +707,28 @@ class IntegrationOrchestratorService {
 
   async listManualUnsNodes() {
     const selected = await this.selectedParkOrThrow();
-    const all = await this.settingRepository.getValue(SETTING_KEYS.unsManualNodes, []);
-    if (!Array.isArray(all)) return [];
-    return all.filter(
-      (r) => r && r.provider === selected.provider && r.externalParkId === selected.externalParkId
-    );
+    return this.manualUnsNodeService.list({
+      provider: selected.provider,
+      externalParkId: selected.externalParkId,
+    });
   }
 
   async addManualUnsNode(input) {
     const selected = await this.selectedParkOrThrow();
-    const all = await this.settingRepository.getValue(SETTING_KEYS.unsManualNodes, []);
-    const rows = Array.isArray(all) ? all : [];
-    const et = input.entityType != null && String(input.entityType).trim() !== '' ? String(input.entityType).trim().toUpperCase() : null;
-    const row = {
-      id: randomUUID(),
+    return this.manualUnsNodeService.add({
       provider: selected.provider,
       externalParkId: selected.externalParkId,
-      domain:
-        input.domain != null && String(input.domain).trim() !== ''
-          ? slugifyName(input.domain)
-          : resolveUnsDomainForEntity(null, et),
-      assetSlug: slugifyName(input.assetSlug || input.assetName),
-      metric: slugifyName(input.metric),
-      assetName: input.assetName || input.assetSlug,
-      entityType: et,
-      source: 'MANUAL',
-      createdAt: new Date().toISOString(),
-    };
-    rows.push(row);
-    await this.settingRepository.upsertValue(SETTING_KEYS.unsManualNodes, rows);
-    return row;
+      input,
+    });
   }
 
   async removeManualUnsNode(id) {
     const selected = await this.selectedParkOrThrow();
-    const all = await this.settingRepository.getValue(SETTING_KEYS.unsManualNodes, []);
-    const rows = Array.isArray(all) ? all : [];
-    const next = rows.filter(
-      (r) => !(r && r.id === id && r.provider === selected.provider && r.externalParkId === selected.externalParkId)
-    );
-    await this.settingRepository.upsertValue(SETTING_KEYS.unsManualNodes, next);
-    return rows.length !== next.length;
+    return this.manualUnsNodeService.remove({
+      provider: selected.provider,
+      externalParkId: selected.externalParkId,
+      id,
+    });
   }
 
   _unsSchemaMatchesPark(doc, selected) {
