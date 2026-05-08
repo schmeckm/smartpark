@@ -14,6 +14,9 @@ tags:
   -
     name: Health
   -
+    name: Agent
+    description: 'Phase A agentic co-pilot runs (read-only tools; persisted trace).'
+  -
     name: Audit
   -
     name: Zones
@@ -1854,6 +1857,86 @@ components:
           nullable: true
           type: object
           additionalProperties: true
+    AddonBoardVenueTriplet:
+      type: object
+      description: 'Counts of active `park_assets` by `AssetType` RESTAURANT, SHOP, SHOW (Phase 3 cross-asset context). No POS throughput.'
+      properties:
+        restaurants:
+          type: integer
+          minimum: 0
+        shops:
+          type: integer
+          minimum: 0
+        shows:
+          type: integer
+          minimum: 0
+    AddonBoardCrossAssetHint:
+      type: object
+      description: 'Rule-based operations hint; clients map `code` to i18n.'
+      properties:
+        code:
+          type: string
+          example: CROSS_QUEUE_NEAR_COMMERCE
+        severity:
+          type: string
+          enum:
+            - INFO
+    AddonBoardCrossAssetContextRideSwdec:
+      type: object
+      description: 'Nested under ride card `swdec` — venues in the ride zone plus hint codes.'
+      required:
+        - schemaVersion
+        - zoneVenues
+        - hints
+      properties:
+        schemaVersion:
+          type: integer
+          enum:
+            - 1
+        zoneVenues:
+          $ref: '#/components/schemas/AddonBoardVenueTriplet'
+        hints:
+          type: array
+          items:
+            $ref: '#/components/schemas/AddonBoardCrossAssetHint'
+    AddonBoardCrossAssetContextPark:
+      type: object
+      description: 'Park-level venue roll-up on L0 / ride-list / critical-list / ride-detail root. Omitted when there are no venue assets.'
+      required:
+        - schemaVersion
+        - parkVenues
+        - zonesWithVenues
+      properties:
+        schemaVersion:
+          type: integer
+          enum:
+            - 1
+        parkVenues:
+          $ref: '#/components/schemas/AddonBoardVenueTriplet'
+        zonesWithVenues:
+          type: integer
+          minimum: 0
+          description: 'Distinct zone keys (including unzoned bucket) with at least one venue asset.'
+    AddonBoardCrossAssetContextZoneResponse:
+      type: object
+      description: 'L1 zone summary — selected zone triplet plus park totals.'
+      required:
+        - schemaVersion
+        - parkVenues
+        - zoneVenues
+        - zonesWithVenues
+      properties:
+        schemaVersion:
+          type: integer
+          enum:
+            - 1
+        parkVenues:
+          $ref: '#/components/schemas/AddonBoardVenueTriplet'
+        zoneVenues:
+          $ref: '#/components/schemas/AddonBoardVenueTriplet'
+        zonesWithVenues:
+          type: integer
+          minimum: 0
     EnvelopeAddonBoardParkSummary:
       type: object
       properties:
@@ -1862,6 +1945,12 @@ components:
         data:
           type: object
           additionalProperties: true
+          properties:
+            crossAssetContext:
+              nullable: true
+              allOf:
+                -
+                  $ref: '#/components/schemas/AddonBoardCrossAssetContextPark'
     EnvelopeAddonBoardRides:
       type: object
       properties:
@@ -1870,6 +1959,21 @@ components:
         data:
           type: object
           additionalProperties: true
+          properties:
+            weatherContext:
+              type: object
+              nullable: true
+              additionalProperties: true
+            crossAssetContext:
+              nullable: true
+              allOf:
+                -
+                  $ref: '#/components/schemas/AddonBoardCrossAssetContextPark'
+            rides:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
     EnvelopeAddonBoardZone:
       type: object
       properties:
@@ -1878,6 +1982,16 @@ components:
         data:
           type: object
           additionalProperties: true
+          properties:
+            weatherContext:
+              type: object
+              nullable: true
+              additionalProperties: true
+            crossAssetContext:
+              nullable: true
+              allOf:
+                -
+                  $ref: '#/components/schemas/AddonBoardCrossAssetContextZoneResponse'
     EnvelopeAddonBoardRideDetail:
       type: object
       properties:
@@ -1886,6 +2000,18 @@ components:
         data:
           type: object
           additionalProperties: true
+          properties:
+            crossAssetContext:
+              nullable: true
+              allOf:
+                -
+                  $ref: '#/components/schemas/AddonBoardCrossAssetContextPark'
+            swdec:
+              type: object
+              additionalProperties: true
+              properties:
+                crossAssetContext:
+                  $ref: '#/components/schemas/AddonBoardCrossAssetContextRideSwdec'
     EnvelopeAddonBoardZoneList:
       type: object
       properties:
@@ -3730,6 +3856,17 @@ components:
           type: boolean
         data:
           $ref: '#/components/schemas/UnsRegistryMirrorSummary'
+    EnvelopeUnsRegistryMirrorSyncPost:
+      type: object
+      properties:
+        success:
+          type: boolean
+        syncedAt:
+          type: string
+          format: date-time
+          description: 'ISO-8601 timestamp when the full mirror transaction completed'
+        data:
+          $ref: '#/components/schemas/UnsRegistryMirrorSummary'
     UnsHierarchyImportBody:
       type: object
       required:
@@ -4193,7 +4330,7 @@ paths:
       tags:
         - AI
       summary: 'Add-on Board park summary (L0)'
-      description: 'Needs `ops.read` or `rides.read` and `X-Park-Id`'
+      description: "Needs `ops.read` or `rides.read` and `X-Park-Id`. **Phase 3:** `data.crossAssetContext` — active F&B / shop / show asset counts by park (master data only).\n"
       responses:
         '200':
           description: OK
@@ -4206,7 +4343,7 @@ paths:
       tags:
         - AI
       summary: 'Add-on Board ride cards with SWDEC + ML forecasts'
-      description: 'Needs `ops.read` or `rides.read` and `X-Park-Id`'
+      description: "Needs `ops.read` or `rides.read` and `X-Park-Id`. **Phase 3:** `data.crossAssetContext` (park roll-up); each ride `swdec.crossAssetContext` (zone venues + hint codes).\n"
       responses:
         '200':
           description: OK
@@ -4219,6 +4356,7 @@ paths:
       tags:
         - AI
       summary: 'Critical / watch-list rides for the board'
+      description: 'Same envelope as `GET /addon-board/rides` (includes optional `crossAssetContext` park roll-up).'
       parameters:
         -
           in: query
@@ -4321,6 +4459,7 @@ paths:
       tags:
         - AI
       summary: 'Zone-level Add-on Board summary (L1)'
+      description: '**Phase 3:** optional `data.crossAssetContext` with `zoneVenues` and park totals.'
       parameters:
         -
           in: path
@@ -4341,6 +4480,7 @@ paths:
       tags:
         - AI
       summary: 'Ride-level Add-on Board detail (L3)'
+      description: '**Phase 3:** `data.crossAssetContext` (park roll-up, same as list) and `data.swdec.crossAssetContext` (zone venues + hints).'
       parameters:
         -
           in: path
@@ -4551,6 +4691,256 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EnvelopeGenericData'
+  /agent/actions:
+    get:
+      tags:
+        - Agent
+      summary: 'List pending proposed agent actions for scoped park'
+      description: 'Needs **`agent.review`** and **`X-Park-Id`**. Returns proposals awaiting approve/reject (`status=proposed`).'
+      parameters:
+        -
+          in: header
+          name: X-Park-Id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        -
+          in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        -
+          in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+  '/agent/actions/{id}/approve':
+    parameters:
+      -
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      -
+        in: header
+        name: X-Park-Id
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags:
+        - Agent
+      summary: 'Approve and apply a proposed agent action'
+      description: "Needs **`agent.approve`** and **`X-Park-Id`**. Executes the whitelisted write tool (e.g. batch recommendation scoring, notify audit stub, incident create).\nOn success the action row stores **`outcome_metric`** (Phase C JSON: forecast-vs-actual bridge stub + `resolution: applied`).\n"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '404':
+          description: 'Not found'
+        '410':
+          description: 'Proposal expired'
+  '/agent/actions/{id}/reject':
+    parameters:
+      -
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      -
+        in: header
+        name: X-Park-Id
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags:
+        - Agent
+      summary: 'Reject a proposed agent action'
+      description: "Needs **`agent.review`** and **`X-Park-Id`**. Stores **`outcome_metric`** with `resolution: rejected` and the same forecast snapshot stub as approve (for later analytics).\n"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  maxLength: 2000
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+  /agent/runs:
+    get:
+      tags:
+        - Agent
+      summary: 'List agent runs for scoped park'
+      description: 'Needs **`agent.read`**, **`X-Park-Id`**, and optional filters (`limit`, `offset`, `skillId`, `status`).'
+      parameters:
+        -
+          in: header
+          name: X-Park-Id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        -
+          in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        -
+          in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        -
+          in: query
+          name: skillId
+          schema:
+            type: string
+        -
+          in: query
+          name: status
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+    post:
+      tags:
+        - Agent
+      summary: 'Trigger an agent skill run (manual)'
+      description: "Needs **`agent.run`** and **`X-Park-Id`**. Body **`parkId`** must match the active park context.\nSupports **`daily_executive_brief`**, **`crowd_spike_triage`**, **`mapping_assistant`**, **`weather_pivot`**, and **`ride_down_response`** (suggest skills propose actions for approval).\n"
+      parameters:
+        -
+          in: header
+          name: X-Park-Id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - skillId
+                - parkId
+              properties:
+                skillId:
+                  type: string
+                  enum:
+                    - daily_executive_brief
+                    - crowd_spike_triage
+                    - mapping_assistant
+                    - weather_pivot
+                    - ride_down_response
+                parkId:
+                  type: string
+                  format: uuid
+                triggerType:
+                  type: string
+                  default: manual
+                crowdEventId:
+                  type: string
+                  format: uuid
+                  nullable: true
+                  description: 'Optional crowd event (`crowd_events.id`) for `crowd_spike_triage` context.'
+                rideId:
+                  type: string
+                  format: uuid
+                  nullable: true
+                  description: 'Optional ride / park asset id (`park_assets.asset_id`) for `ride_down_response` focus context.'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '422':
+          description: 'Validation error'
+  '/agent/runs/{id}':
+    parameters:
+      -
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      -
+        in: header
+        name: X-Park-Id
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - Agent
+      summary: 'Get agent run detail with steps and actions'
+      description: 'Needs **`agent.read`** and **`X-Park-Id`**. Returns ordered **`steps`** and **`actions`** for audit trace.'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: 'Not found'
   /ai/health:
     get:
       tags:
@@ -6452,6 +6842,191 @@ paths:
                 $ref: '#/components/schemas/ErrorBody'
         '404':
           $ref: '#/components/responses/NotFound'
+  '/assets/{assetId}/pdm-sparkplug-metrics':
+    parameters:
+      -
+        in: path
+        name: assetId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - Platform
+      summary: 'Sparkplug metric keys referenced by PDM rules for this asset'
+      responses:
+        '200':
+          description: OK
+        '404':
+          $ref: '#/components/responses/NotFound'
+  '/assets/{assetId}/pdm-evaluation-logs':
+    parameters:
+      -
+        in: path
+        name: assetId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      -
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+        description: 'Max log rows (newest first)'
+    get:
+      tags:
+        - Platform
+      summary: 'PdM evaluation history (snapshots when risk or signal status changed)'
+      responses:
+        '200':
+          description: OK
+        '404':
+          $ref: '#/components/responses/NotFound'
+  '/assets/{assetId}/predictive-maintenance':
+    parameters:
+      -
+        in: path
+        name: assetId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - Platform
+      summary: 'Predictive-maintenance evaluation for asset (rule thresholds vs live signals)'
+      responses:
+        '200':
+          description: OK
+        '404':
+          $ref: '#/components/responses/NotFound'
+  '/assets/{assetId}/pdm-rules':
+    parameters:
+      -
+        in: path
+        name: assetId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - Platform
+      summary: 'List PDM threshold rules for an asset'
+      responses:
+        '200':
+          description: OK
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags:
+        - Platform
+      summary: 'Create PDM threshold rule'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - metricName
+              properties:
+                metricName:
+                  type: string
+                  maxLength: 160
+                label:
+                  type: string
+                  maxLength: 200
+                  nullable: true
+                warnAbove:
+                  type: number
+                  nullable: true
+                criticalAbove:
+                  type: number
+                  nullable: true
+                warnBelow:
+                  type: number
+                  nullable: true
+                criticalBelow:
+                  type: number
+                  nullable: true
+                unit:
+                  type: string
+                  maxLength: 32
+                  nullable: true
+                notes:
+                  type: string
+                  maxLength: 4000
+                  nullable: true
+                enabled:
+                  type: boolean
+                sortOrder:
+                  type: integer
+      responses:
+        '201':
+          description: Created
+        '400':
+          description: 'Validation error'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  '/assets/{assetId}/pdm-rules/{ruleId}':
+    parameters:
+      -
+        in: path
+        name: assetId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      -
+        in: path
+        name: ruleId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      tags:
+        - Platform
+      summary: 'Update PDM threshold rule'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              additionalProperties: true
+      responses:
+        '200':
+          description: OK
+        '400':
+          description: 'Validation error'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags:
+        - Platform
+      summary: 'Delete PDM threshold rule'
+      responses:
+        '204':
+          description: 'No content'
+        '404':
+          $ref: '#/components/responses/NotFound'
   '/assets/{assetId}':
     parameters:
       -
@@ -8179,7 +8754,40 @@ paths:
           application/json:
             schema:
               type: object
-              additionalProperties: true
+              required:
+                - capabilities
+              properties:
+                capabilities:
+                  type: array
+                  minItems: 1
+                  maxItems: 500
+                  items:
+                    type: object
+                    required:
+                      - signalCatalogId
+                      - signalSource
+                    additionalProperties: false
+                    properties:
+                      signalCatalogId:
+                        type: string
+                        format: uuid
+                      signalSource:
+                        type: string
+                        enum:
+                          - NOT_AVAILABLE
+                          - MASTER_DATA
+                          - MANUAL
+                          - ADAPTER
+                          - MQTT_EDGE
+                          - SIMULATION
+                          - ML
+                      valueType:
+                        type: string
+                        maxLength: 64
+                      useForMl:
+                        type: boolean
+                      useForForecast:
+                        type: boolean
       responses:
         '200':
           description: OK
@@ -10240,6 +10848,39 @@ paths:
                     additionalProperties: true
         '404':
           $ref: '#/components/responses/NotFound'
+  '/parks/{parkId}/level0':
+    patch:
+      tags:
+        - Platform
+      summary: 'Patch park Level-0 master profile (hours baseline, Sparkplug routing block, identity)'
+      parameters:
+        -
+          in: path
+          name: parkId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              additionalProperties: true
+              description: 'Subset of park master profile — see `parkLevel0Body` validator'
+      responses:
+        '200':
+          description: OK
+        '400':
+          description: 'Validation error'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '404':
+          $ref: '#/components/responses/NotFound'
   '/parks/{parkId}/shift-handovers':
     parameters:
       -
@@ -10310,6 +10951,183 @@ paths:
       responses:
         '201':
           description: Created
+  '/parks/{parkId}/shift-handovers/{entryId}/acknowledge':
+    post:
+      tags:
+        - Platform
+      summary: 'Acknowledge shift handover entry'
+      parameters:
+        -
+          in: path
+          name: parkId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        -
+          in: path
+          name: entryId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note:
+                  type: string
+                  maxLength: 4000
+                  nullable: true
+      responses:
+        '200':
+          description: OK
+        '404':
+          $ref: '#/components/responses/NotFound'
+  '/parks/{parkId}/shift-handovers/{entryId}/tasks':
+    patch:
+      tags:
+        - Platform
+      summary: 'Replace follow-up task list on shift handover entry'
+      parameters:
+        -
+          in: path
+          name: parkId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        -
+          in: path
+          name: entryId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - tasks
+              properties:
+                tasks:
+                  type: array
+                  maxItems: 100
+                  items:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        maxLength: 80
+                      title:
+                        type: string
+                        maxLength: 280
+                      ownerUserId:
+                        type: string
+                        format: uuid
+                        nullable: true
+                      dueAt:
+                        type: string
+                        maxLength: 64
+                        nullable: true
+                      status:
+                        type: string
+                        enum:
+                          - OPEN
+                          - DONE
+                          - CANCELLED
+                    required:
+                      - title
+      responses:
+        '200':
+          description: OK
+        '404':
+          $ref: '#/components/responses/NotFound'
+  '/parks/{parkId}/shift-handovers/reminders/due':
+    get:
+      tags:
+        - Platform
+      summary: 'List shift handovers with reminders due'
+      parameters:
+        -
+          in: path
+          name: parkId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        -
+          in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+      responses:
+        '200':
+          description: OK
+        '404':
+          $ref: '#/components/responses/NotFound'
+  '/parks/{parkId}/shift-handovers/{entryId}/reminders/mark-sent':
+    post:
+      tags:
+        - Platform
+      summary: 'Mark shift handover reminder as sent'
+      parameters:
+        -
+          in: path
+          name: parkId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        -
+          in: path
+          name: entryId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+        '404':
+          $ref: '#/components/responses/NotFound'
+  '/parks/{parkId}/shift-handovers/{entryId}/pdf':
+    get:
+      tags:
+        - Platform
+      summary: 'Download shift handover PDF'
+      parameters:
+        -
+          in: path
+          name: parkId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        -
+          in: path
+          name: entryId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 'PDF stream'
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '404':
+          $ref: '#/components/responses/NotFound'
   /recommendations:
     get:
       tags:
@@ -11177,6 +11995,19 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EnvelopeUnsRegistryMirrorSummary'
+  /uns-registry/mirror/sync:
+    post:
+      tags:
+        - UNS
+      summary: 'UNS registry mirror — force full sync from legacy'
+      description: 'Requires **integrations.read**. Runs a full mirror rebuild (ignores stale TTL). Use after deploy or when canonical Sparkplug metrics / signal catalog must refresh immediately.'
+      responses:
+        '200':
+          description: 'Sync completed; mirror counts plus syncedAt'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeUnsRegistryMirrorSyncPost'
   /uns-registry/entities:
     get:
       tags:

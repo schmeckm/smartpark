@@ -261,6 +261,191 @@
               $ref: '#/components/schemas/ErrorBody'
       '404':
         $ref: '#/components/responses/NotFound'
+'/assets/{assetId}/pdm-sparkplug-metrics':
+  parameters:
+    -
+      in: path
+      name: assetId
+      required: true
+      schema:
+        type: string
+        format: uuid
+  get:
+    tags:
+      - Platform
+    summary: 'Sparkplug metric keys referenced by PDM rules for this asset'
+    responses:
+      '200':
+        description: OK
+      '404':
+        $ref: '#/components/responses/NotFound'
+'/assets/{assetId}/pdm-evaluation-logs':
+  parameters:
+    -
+      in: path
+      name: assetId
+      required: true
+      schema:
+        type: string
+        format: uuid
+    -
+      in: query
+      name: limit
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+      description: 'Max log rows (newest first)'
+  get:
+    tags:
+      - Platform
+    summary: 'PdM evaluation history (snapshots when risk or signal status changed)'
+    responses:
+      '200':
+        description: OK
+      '404':
+        $ref: '#/components/responses/NotFound'
+'/assets/{assetId}/predictive-maintenance':
+  parameters:
+    -
+      in: path
+      name: assetId
+      required: true
+      schema:
+        type: string
+        format: uuid
+  get:
+    tags:
+      - Platform
+    summary: 'Predictive-maintenance evaluation for asset (rule thresholds vs live signals)'
+    responses:
+      '200':
+        description: OK
+      '404':
+        $ref: '#/components/responses/NotFound'
+'/assets/{assetId}/pdm-rules':
+  parameters:
+    -
+      in: path
+      name: assetId
+      required: true
+      schema:
+        type: string
+        format: uuid
+  get:
+    tags:
+      - Platform
+    summary: 'List PDM threshold rules for an asset'
+    responses:
+      '200':
+        description: OK
+      '404':
+        $ref: '#/components/responses/NotFound'
+  post:
+    tags:
+      - Platform
+    summary: 'Create PDM threshold rule'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - metricName
+            properties:
+              metricName:
+                type: string
+                maxLength: 160
+              label:
+                type: string
+                maxLength: 200
+                nullable: true
+              warnAbove:
+                type: number
+                nullable: true
+              criticalAbove:
+                type: number
+                nullable: true
+              warnBelow:
+                type: number
+                nullable: true
+              criticalBelow:
+                type: number
+                nullable: true
+              unit:
+                type: string
+                maxLength: 32
+                nullable: true
+              notes:
+                type: string
+                maxLength: 4000
+                nullable: true
+              enabled:
+                type: boolean
+              sortOrder:
+                type: integer
+    responses:
+      '201':
+        description: Created
+      '400':
+        description: Validation error
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+      '404':
+        $ref: '#/components/responses/NotFound'
+'/assets/{assetId}/pdm-rules/{ruleId}':
+  parameters:
+    -
+      in: path
+      name: assetId
+      required: true
+      schema:
+        type: string
+        format: uuid
+    -
+      in: path
+      name: ruleId
+      required: true
+      schema:
+        type: string
+        format: uuid
+  patch:
+    tags:
+      - Platform
+    summary: 'Update PDM threshold rule'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            minProperties: 1
+            additionalProperties: true
+    responses:
+      '200':
+        description: OK
+      '400':
+        description: Validation error
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+      '404':
+        $ref: '#/components/responses/NotFound'
+  delete:
+    tags:
+      - Platform
+    summary: 'Delete PDM threshold rule'
+    responses:
+      '204':
+        description: 'No content'
+      '404':
+        $ref: '#/components/responses/NotFound'
 '/assets/{assetId}':
   parameters:
     -
