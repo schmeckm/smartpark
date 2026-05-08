@@ -12,9 +12,10 @@ const {
 } = require('../modules/integrations/orchestrator/integration-settings.service');
 const {
   SparkplugTopicSchemaService,
-  unsSchemaMatchesPark,
-  applyUploadedUnsSchemaEntries,
 } = require('../modules/integrations/orchestrator/sparkplug-topic-schema.service');
+const {
+  UnsTopicSuggestionService,
+} = require('../modules/integrations/orchestrator/uns-topic-suggestion.service');
 const { emitExternalMappingUpdated, emitExternalParkDataUpdated } = require('../sockets');
 const env = require('../config/env');
 const { getPlatformSettingsService } = require('./platform-settings.service');
@@ -66,6 +67,14 @@ class IntegrationOrchestratorService {
       registryService: this.registryService,
       unsParkKeyResolver: async () => this.resolveUnsParkKey(),
     });
+    this.unsTopicSuggestion = new UnsTopicSuggestionService({
+      selectedParkResolver: () => this.selectedParkOrThrow(),
+      providerEntityResolver: (provider, entityId) => this.getProviderEntity(provider, entityId),
+      manualNodeService: this.manualUnsNodeService,
+      mappingService: this.mappingService,
+      canonicalService: this.canonicalService,
+      settingRepository: this.settingRepository,
+    });
     this.sparkplugSchema = new SparkplugTopicSchemaService({
       settingRepository: this.settingRepository,
       selectedParkResolver: () => this.selectedParkOrThrow(),
@@ -74,7 +83,7 @@ class IntegrationOrchestratorService {
         return slugifyName(parkEntity?.name || selected.parkName || selected.externalParkId);
       },
       dynamicTopicRowsResolver: (selected, parkSlug) =>
-        this.buildDynamicUnsTopicNodesFromIntegrations(selected, parkSlug),
+        this.unsTopicSuggestion.buildDynamicUnsTopicNodesFromIntegrations(selected, parkSlug),
     });
   }
 
@@ -443,206 +452,21 @@ class IntegrationOrchestratorService {
     });
   }
 
-  _unsSchemaMatchesPark(doc, selected) {
-    return unsSchemaMatchesPark(doc, selected);
-  }
-
-  _applyUploadedUnsSchemaEntries(entries, selected, parkSlug) {
-    return applyUploadedUnsSchemaEntries(entries, selected, parkSlug);
-  }
-
-  async buildDynamicUnsTopicNodesFromIntegrations(selected, parkSlug) {
-    const [mappings, messages] = await Promise.all([
-      this.mappingService.listMappings({
-        provider: selected.provider,
-        parkId: selected.externalParkId,
-      }),
-      this.canonicalService.list({
-        provider: selected.provider,
-        externalParkId: selected.externalParkId,
-        limit: 500,
-        offset: 0,
-      }),
-    ]);
-
-    const nodesByEntity = new Map();
-    for (const m of mappings) {
-      const met = m.externalEntityType != null && String(m.externalEntityType).trim() !== '' ? String(m.externalEntityType).trim().toUpperCase() : null;
-      nodesByEntity.set(m.externalEntityId, {
-        externalEntityId: m.externalEntityId,
-        entityName: m.externalEntityName || m.externalEntityId,
-        assetSlug: slugifyName(m.externalEntityName || m.externalEntityId),
-        entityType: met,
-        domain: resolveUnsDomainForEntity(null, met),
-        metrics: new Set(),
-        source: 'MAPPING',
-      });
-    }
-    for (const msg of messages) {
-      if (!msg.externalEntityId) continue;
-      if (!['WAIT_TIME_UPDATED', 'ENTITY_STATUS_UPDATED'].includes(msg.messageType)) continue;
-      const payload = msg.payload || {};
-      const metric = msg.messageType === 'WAIT_TIME_UPDATED' ? 'queue_time' : 'status';
-      if (!nodesByEntity.has(msg.externalEntityId)) {
-        const etRaw = payload.entityType || msg.entityType;
-        const et = etRaw != null && String(etRaw).trim() !== '' ? String(etRaw).trim().toUpperCase() : null;
-        const assetSlug = slugifyName(payload.slug || payload.externalEntityName || msg.externalEntityId);
-        nodesByEntity.set(msg.externalEntityId, {
-          externalEntityId: msg.externalEntityId,
-          entityName: payload.externalEntityName || msg.externalEntityId,
-          assetSlug,
-          entityType: et,
-          domain: resolveUnsDomainForEntity(null, et),
-          metrics: new Set(),
-          source: 'CANONICAL',
-        });
-      }
-      nodesByEntity.get(msg.externalEntityId).metrics.add(metric);
-    }
-
-    const integrationNodes = [...nodesByEntity.values()].flatMap((n) => {
-      const metrics = n.metrics.size ? [...n.metrics] : ['status', 'queue_time'];
-      return metrics.map((metric) => ({
-        provider: selected.provider,
-        externalParkId: selected.externalParkId,
-        externalEntityId: n.externalEntityId,
-        entityName: n.entityName,
-        entityType: n.entityType,
-        domain: n.domain,
-        assetSlug: n.assetSlug,
-        metric,
-        topicPath: buildCanonicalUnsTopic({
-          parkSlug,
-          entityType: n.domain,
-          entitySlug: n.assetSlug,
-          metric,
-        }),
-        source: n.source,
-      }));
-    });
-
-    let masterRows = [];
-    try {
-      const { generateUnsTopicRowsFromMasterData } = require('../modules/uns/uns-master-data-generation.service');
-      masterRows = await generateUnsTopicRowsFromMasterData({
-        provider: selected.provider,
-        externalParkId: selected.externalParkId,
-        parkSlug,
-      });
-    } catch (e) {
-      logger.warn({ err: e.message }, 'UNS: master-data topic rows skipped');
-    }
-
-    const byPath = new Map();
-    for (const r of integrationNodes) {
-      byPath.set(r.topicPath, r);
-    }
-    for (const r of masterRows) {
-      byPath.set(r.topicPath, r);
-    }
-    return [...byPath.values()];
-  }
-
-  async _buildUnsSuggestionCore() {
-    const selected = await this.selectedParkOrThrow();
-    const parkEntity = await this.getProviderEntity(selected.provider, selected.externalParkId);
-    const parkSlug = slugifyName(parkEntity?.name || selected.parkName || selected.externalParkId);
-
-    const [manualNodes, storedOverride] = await Promise.all([
-      this.listManualUnsNodes(),
-      this.settingRepository.getValue(SETTING_KEYS.unsSparkplugSchemaOverride, null),
-    ]);
-
-    let dynamicNodes = await this.buildDynamicUnsTopicNodesFromIntegrations(selected, parkSlug);
-    let schemaOverrideActive = false;
-    const matchedOverride =
-      storedOverride?.entries?.length && this._unsSchemaMatchesPark(storedOverride, selected) ? storedOverride : null;
-    if (matchedOverride) {
-      dynamicNodes = this._applyUploadedUnsSchemaEntries(matchedOverride.entries, selected, parkSlug);
-      schemaOverrideActive = true;
-    }
-
-    const manualRows = manualNodes.map((m) => ({
-      id: m.id,
-      provider: m.provider,
-      externalParkId: m.externalParkId,
-      externalEntityId: null,
-      entityName: m.assetName || m.assetSlug,
-      entityType: m.entityType,
-      domain: m.domain,
-      assetSlug: m.assetSlug,
-      metric: m.metric,
-      topicPath: buildCanonicalUnsTopic({
-        parkSlug,
-        entityType: m.domain,
-        entitySlug: m.assetSlug,
-        metric: m.metric,
-      }),
-      source: 'MANUAL',
-    }));
-
-    return {
-      selected,
-      parkSlug,
-      dynamicNodes,
-      manualNodes,
-      manualRows,
-      schemaOverrideActive,
-      matchedOverride,
-    };
+  buildDynamicUnsTopicNodesFromIntegrations(selected, parkSlug) {
+    return this.unsTopicSuggestion.buildDynamicUnsTopicNodesFromIntegrations(selected, parkSlug);
   }
 
   /** Flat rows for persisting into `uns_nodes` (no Sparkplug enrichment). */
-  async getUnsTopicSuggestionFlatRows() {
-    const core = await this._buildUnsSuggestionCore();
-    return { parkSlug: core.parkSlug, rows: [...core.dynamicNodes, ...core.manualRows] };
+  getUnsTopicSuggestionFlatRows() {
+    return this.unsTopicSuggestion.getFlatRows();
   }
 
-  async materializeUnsNodesFromSuggestions() {
-    const { UnsService } = require('../modules/uns/uns.service');
-    const { parkSlug, rows } = await this.getUnsTopicSuggestionFlatRows();
-    const lean = rows.map((r) => ({
-      topicPath: r.topicPath,
-      domain: r.domain,
-      assetSlug: r.assetSlug,
-      metric: r.metric,
-      entityName: r.entityName,
-      entityType: r.entityType,
-      source: r.source,
-    }));
-    const unsService = new UnsService();
-    return unsService.materializeLeavesFromIntegration(parkSlug, lean);
+  materializeUnsNodesFromSuggestions() {
+    return this.unsTopicSuggestion.materializeFromSuggestions();
   }
 
-  async getUnsTopicSuggestions() {
-    const core = await this._buildUnsSuggestionCore();
-    const { selected, parkSlug, dynamicNodes: dynRaw, manualRows, manualNodes, schemaOverrideActive, matchedOverride } =
-      core;
-
-    const groupId = matchedOverride?.sparkplug?.groupId || env.sparkplugGroupId || parkSlug;
-    const edgeNodeId = matchedOverride?.sparkplug?.edgeNodeId || env.sparkplugEdgeNode || 'park_gateway';
-    const dynamicNodes = enrichRowsWithSparkplug(dynRaw, { groupId, edgeNodeId });
-    const manual = enrichRowsWithSparkplug(manualRows, { groupId, edgeNodeId });
-
-    const all = [...dynamicNodes, ...manual].sort((a, b) => a.topicPath.localeCompare(b.topicPath));
-    const byDomain = new Map();
-    for (const n of all) {
-      if (!byDomain.has(n.domain)) byDomain.set(n.domain, []);
-      byDomain.get(n.domain).push(n);
-    }
-    const tree = [...byDomain.entries()].map(([domain, items]) => ({ domain, items }));
-
-    return {
-      provider: selected.provider,
-      externalParkId: selected.externalParkId,
-      parkSlug,
-      schemaOverrideActive,
-      sparkplug: { groupId, edgeNodeId },
-      tree,
-      totalTopics: all.length,
-      dynamicTopics: dynRaw.length,
-      manualTopics: manualNodes.length,
-    };
+  getUnsTopicSuggestions() {
+    return this.unsTopicSuggestion.getSuggestions();
   }
 
   getSparkplugTopicSchemaDocument({ source }) {

@@ -7,15 +7,15 @@
   "matches": [
     {
       "file": "src/services/integration-orchestrator.service.js",
-      "line": 268,
+      "line": 277,
       "text": "if (String(selected.provider || '').toLowerCase() === 'themeparks_wiki' && selected.externalParkId) {",
-      "context": "syncEntities() — calls themeparks-sync.service.syncParkFromThemeParks for platform master-data sync after ingest. Slated for replacement by post-ingest hook registry in C3.7. Line shifted in C3.4 (sparkplug-topic-schema extraction)."
+      "context": "syncEntities() — calls themeparks-sync.service.syncParkFromThemeParks for platform master-data sync after ingest. Slated for replacement by post-ingest hook registry in C3.7. Line shifted in C3.6 (uns-topic-suggestion extraction)."
     },
     {
       "file": "src/services/integration-orchestrator.service.js",
-      "line": 322,
+      "line": 331,
       "text": "if (String(selected.provider || '').toLowerCase() === 'themeparks_wiki' && selected.externalParkId) {",
-      "context": "syncLive() — calls themeparks-sync.service.syncThemeParksLiveOnly for platform live observations after ingest. Slated for replacement by post-ingest hook registry in C3.7. Line shifted in C3.4 (sparkplug-topic-schema extraction)."
+      "context": "syncLive() — calls themeparks-sync.service.syncThemeParksLiveOnly for platform live observations after ingest. Slated for replacement by post-ingest hook registry in C3.7. Line shifted in C3.6 (uns-topic-suggestion extraction)."
     }
   ],
   "matchCount": 2,
