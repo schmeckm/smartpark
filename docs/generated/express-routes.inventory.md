@@ -1,6 +1,6 @@
 # Express route inventory (generated)
 
-- **Generated:** 2026-05-08T09:07:36.312Z
+- **Generated:** 2026-05-08T09:12:45.135Z
 - **Route count:** 336
 
 | Method | Path | Mount origin | In OpenAPI |

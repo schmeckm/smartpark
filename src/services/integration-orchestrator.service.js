@@ -19,8 +19,10 @@ const {
 const {
   CanonicalIngestionPipelineService,
 } = require('../modules/integrations/orchestrator/canonical-ingestion-pipeline.service');
+const {
+  IntegrationPollingService,
+} = require('../modules/integrations/orchestrator/integration-polling.service');
 const { emitExternalMappingUpdated, emitExternalParkDataUpdated } = require('../sockets');
-const env = require('../config/env');
 const { getPlatformSettingsService } = require('./platform-settings.service');
 const { generateTopicPath, buildCanonicalUnsTopic } = require('../modules/uns/uns-topic-generator.service');
 const { enrichRowsWithSparkplug } = require('../modules/uns/sparkplug-topic-builder.service');
@@ -94,6 +96,13 @@ class IntegrationOrchestratorService {
       providerBrowser: this.providerBrowser,
       socketEvents: { emitExternalParkDataUpdated },
       onAfterEntitiesSynced: () => this.materializeUnsNodesFromSuggestions(),
+    });
+    this.pollingService = new IntegrationPollingService({
+      settingRepository: this.settingRepository,
+      syncLive: () => this.syncLive(),
+      platformSettingsFactory: () => getPlatformSettingsService(),
+      settingKeys: SETTING_KEYS,
+      logger,
     });
   }
 
@@ -274,44 +283,16 @@ class IntegrationOrchestratorService {
   }
 
   /**
-   * Polls live data when integration polling is on **and** platform `EXTERNAL_PARK_DATA_ENABLED` is true.
-   * Interval follows **app_settings** (`pollingIntervalSeconds`); platform setting seeds defaults at bootstrap.
+   * Polls live data when integration polling is on **and** platform
+   * `EXTERNAL_PARK_DATA_ENABLED` is true. Interval follows app_settings
+   * (`pollingIntervalSeconds`); the platform setting seeds the default.
+   *
+   * Phase C3.8 — implementation lives in IntegrationPollingService.
+   *
+   * @returns {() => void} cancel handle
    */
   startPollingIfEnabled() {
-    let cancelled = false;
-    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-    const loop = async () => {
-      while (!cancelled) {
-        let waitMs = 60_000;
-        try {
-          const ps = getPlatformSettingsService();
-          const pe = await this.settingRepository.getValue(SETTING_KEYS.pollingEnabled, { enabled: false });
-          const iv = await this.settingRepository.getValue(SETTING_KEYS.pollingIntervalSeconds, {
-            seconds: await ps.getNumber('EXTERNAL_PARK_DATA_POLL_INTERVAL_SECONDS', 300),
-          });
-          const sec = Math.max(30, Math.min(86400, Number(iv?.seconds) || 300));
-          waitMs = sec * 1000;
-          const master = await ps.getBoolean('EXTERNAL_PARK_DATA_ENABLED', true);
-          if (pe?.enabled && master) {
-            await this.syncLive();
-          } else if (pe?.enabled && !master) {
-            logger.debug(
-              { key: SETTING_KEYS.pollingEnabled },
-              'external park polling enabled in app_settings but EXTERNAL_PARK_DATA_ENABLED is false — skipping live sync'
-            );
-          }
-        } catch (e) {
-          logger.warn({ err: e.message }, 'external integration polling failed');
-        }
-        await sleep(waitMs);
-      }
-    };
-
-    void loop();
-    return () => {
-      cancelled = true;
-    };
+    return this.pollingService.start();
   }
 }
 
