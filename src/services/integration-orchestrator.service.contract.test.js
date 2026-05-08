@@ -26,6 +26,11 @@ const moduleUnderTest = require('./integration-orchestrator.service');
  * update REQUIRED_PROTO_METHODS in this file (and the corresponding
  * caller). That keeps "I changed the public API" visible in PR diffs.
  *
+ * Removed in C3.5:
+ *   - listCanonicalMessages       (call CanonicalInboundMessageService.list)
+ *   - getCanonicalMessage         (call CanonicalInboundMessageService.findById)
+ *   - reprocessCanonicalMessage   (call CanonicalInboundMessageService.reprocess)
+ *
  * See: docs/architecture/orchestrator-inventory.md (§2 Public API surface)
  */
 
@@ -54,11 +59,6 @@ const REQUIRED_PROTO_METHODS = [
   'syncCalendar',
   'syncAllParksInDestination',
   'selectedParkOrThrow',
-
-  // Canonical message access.
-  'listCanonicalMessages',
-  'getCanonicalMessage',
-  'reprocessCanonicalMessage',
 
   // External-entity mapping.
   'listMappings',

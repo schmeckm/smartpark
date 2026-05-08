@@ -3,6 +3,7 @@ const path = require('node:path');
 const { asyncHandler } = require('../utils/async-handler');
 const { AppError } = require('../utils/app-error');
 const { IntegrationOrchestratorService } = require('../services/integration-orchestrator.service');
+const { CanonicalInboundMessageService } = require('../services/canonical-inbound-message.service');
 const { OutputRouterService } = require('../services/output-router.service');
 const { AdapterRuntimeService } = require('../modules/integrations/adapter-framework/adapter-runtime.service');
 const { AdapterInventoryService } = require('../modules/integrations/adapter-framework/adapter-inventory.service');
@@ -10,6 +11,7 @@ const { enrichPackagesResponsePayload } = require('../utils/adapter-manifest-ui'
 const { readRecentAdapterPipelineLog } = require('../modules/integrations/adapter-framework/adapter-pipeline-log.service');
 
 const integrationService = new IntegrationOrchestratorService();
+const canonicalMessageService = new CanonicalInboundMessageService();
 const outputRouter = new OutputRouterService();
 const adapterRuntime = new AdapterRuntimeService();
 const adapterInventory = new AdapterInventoryService();
@@ -146,9 +148,15 @@ const syncAllParksInDestination = asyncHandler(async (req, res) => {
   res.json({ success: true, data: out });
 });
 
+/* C3.5: canonical-message endpoints now hit the
+ * `CanonicalInboundMessageService` directly. The orchestrator wrappers
+ * (`listCanonicalMessages` / `getCanonicalMessage` /
+ * `reprocessCanonicalMessage`) were thin pass-throughs and have been
+ * removed; the controller is the only call site outside the
+ * orchestrator's own ingestion pipeline. */
 const listCanonicalMessages = asyncHandler(async (req, res) => {
   const q = req.validated || req.query;
-  const rows = await integrationService.listCanonicalMessages({
+  const rows = await canonicalMessageService.list({
     provider: q.provider,
     externalParkId: q.externalParkId,
     status: q.status,
@@ -160,13 +168,13 @@ const listCanonicalMessages = asyncHandler(async (req, res) => {
 });
 
 const getCanonicalMessage = asyncHandler(async (req, res) => {
-  const row = await integrationService.getCanonicalMessage(req.params.id);
+  const row = await canonicalMessageService.findById(req.params.id);
   if (!row) throw new AppError('Canonical message not found', 404, { code: 'NOT_FOUND' });
   res.json({ success: true, data: row });
 });
 
 const reprocessCanonicalMessage = asyncHandler(async (req, res) => {
-  const row = await integrationService.reprocessCanonicalMessage(req.params.id);
+  const row = await canonicalMessageService.reprocess(req.params.id);
   res.json({ success: true, data: row });
 });
 

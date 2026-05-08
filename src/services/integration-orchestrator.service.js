@@ -400,17 +400,12 @@ class IntegrationOrchestratorService {
     return summary;
   }
 
-  listCanonicalMessages(filters) {
-    return this.canonicalService.list(filters);
-  }
-
-  getCanonicalMessage(id) {
-    return this.canonicalService.findById(id);
-  }
-
-  reprocessCanonicalMessage(id) {
-    return this.canonicalService.reprocess(id);
-  }
+  /* C3.5: removed `listCanonicalMessages`, `getCanonicalMessage`, and
+   * `reprocessCanonicalMessage`. They were thin pass-throughs to
+   * `this.canonicalService.{list,findById,reprocess}`. The
+   * integrations controller now uses `CanonicalInboundMessageService`
+   * directly; internal ingestion code already calls
+   * `this.canonicalService.ingest()` without going through a wrapper. */
 
   listMappings(filters) {
     return this.mappingService.listMappings(filters);
