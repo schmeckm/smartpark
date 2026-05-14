@@ -1,0 +1,30 @@
+{
+  "description": "Example payloads for manual traffic snapshots and attendance-risk forecast runs (MVP). Replace UUIDs and park IDs with your environment.",
+  "manualSnapshot": {
+    "method": "POST",
+    "path": "/api/v1/traffic-corridors/{corridorId}/snapshots/manual",
+    "body": {
+      "currentTravelTimeMin": 34,
+      "snapshotTs": "2026-05-14T08:05:00.000Z"
+    },
+    "bodyMinimal": {
+      "currentTravelTimeMin": 28
+    }
+  },
+  "runAttendanceRiskForecast": {
+    "method": "POST",
+    "path": "/api/v1/parks/{parkId}/attendance-risk-forecast/run",
+    "body": {
+      "plannedDemand": 12000,
+      "knownRegisteredExpected": 800,
+      "weatherScore": 40,
+      "holidayScore": 70,
+      "eventScore": 20,
+      "parkingPressureScore": 55
+    },
+    "bodyRequiredOnly": {
+      "plannedDemand": 9000,
+      "knownRegisteredExpected": 500
+    }
+  }
+}
