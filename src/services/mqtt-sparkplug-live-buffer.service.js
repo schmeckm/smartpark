@@ -7,8 +7,10 @@
  */
 
 const { randomUUID } = require('node:crypto');
+const env = require('../config/env');
 const { logger } = require('../utils/logger');
 const { emitUnsMqttLiveEvents } = require('../sockets');
+const { maybeWriteSparkplugDdataRow } = require('./influx-ot-metrics.service');
 const { buildCanonicalUnsTopic, slugifyName } = require('../modules/uns/uns-topic-generator.service');
 const { parseTopic } = require('../modules/uns/uns-validator.service');
 const {
@@ -259,6 +261,7 @@ function ingestLiveRows(topic, bodyStr, rows) {
 
   for (const row of rows) {
     events.push(row);
+    maybeWriteSparkplugDdataRow(row);
   }
   while (events.length > MAX_EVENTS) {
     events.shift();
@@ -287,6 +290,54 @@ function appendFromMqtt(topic, messageBuffer) {
 function appendTpunsLiveFromMqtt(topic, messageBuffer) {
   const bodyStr = Buffer.isBuffer(messageBuffer) ? messageBuffer.toString('utf8') : String(messageBuffer);
   ingestLiveRows(topic, bodyStr, flattenTpunsMqttMessage(topic, bodyStr));
+}
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
+ * Master-data / ride payloads pass internal park UUIDs; UNS Live URLs often use slug.
+ * Resolve UUID → park.slug so buffer filtering matches Sparkplug `groupId` (e.g. europa_park).
+ *
+ * @param {string} parkIdUrlParam
+ * @returns {Promise<string>}
+ */
+async function resolveParkKeyForMqttLiveBufferParam(parkIdUrlParam) {
+  const raw = String(parkIdUrlParam || '').trim();
+  if (!raw || !UUID_RE.test(raw)) return raw;
+  try {
+    const { Park } = require('../models');
+    const park = await Park.findByPk(raw, { attributes: ['slug', 'name'] });
+    if (!park) return raw;
+    const slug = park.slug != null ? String(park.slug).trim() : '';
+    if (slug) return slug;
+    return slugifyName(park.name != null ? String(park.name) : '');
+  } catch {
+    return raw;
+  }
+}
+
+/**
+ * Same as {@link resolveBufferGroupIdForMqttLiveUrlParam} after resolving internal park UUID to slug when needed.
+ *
+ * @param {string} parkIdUrlParam
+ * @returns {Promise<string>}
+ */
+async function resolveBufferGroupIdForMqttLiveUrlParamAsync(parkIdUrlParam) {
+  const parkKey = await resolveParkKeyForMqttLiveBufferParam(parkIdUrlParam);
+  return resolveBufferGroupIdForMqttLiveUrlParam(parkKey);
+}
+
+/**
+ * Sparkplug group segment for UNS Live filtering — must match `sparkplugRouting` in
+ * `attraction-oee-simulator.service.js` (SPARKPLUG_GROUP_ID overrides slugified park key from the URL).
+ * @param {string} parkIdUrlParam - e.g. `europa_park` from `/uns/parks/:parkId/mqtt-live/...`
+ * @returns {string}
+ */
+function resolveBufferGroupIdForMqttLiveUrlParam(parkIdUrlParam) {
+  const fromEnv = env.sparkplugGroupId && String(env.sparkplugGroupId).trim();
+  const base = fromEnv || slugifyName(parkIdUrlParam);
+  return String(base).toLowerCase();
 }
 
 function getSnapshot({ groupId, limit = 500 }) {
@@ -362,15 +413,117 @@ function findLatestSparkplugLiveMetricRow(p) {
   );
 }
 
+/**
+ * Find latest Sparkplug live metric matching ride context — resolves edge node (zone-aware), then probes legacy edges and device id variants.
+ *
+ * @param {{ parkSlug: string; parkId: string | null | undefined; assetId: string; assetSlug?: string | null }} ctx
+ * @param {string} signalCode metric name / signal catalog code
+ */
+async function probeSparkplugLiveMetricForRide(ctx, signalCode) {
+  const { resolveSparkplugEdgeNodeForAsset } = require('./sparkplug-edge-resolver.service');
+  const { sparkplugDeviceTopicSegment } = require('../modules/uns/sparkplug-topic-builder.service');
+  const groupId =
+    (env.sparkplugGroupId && String(env.sparkplugGroupId).trim()) || slugifyName(ctx.parkSlug);
+
+  let primaryEdge = String(env.sparkplugEdgeNode || 'park_gateway').trim();
+  try {
+    const er = await resolveSparkplugEdgeNodeForAsset({
+      parkId: ctx.parkId ?? null,
+      parkSlug: ctx.parkSlug,
+      assetId: ctx.assetId,
+      assetSlug: ctx.assetSlug,
+    });
+    if (er?.edgeNodeId) primaryEdge = String(er.edgeNodeId).trim();
+  } catch (_) {
+    /* resolver failure — keep env */
+  }
+
+  const edgeCandidates = [
+    ...new Set(
+      [primaryEdge, ...(env.sparkplugEdgeNode ? [String(env.sparkplugEdgeNode).trim()] : []), 'park_gateway']
+        .map((x) => String(x || '').trim())
+        .filter(Boolean)
+    ),
+  ];
+
+  const slugSeg = ctx.assetSlug ? slugifyName(String(ctx.assetSlug)) : '';
+  const idSeg = sparkplugDeviceTopicSegment(ctx.assetId);
+  const rawId = ctx.assetId != null ? String(ctx.assetId) : '';
+  const deviceCandidates = [...new Set([slugSeg, idSeg, rawId].filter(Boolean))];
+
+  for (const edgeNodeId of edgeCandidates) {
+    for (const deviceId of deviceCandidates) {
+      const row = findLatestSparkplugLiveMetricRow({
+        groupId,
+        edgeNodeId,
+        deviceId,
+        metricName: signalCode,
+      });
+      if (row && row.value !== undefined && row.value !== null) {
+        return { row, edgeNodeId, deviceId, groupId };
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Unique Sparkplug metric names recently seen for any of the given device IDs (same buffer as PdM / OEE).
+ * Scans newest-first; first hit per (deviceId, metric) wins (most recent sample).
+ *
+ * @param {{ groupId: string; edgeNodeId: string; deviceIds: string[] }} p
+ * @param {{ maxScan?: number }} [opts]
+ * @returns {Array<{ metricName: string; sparkplugDeviceId: string; lastReceivedAt: string; lastValue: unknown }>}
+ */
+function listSparkplugMetricsForDevices(p, opts = {}) {
+  const g = String(p.groupId || '').toLowerCase();
+  const edge = String(p.edgeNodeId || '');
+  const deviceSet = new Set((p.deviceIds || []).map((id) => String(id || '').trim()).filter(Boolean));
+  if (!deviceSet.size) return [];
+
+  const maxScan = Math.min(8000, Math.max(1, Number(opts.maxScan) || 4000));
+  /** @type {Map<string, { metricName: string; sparkplugDeviceId: string; lastReceivedAt: string; lastValue: unknown }>} */
+  const seen = new Map();
+  let scanned = 0;
+  for (let i = events.length - 1; i >= 0 && scanned < maxScan; i -= 1, scanned += 1) {
+    const e = events[i];
+    if (String(e.messageType || '').toUpperCase() === 'UNS_JSON') continue;
+    if (String(e.groupId || '').toLowerCase() !== g) continue;
+    if (String(e.edgeNodeId || '') !== edge) continue;
+    const dev = String(e.deviceId || '');
+    if (!deviceSet.has(dev)) continue;
+    const metric = e.metric != null ? String(e.metric).trim() : '';
+    if (!metric) continue;
+    const key = `${dev}\0${metric}`;
+    if (seen.has(key)) continue;
+    seen.set(key, {
+      metricName: metric,
+      sparkplugDeviceId: dev,
+      lastReceivedAt: e.receivedAt != null ? String(e.receivedAt) : '',
+      lastValue: e.value,
+    });
+  }
+
+  return [...seen.values()].sort((a, b) => {
+    const c = a.metricName.localeCompare(b.metricName);
+    return c !== 0 ? c : a.sparkplugDeviceId.localeCompare(b.sparkplugDeviceId);
+  });
+}
+
 module.exports = {
   appendFromMqtt,
   appendTpunsLiveFromMqtt,
+  resolveBufferGroupIdForMqttLiveUrlParam,
+  resolveParkKeyForMqttLiveBufferParam,
+  resolveBufferGroupIdForMqttLiveUrlParamAsync,
   getSnapshot,
   getStats,
   getSparkplugSubscribePatterns,
   findLatestLiveRow,
   findLatestTpunsLiveRowForTopic,
   findLatestSparkplugLiveMetricRow,
+  probeSparkplugLiveMetricForRide,
+  listSparkplugMetricsForDevices,
   MAX_EVENTS,
   /** @public for Phase 13 capability guard (topic parse only). */
   parseSparkplugTopic,

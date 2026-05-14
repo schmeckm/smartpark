@@ -1,15 +1,41 @@
 # OPC-UA Edge (`opcua_edge`)
 
-Reads a fixed list of OPC-UA nodes and maps each to a **normalized observation** (`domain`, `assetSlug`, `metric`, `value`, …) for UNS / Sparkplug / canonical encoders.
+This adapter reads selected OPC-UA nodes and turns them into normalized Smart Park observations.
 
-## Modes
+Use it to connect PLC/edge values into:
 
-| `configJson.live` | Behaviour |
-|-------------------|-----------|
-| `false` (default) | **Simulate**: values from each tag’s `mockValue` or from `mockValues[nodeId]`. No network. |
-| `true` | **Live**: connects with [`node-opcua`](https://www.npmjs.com/package/node-opcua), reads each `nodeId`. Requires `npm install node-opcua` in the Smart Park OS repo. Only `securityMode: "None"` is supported without extra certificate wiring. |
+- Sparkplug MQTT
+- canonical historian pipelines
+- UNS-based downstream processing
 
-## Minimal simulate config
+## How it works
+
+You define `subscriptionTags`. Each tag maps one OPC-UA `nodeId` to Smart Park fields like:
+
+- `domain`
+- `assetSlug`
+- `metric`
+- `eventType`
+- `unit`
+
+The adapter then publishes normalized observations from these mappings.
+
+## Modes (`configJson.live`)
+
+| Value | Behavior |
+|---|---|
+| `false` (default) | Simulate mode: no OPC-UA connection, uses `mockValue` (or `mockValues[nodeId]`). |
+| `true` | Live mode: connects to OPC-UA endpoint and reads real node values. |
+
+## Quick start
+
+1. Install adapter in Devices and Services.
+2. Start in simulate mode (`live: false`).
+3. Add at least one `subscriptionTags` entry.
+4. Run preview and verify output events.
+5. Switch to `live: true` after endpoint connectivity is confirmed.
+
+## Minimal config (simulate)
 
 ```json
 {
@@ -29,14 +55,59 @@ Reads a fixed list of OPC-UA nodes and maps each to a **normalized observation**
 }
 ```
 
-## Install (platform)
+## Required runtime dependency for live mode
 
-Use **Devices & Services** in the admin UI or `POST /api/v1/integrations/adapters/install-local` with `adapterKey: "opcua_edge"` plus `configJson` / `contextJson` (`parkSlug`, optional `sparkplugGroupId` / `sparkplugEdgeNode`). Set `scheduleCron` and `emitEnabled` when the scheduler should publish MQTT.
-
-## Live mode dependency
+Install once in the Smart Park OS repository:
 
 ```bash
 npm install node-opcua
 ```
 
-Then set `"live": true` and a reachable `endpointUrl` with anonymous access and security policy None on the server.
+Without this package, `live: true` cannot read OPC-UA nodes.
+
+## Live mode requirements
+
+- reachable `endpointUrl`
+- server access compatible with `node-opcua`
+- without additional certificate setup, use `securityMode: "None"`
+
+## Context and outputs
+
+Set context as needed for topic structure:
+
+- `parkSlug`
+- `sparkplugGroupId` (optional)
+- `sparkplugEdgeNode` (optional)
+
+Enable scheduler/publishing with your install settings (`scheduleCron`, `emitEnabled`, output profiles).
+
+## Typical pitfalls
+
+- `127.0.0.1` endpoint from inside Docker points to container, not host PLC.
+- wrong `nodeId` syntax (`ns=...;s=...`) causes empty/failed reads.
+- missing `eventType` / mapping fields leads to unusable downstream data.
+
+## Fehlerbilder & Loesung
+
+### 1) Live mode liefert keine Werte
+
+Pruefen:
+
+- `live: true` gesetzt?
+- `node-opcua` installiert?
+- Endpoint vom Container/Host wirklich erreichbar?
+- OPC-UA Server erlaubt den verwendeten Security-Mode.
+
+### 2) Nur Simulationswerte sichtbar
+
+Pruefen:
+
+- `live` steht evtl. noch auf `false`.
+- `mockValue` ist gesetzt und uebersteuert erwartetes Live-Verhalten.
+
+### 3) Werte kommen, aber nicht nutzbar downstream
+
+Pruefen:
+
+- je Tag korrektes Mapping (`domain`, `assetSlug`, `metric`, `eventType`, `unit`)
+- `parkSlug`/Sparkplug-Kontext konsistent mit Ziel-Pipeline

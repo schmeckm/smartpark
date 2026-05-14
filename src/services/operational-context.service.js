@@ -64,6 +64,46 @@ function openingHoursSummary(scheduleRow) {
   };
 }
 
+function normalizeMonthDay(raw) {
+  const s = String(raw || '').trim();
+  if (!s) return null;
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (iso) return `${iso[2]}-${iso[3]}`;
+  const md = s.match(/^(\d{2})-(\d{2})$/);
+  if (md) return `${md[1]}-${md[2]}`;
+  return null;
+}
+
+function localDateToMonthDay(localDate) {
+  const m = String(localDate || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  return `${m[2]}-${m[3]}`;
+}
+
+function isMonthDayInRange(md, fromMd, untilMd) {
+  if (!md || !fromMd || !untilMd) return false;
+  if (fromMd <= untilMd) return md >= fromMd && md <= untilMd;
+  return md >= fromMd || md <= untilMd;
+}
+
+function scheduleFromLevel0Annual(masterProfile, localDate) {
+  const mp = masterProfile && typeof masterProfile === 'object' ? masterProfile : {};
+  const level0 = mp.level0 && typeof mp.level0 === 'object' ? mp.level0 : {};
+  const from = normalizeMonthDay(level0.annualOpenFrom);
+  const until = normalizeMonthDay(level0.annualOpenUntil);
+  const todayMd = localDateToMonthDay(localDate);
+  if (!isMonthDayInRange(todayMd, from, until)) return null;
+  const openingTime =
+    level0.baselineOpenTime != null && String(level0.baselineOpenTime).trim() !== ''
+      ? String(level0.baselineOpenTime).trim()
+      : '09:00';
+  const closingTime =
+    level0.baselineCloseTime != null && String(level0.baselineCloseTime).trim() !== ''
+      ? String(level0.baselineCloseTime).trim()
+      : '18:00';
+  return { date: localDate, type: 'OPERATING', openingTime, closingTime };
+}
+
 class OperationalContextService {
   constructor() {
     this.operatingRepo = new ParkOperatingSnapshotRepository();
@@ -80,7 +120,7 @@ class OperationalContextService {
     }
 
     const park = await Park.findByPk(internalParkId, {
-      attributes: ['id', 'name', 'slug', 'timezone', 'externalEntityId', 'enrichment', 'updatedAt'],
+      attributes: ['id', 'name', 'slug', 'timezone', 'externalEntityId', 'enrichment', 'masterProfile', 'updatedAt'],
     });
     if (!park) {
       throw new AppError('Park not found', 404, { code: 'PARK_NOT_FOUND' });
@@ -120,6 +160,14 @@ class OperationalContextService {
         scheduleSampledAt = opRow.sampledAt;
         scheduleProvider = opRow.scheduleProvider ?? null;
       }
+    }
+
+    const scheduleType = String(scheduleRow?.type || 'OPERATING').toUpperCase();
+    const level0Annual = scheduleFromLevel0Annual(plain.masterProfile, localParts.localDate);
+    if (level0Annual && (!scheduleRow || scheduleType !== 'OPERATING')) {
+      scheduleRow = level0Annual;
+      scheduleProvider = 'LEVEL0_ANNUAL';
+      scheduleSampledAt = plain.updatedAt ? new Date(plain.updatedAt) : null;
     }
 
     const bucket = bucket5m(at);

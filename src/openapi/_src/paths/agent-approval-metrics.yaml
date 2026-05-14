@@ -1,0 +1,47 @@
+/agent/approval-metrics:
+  get:
+    tags:
+      - Agent
+    summary: 'Rolling approval metrics for write proposals (Phase C)'
+    description: "Needs **`agent.read`** and **`X-Park-Id`**. Counts `agent_actions` with `action_type` like `write.%` joined to runs in the park, over **`sinceDays`** (default 30). Optional **`skillId`** scopes to one skill’s runs.\nUsed by preflight **`approval_rate_gate`** vs env **`AGENT_APPROVAL_GATE_MIN`** (default `0.6`).\n"
+    parameters:
+      -
+        in: header
+        name: X-Park-Id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      -
+        in: query
+        name: skillId
+        required: false
+        schema:
+          type: string
+          enum:
+            - daily_executive_brief
+            - crowd_spike_triage
+            - mapping_assistant
+            - weather_pivot
+            - ride_down_response
+        description: 'When set, only actions from runs with this `skill_id` are counted.'
+      -
+        in: query
+        name: sinceDays
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 365
+          default: 30
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden

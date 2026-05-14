@@ -2,12 +2,19 @@
 schemaVersion: 1
 adapterKey: weather_open_meteo
 installedAt: '2026-04-26T17:54:10.830Z'
-updatedAt: '2026-04-26T18:26:42.372Z'
-configJson: {}
+updatedAt: '2026-05-13T19:29:44.159Z'
+configJson:
+  latitude: 48.2661
+  parkSlug: europa_park
+  timezone: Europe/Berlin
+  longitude: 7.7225
 contextJson:
   parkSlug: europapark
+  sparkplugGroupId: europa_park
+  sparkplugEdgeNode: weather_gateway
 outputProfiles:
   - UNS_JSON
   - CANONICAL_HISTORIAN
-emitEnabled: false
-scheduleCron: null
+emitEnabled: true
+ingestCanonicalEnabled: true
+scheduleCron: '*/10 * * * *'

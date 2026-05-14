@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
@@ -9,29 +9,38 @@ import {
   getEntityTypeTemplate,
   getMasterDataDetail,
   getMlProfiles,
-  getMdmZones,
+  getPlatformParkZones,
+  getRideSignalCapabilities,
   listEntityTypeTemplates,
   patchMasterData,
   putAssetMlProfile,
   type EntityTypeTemplateRow,
   type MlProfileRow,
+  type PlatformParkZoneRow,
 } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
+import { askConfirm } from '@/composables/useConfirmDialog'
 import type { PlatformPark } from '@/types/api'
-import type { MdmParkZone } from '@/types/api'
 import {
   buildPatchPayload,
   computeWizardKpis,
   draftStorageKey,
   emptyWizardState,
+  flattenWizardProfileForTemplate,
   hydrateWizardFromDetail,
+  KNOWN_RIDE_PROFILE_RIDE_TYPES,
+  missingTemplateRequiredKeys,
   profileCompletenessLabel,
   templateApplyPreview,
   validateStaffingChain,
+  WIZARD_CAPACITY_UI_TO_PROFILE_KEY,
+  WIZARD_STAFFING_UI_TO_PROFILE_KEY,
   type WizardEntityTab,
   type WizardFormState,
 } from './masterDataWizard.utils'
+import RideSignalCapabilitiesPanel from './RideSignalCapabilitiesPanel.vue'
+import type { RideSignalCapsPanelExpose } from './rideSignalCapabilitiesPanel.types'
 
 const { t } = useI18n()
 
@@ -78,9 +87,12 @@ const mlProfileOptions = ref<MlProfileRow[]>([])
 const selectedMlProfileId = ref('')
 const effectiveMl = ref<Record<string, unknown> | null>(null)
 const mlStepLoading = ref(false)
+const signalUsageLoading = ref(false)
+const signalUsageCounts = ref<{ ml: number; forecast: number } | null>(null)
 
-async function loadMlStep() {
-  if (step.value !== 5 || props.tab === 'parks') return
+async function loadMlStep(force = false) {
+  if (props.tab === 'parks') return
+  if (!force && step.value !== 5) return
   if (!effectiveId.value) {
     mlProfileOptions.value = []
     effectiveMl.value = null
@@ -96,22 +108,60 @@ async function loadMlStep() {
     }
     mlProfileOptions.value = await getMlProfiles({ entityType: et, activeFlag: true })
     effectiveMl.value = (await getEffectiveMlConfig(effectiveId.value)) as Record<string, unknown>
+    if (props.tab === 'rides') {
+      signalUsageLoading.value = true
+      try {
+        const caps = await getRideSignalCapabilities(effectiveId.value)
+        let ml = 0
+        let forecast = 0
+        for (const row of caps.signals || []) {
+          const useForMl = typeof row.useForMl === 'boolean' ? row.useForMl : row.signalSource === 'ML'
+          const useForForecast = typeof row.useForForecast === 'boolean' ? row.useForForecast : useForMl
+          if (useForMl) ml += 1
+          if (useForForecast) forecast += 1
+        }
+        signalUsageCounts.value = { ml, forecast }
+      } catch {
+        signalUsageCounts.value = null
+      } finally {
+        signalUsageLoading.value = false
+      }
+    } else {
+      signalUsageCounts.value = null
+      signalUsageLoading.value = false
+    }
     const prof = effectiveMl.value?.profile as { id?: string } | undefined
     selectedMlProfileId.value = prof?.id ? String(prof.id) : ''
   } catch {
     mlProfileOptions.value = []
     effectiveMl.value = null
     selectedMlProfileId.value = ''
+    signalUsageCounts.value = null
+    signalUsageLoading.value = false
   } finally {
     mlStepLoading.value = false
   }
 }
 
+/** Enterprise ML catalog assignment (not part of master_profile PATCH). */
+async function writeCatalogMlProfileIfSelected(): Promise<void> {
+  if (props.tab === 'parks') return
+  const aid = effectiveId.value
+  if (!aid) return
+  const pid = String(selectedMlProfileId.value || '').trim()
+  if (!pid) return
+  if (!canRefreshAi()) {
+    push(t('wizardMl.needAiRefresh'), 'warning')
+    return
+  }
+  await putAssetMlProfile(aid, { profileId: pid })
+}
+
 async function saveMlProfileAssignment() {
-  if (!effectiveId.value || !selectedMlProfileId.value || !canRefreshAi()) return
+  if (!effectiveId.value || !String(selectedMlProfileId.value || '').trim() || !canRefreshAi()) return
   mlStepLoading.value = true
   try {
-    await putAssetMlProfile(effectiveId.value, { profileId: selectedMlProfileId.value })
+    await writeCatalogMlProfileIfSelected()
     push(t('wizardMl.toastSaved'), 'success')
     await loadMlStep()
   } catch (e) {
@@ -121,14 +171,24 @@ async function saveMlProfileAssignment() {
   }
 }
 
-const STEPS = [
+type WizardStepDef = { id: number; label: string; labelI18n?: string }
+
+const STEPS: readonly WizardStepDef[] = [
   { id: 1, label: 'Basic Info' },
   { id: 2, label: 'Template' },
   { id: 3, label: 'Capacity' },
   { id: 4, label: 'Staffing' },
-  { id: 5, label: 'ML profile' },
+  { id: 5, label: 'Forecast behavior', labelI18n: 'wizardMl.stepNav' },
   { id: 6, label: 'Review' },
-] as const
+]
+
+function sortPlatformZones(rows: PlatformParkZoneRow[]): PlatformParkZoneRow[] {
+  return rows.slice().sort((a, b) => {
+    const so = (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
+    if (so !== 0) return so
+    return (a.name || '').localeCompare(b.name || '')
+  })
+}
 
 const step = ref(1)
 const loading = ref(false)
@@ -139,9 +199,10 @@ const state = ref<WizardFormState>(emptyWizardState('rides'))
 const baseline = ref('')
 const templateOptions = ref<EntityTypeTemplateRow[]>([])
 const templateDetail = ref<EntityTypeTemplateRow | null>(null)
-const zones = ref<MdmParkZone[]>([])
+const zones = ref<PlatformParkZoneRow[]>([])
 const advOpen = ref(false)
 const resolvedEntityId = ref<string | null>(null)
+const rideSignalCapsPanelRef = ref<RideSignalCapsPanelExpose | null>(null)
 
 const effectiveId = computed(() => resolvedEntityId.value || props.entityId)
 
@@ -172,6 +233,43 @@ const preview = computed(() =>
 )
 
 const kpis = computed(() => computeWizardKpis(props.tab, state.value))
+
+/** Template `requiredFieldsJson` (detail fetch or template dropdown row). */
+const templateRequiredKeysList = computed((): string[] => {
+  const tpl = templateDetail.value || selectedTemplate.value
+  const raw = tpl?.requiredFieldsJson
+  if (!Array.isArray(raw)) return []
+  return raw.map((x) => String(x))
+})
+
+const templateRequiredKeySet = computed(
+  () => new Set(templateRequiredKeysList.value.map((k) => k.trim().toLowerCase()))
+)
+
+const parkRowForTemplateCompleteness = computed(() => {
+  if (props.tab !== 'parks') return null
+  return { name: state.value.basic.name, timezone: state.value.basic.timezone || null }
+})
+
+/** Missing required master-profile keys from current wizard state (all steps). */
+const missingTemplateKeysLive = computed(() => {
+  if (!state.value.templateId || templateRequiredKeysList.value.length === 0) return []
+  try {
+    const flat = flattenWizardProfileForTemplate(props.tab, state.value)
+    return missingTemplateRequiredKeys(templateRequiredKeysList.value, flat, parkRowForTemplateCompleteness.value)
+  } catch {
+    return []
+  }
+})
+
+function profileKeyRequired(snakeKey: string): boolean {
+  return templateRequiredKeySet.value.has(snakeKey.trim().toLowerCase())
+}
+
+function reqStarUi(uiField: string, map: Record<string, string>): string {
+  const pk = map[uiField]
+  return pk && profileKeyRequired(pk) ? ' *' : ''
+}
 
 function serializeForDirty(): string {
   return JSON.stringify({
@@ -231,7 +329,8 @@ watch(
       return
     }
     try {
-      zones.value = await getMdmZones(parkKey)
+      const rows = await getPlatformParkZones(parkKey)
+      zones.value = sortPlatformZones(rows)
     } catch {
       zones.value = []
     }
@@ -264,7 +363,8 @@ async function loadDetailIntoState() {
     }
     if (state.value.basic.parkId) {
       try {
-        zones.value = await getMdmZones(state.value.basic.parkId)
+        const rows = await getPlatformParkZones(state.value.basic.parkId)
+        zones.value = sortPlatformZones(rows)
       } catch {
         zones.value = []
       }
@@ -285,6 +385,8 @@ watch(
     resolvedEntityId.value = props.entityId
     await loadDetailIntoState()
     tryLoadDraft()
+    /** Draft overwrote hydrated state — rebaseline so ✕ close does not warn without further edits. */
+    setBaseline()
   }
 )
 
@@ -314,9 +416,15 @@ function close() {
   emit('update:open', false)
 }
 
-function requestClose() {
+async function requestClose() {
   if (isDirty.value) {
-    if (!confirm('Discard unsaved changes?')) return
+    const ok = await askConfirm({
+      message: t('wizardMl.closeUnsavedMessage'),
+      confirmLabel: t('wizardMl.closeConfirmDiscard'),
+      cancelLabel: t('wizardMl.closeConfirmStay'),
+      variant: 'danger',
+    })
+    if (!ok) return
   }
   close()
 }
@@ -344,20 +452,6 @@ function saveDraft() {
   }
 }
 
-function stepValid(n: number): boolean {
-  if (n === 1) {
-    if (!state.value.basic.name.trim()) return false
-    if (props.tab === 'parks' && state.value.basic.masterOperatingHoursEnabled) {
-      if (state.value.basic.masterOperatingType === 'OPERATING') {
-        if (!state.value.basic.masterOpeningTime.trim() || !state.value.basic.masterClosingTime.trim()) return false
-      }
-    }
-    if (props.mode === 'create' && props.tab !== 'parks' && !state.value.basic.parkId.trim()) return false
-    return true
-  }
-  return true
-}
-
 const stepDone = computed(() => {
   const s = state.value
   const parkHoursOk =
@@ -369,27 +463,6 @@ const stepDone = computed(() => {
   const ok4 = validateStaffingChain(props.tab, s.staffing) === null
   return [ok1, true, true, ok4, true, true]
 })
-
-function nextStep() {
-  errorMsg.value = null
-  if (step.value === 4) {
-    const err = validateStaffingChain(props.tab, state.value.staffing)
-    if (err) {
-      errorMsg.value = err
-      return
-    }
-  }
-  if (!stepValid(step.value)) {
-    errorMsg.value = 'Please complete required fields on this step.'
-    return
-  }
-  if (step.value < 6) step.value += 1
-}
-
-function prevStep() {
-  errorMsg.value = null
-  if (step.value > 1) step.value -= 1
-}
 
 async function applyTemplateDefaults() {
   const tid = state.value.templateId
@@ -428,6 +501,12 @@ function mergeDefaultsLocal() {
     }
   }
   state.value.baseMasterProfile = mp
+  if (props.tab === 'rides') {
+    const mergedRt = mp.ride_type
+    if (mergedRt !== undefined && mergedRt !== null && String(mergedRt).trim() !== '') {
+      state.value.basic.rideType = String(mergedRt).trim()
+    }
+  }
   push('Defaults merged into profile (local). Use Save to persist.', 'success')
 }
 
@@ -473,11 +552,32 @@ async function saveAll(final: boolean) {
       if (!effectiveId.value) throw new Error('Missing entity id')
       await persist()
     }
-    push(final ? 'Saved' : 'Saved', 'success')
+    await nextTick()
+    if (props.tab === 'rides' && effectiveId.value) {
+      const flush = rideSignalCapsPanelRef.value?.flushSignalCapabilitiesIfDirty
+      if (flush) {
+        const signalOk = await flush()
+        if (!signalOk) throw new Error(t('wizardMl.signalCapsSaveFailed'))
+      }
+    }
+    let mlSaveFailed: string | null = null
+    try {
+      await writeCatalogMlProfileIfSelected()
+    } catch (e) {
+      mlSaveFailed = e instanceof Error ? e.message : String(e)
+    }
+    if (mlSaveFailed) {
+      push(t('wizardMl.toastMasterSavedMlFailed', { detail: mlSaveFailed }), 'error')
+    } else {
+      push(final ? 'Saved' : 'Saved', 'success')
+    }
     setBaseline()
     emit('saved')
     if (final) close()
-    else await loadDetailIntoState()
+    else {
+      await loadDetailIntoState()
+      if (props.tab !== 'parks' && effectiveId.value) await loadMlStep(true)
+    }
   } catch (e) {
     errorMsg.value = e instanceof Error ? e.message : String(e)
     push(errorMsg.value, 'error')
@@ -497,7 +597,7 @@ async function saveAll(final: boolean) {
       aria-labelledby="mdw-title"
     >
       <div
-        class="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-950 shadow-2xl"
+        class="flex h-[96vh] min-h-[36rem] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-950 shadow-2xl sm:h-[92vh] lg:h-[88vh]"
         @click.stop
       >
         <header class="flex flex-wrap items-start justify-between gap-2 border-b border-slate-800 px-4 py-3">
@@ -507,7 +607,16 @@ async function saveAll(final: boolean) {
             </h2>
             <div class="mt-1 flex flex-wrap items-center gap-2 text-xs">
               <span class="rounded bg-slate-800 px-2 py-0.5 font-mono text-brand-300">{{ typeBadge }}</span>
-              <span class="text-slate-500">Profile: {{ completeness }}</span>
+              <span
+                class="text-slate-500"
+                :title="
+                  missingTemplateKeysLive.length
+                    ? `${t('masterDataWizard.requiredFieldsBanner')} ${missingTemplateKeysLive.join(', ')}`
+                    : undefined
+                "
+              >
+                Profile: {{ completeness }}
+              </span>
               <span v-if="isDirty" class="text-amber-400">Unsaved changes</span>
             </div>
           </div>
@@ -515,7 +624,7 @@ async function saveAll(final: boolean) {
         </header>
 
         <div class="grid min-h-0 flex-1 grid-cols-1 gap-0 md:grid-cols-[11rem_1fr]">
-          <nav class="border-b border-slate-800 p-3 md:border-b-0 md:border-r md:border-slate-800">
+          <nav class="border-b border-slate-800 p-3 md:sticky md:top-0 md:max-h-full md:self-start md:overflow-y-auto md:border-b-0 md:border-r md:border-slate-800">
             <ol class="space-y-1 text-sm">
               <li v-for="(st, idx) in STEPS" :key="st.id">
                 <button
@@ -530,7 +639,7 @@ async function saveAll(final: boolean) {
                   >
                     {{ stepDone[idx] ? '✓' : st.id }}
                   </span>
-                  <span>{{ st.label }}</span>
+                  <span>{{ st.labelI18n ? t(st.labelI18n) : st.label }}</span>
                 </button>
               </li>
             </ol>
@@ -547,29 +656,42 @@ async function saveAll(final: boolean) {
                   :key="k.label"
                   class="rounded-lg border border-slate-800 bg-slate-900/80 px-3 py-2 text-xs text-slate-400"
                 >
-                  <div class="text-[10px] uppercase tracking-wide text-slate-500">{{ k.label }}</div>
+                  <div class="text-[10px] uppercase tracking-wide text-slate-500">
+                    {{ k.label }}<span v-if="k.requiredProfileKey && profileKeyRequired(k.requiredProfileKey)" class="text-amber-400"> *</span>
+                  </div>
                   <div class="mt-1 font-mono text-sm text-white">{{ k.value }}</div>
                 </div>
+              </div>
+
+              <div
+                v-if="state.templateId && templateRequiredKeysList.length && missingTemplateKeysLive.length"
+                class="rounded-lg border border-amber-800/50 bg-amber-950/35 px-3 py-2 text-xs text-amber-100"
+                role="status"
+              >
+                <span class="font-medium text-amber-50">{{ t('masterDataWizard.requiredFieldsBanner') }}</span>
+                <span class="mt-1 block font-mono text-[11px] leading-snug text-amber-200/95">{{ missingTemplateKeysLive.join(', ') }}</span>
+                <p class="mt-1 text-[10px] leading-snug text-amber-200/75">{{ t('masterDataWizard.requiredFieldsHint') }}</p>
               </div>
 
               <!-- Step 1 -->
               <section v-show="step === 1" class="space-y-3">
                 <h3 class="text-sm font-medium text-slate-200">Basic Info</h3>
+                <p v-if="templateRequiredKeysList.length" class="text-[11px] text-slate-500">{{ t('masterDataWizard.requiredStarMeaning') }}</p>
                 <div class="grid gap-3 sm:grid-cols-2">
                   <label class="block text-xs text-slate-500">
                     Name *
                     <input v-model="state.basic.name" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white" />
                   </label>
                   <label class="block text-xs text-slate-500">
-                    Display name
+                    Display name<span v-if="profileKeyRequired('display_name')" class="text-amber-400"> *</span>
                     <input v-model="state.basic.displayName" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white" />
                   </label>
                   <label class="block text-xs text-slate-500">
-                    Internal code
+                    Internal code<span v-if="profileKeyRequired('internal_code')" class="text-amber-400"> *</span>
                     <input v-model="state.basic.internalCode" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white" />
                   </label>
                   <label class="block text-xs text-slate-500">
-                    Slug
+                    Slug<span v-if="profileKeyRequired('slug')" class="text-amber-400"> *</span>
                     <input v-model="state.basic.slug" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white" />
                   </label>
                   <label v-if="tab !== 'parks'" class="block text-xs text-slate-500">
@@ -591,7 +713,7 @@ async function saveAll(final: boolean) {
                     <input v-model="state.basic.parentAssetId" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-2 font-mono text-xs text-white" />
                   </label>
                   <label v-if="tab === 'parks'" class="block text-xs text-slate-500">
-                    Timezone
+                    Timezone<span v-if="profileKeyRequired('timezone')" class="text-amber-400"> *</span>
                     <input v-model="state.basic.timezone" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white" />
                   </label>
                   <template v-if="tab === 'parks'">
@@ -641,12 +763,26 @@ async function saveAll(final: boolean) {
                     <input v-model="state.basic.activeFlag" type="checkbox" class="rounded border-slate-600" />
                     Active
                   </label>
+                  <label v-if="tab === 'rides'" class="block text-xs text-slate-500">
+                    {{ t('masterDataWizard.rideType') }}<span v-if="profileKeyRequired('ride_type')" class="text-amber-400"> *</span>
+                    <input
+                      v-model="state.basic.rideType"
+                      list="mdw-ride-type-suggestions"
+                      class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-2 font-mono text-xs text-white"
+                      :placeholder="t('masterDataWizard.rideTypePlaceholder')"
+                      autocomplete="off"
+                    />
+                    <datalist id="mdw-ride-type-suggestions">
+                      <option v-for="rt in KNOWN_RIDE_PROFILE_RIDE_TYPES" :key="rt" :value="rt" />
+                    </datalist>
+                    <p class="mt-0.5 text-[10px] text-slate-500">{{ t('masterDataWizard.rideTypeHint') }}</p>
+                  </label>
                   <label class="block text-xs text-slate-500">
-                    Indoor / outdoor
+                    Indoor / outdoor<span v-if="profileKeyRequired('indoor_outdoor')" class="text-amber-400"> *</span>
                     <input v-model="state.basic.indoorOutdoor" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white" placeholder="INDOOR / OUTDOOR" />
                   </label>
                   <label class="block text-xs text-slate-500 sm:col-span-2">
-                    Notes
+                    Notes<span v-if="profileKeyRequired('notes')" class="text-amber-400"> *</span>
                     <textarea v-model="state.basic.notes" rows="2" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white" />
                   </label>
                 </div>
@@ -692,33 +828,37 @@ async function saveAll(final: boolean) {
                   <p class="mt-1">Filled / new: {{ preview.filled.join(', ') || '—' }}</p>
                   <p class="mt-1">Unchanged (fill-empty only): {{ preview.unchanged.join(', ') || '—' }}</p>
                   <p class="mt-1 text-amber-200">Required still missing: {{ preview.missing.join(', ') || '—' }}</p>
+                  <p v-if="state.templateId && templateRequiredKeysList.length" class="mt-1 text-amber-100/95">
+                    {{ t('masterDataWizard.requiredStillMissingLive') }} {{ missingTemplateKeysLive.join(', ') || '—' }}
+                  </p>
                 </div>
               </section>
 
               <!-- Step 3 Capacity -->
               <section v-show="step === 3" class="space-y-3">
                 <h3 class="text-sm font-medium text-slate-200">Capacity & throughput</h3>
+                <p v-if="templateRequiredKeysList.length" class="text-[11px] text-slate-500">{{ t('masterDataWizard.requiredStarMeaning') }}</p>
                 <div v-if="tab === 'rides'" class="grid gap-3 sm:grid-cols-2">
                   <label v-for="lbl in ['theoreticalCapacityPerHour','targetThroughputPerHour','dispatchIntervalSec','seatsPerVehicle','vehiclesCount','loadingStations','loadTimeAvgSec','unloadTimeAvgSec']" :key="lbl" class="block text-xs text-slate-500">
-                    {{ lbl }}
+                    {{ lbl }}{{ reqStarUi(lbl, WIZARD_CAPACITY_UI_TO_PROFILE_KEY) }}
                     <input v-model="state.capacity[lbl]" type="text" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-2 font-mono text-xs text-white" />
                   </label>
                 </div>
                 <div v-else-if="tab === 'shows'" class="grid gap-3 sm:grid-cols-2">
                   <label v-for="lbl in ['venueCapacity','showDurationMin','turnoverTimeMin','showsPerDayTarget','avgFillRatePercent']" :key="lbl" class="block text-xs text-slate-500">
-                    {{ lbl }}
+                    {{ lbl }}{{ reqStarUi(lbl, WIZARD_CAPACITY_UI_TO_PROFILE_KEY) }}
                     <input v-model="state.capacity[lbl]" type="text" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-2 font-mono text-xs text-white" />
                   </label>
                 </div>
                 <div v-else-if="tab === 'restaurants'" class="grid gap-3 sm:grid-cols-2">
                   <label v-for="lbl in ['seatingCapacity','serviceCapacityPerHour','avgServiceTimeMin','cashRegisters','kitchenStations','tableTurnoverTimeMin']" :key="lbl" class="block text-xs text-slate-500">
-                    {{ lbl }}
+                    {{ lbl }}{{ reqStarUi(lbl, WIZARD_CAPACITY_UI_TO_PROFILE_KEY) }}
                     <input v-model="state.capacity[lbl]" type="text" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-2 font-mono text-xs text-white" />
                   </label>
                 </div>
                 <div v-else class="grid gap-3 sm:grid-cols-2">
                   <label v-for="lbl in ['maxDailyCapacity','expectedDailyVisitors','parkingCapacity','hotelRooms']" :key="lbl" class="block text-xs text-slate-500">
-                    {{ lbl }}
+                    {{ lbl }}{{ reqStarUi(lbl, WIZARD_CAPACITY_UI_TO_PROFILE_KEY) }}
                     <input v-model="state.capacity[lbl]" type="text" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-2 font-mono text-xs text-white" />
                   </label>
                 </div>
@@ -727,9 +867,10 @@ async function saveAll(final: boolean) {
               <!-- Step 4 Staffing -->
               <section v-show="step === 4" class="space-y-3">
                 <h3 class="text-sm font-medium text-slate-200">Staffing</h3>
+                <p v-if="templateRequiredKeysList.length" class="text-[11px] text-slate-500">{{ t('masterDataWizard.requiredStarMeaning') }}</p>
                 <div v-if="tab === 'rides'" class="grid gap-3 sm:grid-cols-2">
                   <label v-for="lbl in ['employeesRequiredMin','employeesRequiredNormal','employeesRequiredPeak','operatorSkillLevel']" :key="lbl" class="block text-xs text-slate-500">
-                    {{ lbl }}
+                    {{ lbl }}{{ reqStarUi(lbl, WIZARD_STAFFING_UI_TO_PROFILE_KEY) }}
                     <input
                       v-if="lbl !== 'operatorSkillLevel'"
                       v-model="state.staffing[lbl]"
@@ -740,24 +881,24 @@ async function saveAll(final: boolean) {
                   </label>
                   <label class="flex items-center gap-2 text-xs text-slate-400 sm:col-span-2">
                     <input v-model="state.staffing.supervisorRequiredFlag" type="checkbox" class="rounded border-slate-600" />
-                    supervisorRequiredFlag
+                    supervisorRequiredFlag<span v-if="profileKeyRequired('supervisor_required_flag')" class="text-amber-400"> *</span>
                   </label>
                 </div>
                 <div v-else-if="tab === 'shows'" class="grid gap-3 sm:grid-cols-2">
                   <label v-for="lbl in ['employeesRequiredMin','employeesRequiredNormal','employeesRequiredPeak','performersRequired','technicalStaffRequired']" :key="lbl" class="block text-xs text-slate-500">
-                    {{ lbl }}
+                    {{ lbl }}{{ reqStarUi(lbl, WIZARD_STAFFING_UI_TO_PROFILE_KEY) }}
                     <input v-model="state.staffing[lbl]" type="text" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-2 font-mono text-xs text-white" />
                   </label>
                 </div>
                 <div v-else-if="tab === 'restaurants'" class="grid gap-3 sm:grid-cols-2">
                   <label v-for="lbl in ['employeesRequiredMin','employeesRequiredNormal','employeesRequiredPeak','kitchenStaffRequired','serviceStaffRequired','cashierStaffRequired']" :key="lbl" class="block text-xs text-slate-500">
-                    {{ lbl }}
+                    {{ lbl }}{{ reqStarUi(lbl, WIZARD_STAFFING_UI_TO_PROFILE_KEY) }}
                     <input v-model="state.staffing[lbl]" type="text" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-2 font-mono text-xs text-white" />
                   </label>
                 </div>
                 <div v-else class="grid gap-3 sm:grid-cols-2">
                   <label v-for="lbl in ['operationsStaffTarget','securityStaffTarget','cleaningStaffTarget']" :key="lbl" class="block text-xs text-slate-500">
-                    {{ lbl }}
+                    {{ lbl }}{{ reqStarUi(lbl, WIZARD_STAFFING_UI_TO_PROFILE_KEY) }}
                     <input v-model="state.staffing[lbl]" type="text" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-2 font-mono text-xs text-white" />
                   </label>
                 </div>
@@ -796,6 +937,15 @@ async function saveAll(final: boolean) {
                       </label>
                       <div v-if="effectiveMl" class="text-xs text-slate-400">
                         <div>{{ t('wizardMl.sourceLabel') }} {{ String(effectiveMl.source || '—') }}</div>
+                        <div v-if="tab === 'rides'">
+                          {{
+                            signalUsageLoading
+                              ? 'Signal usage: loading...'
+                              : signalUsageCounts
+                                ? `Signal usage: ${signalUsageCounts.ml} ML / ${signalUsageCounts.forecast} Forecast`
+                                : 'Signal usage: —'
+                          }}
+                        </div>
                         <div v-if="effectiveMl.warnings && (effectiveMl.warnings as string[]).length" class="mt-1 text-amber-400">
                           {{ (effectiveMl.warnings as string[]).join('; ') }}
                         </div>
@@ -814,30 +964,26 @@ async function saveAll(final: boolean) {
                       >
                         {{ t('wizardMl.saveAssignment') }}
                       </button>
+                      <p class="text-[11px] text-slate-500">{{ t('wizardMl.mainSaveIncludesMl') }}</p>
                       <p v-if="!canRefreshAi()" class="text-xs text-slate-500">{{ t('wizardMl.needAiRefresh') }}</p>
                     </template>
                   </div>
+                  <div v-if="tab === 'rides'" class="rounded border border-slate-700/60 bg-slate-950/40 p-3">
+                    <div class="mb-2">
+                      <p class="text-xs font-medium text-slate-300">Realtime signals (UNS / MQTT)</p>
+                      <p class="text-[11px] text-slate-500">
+                        Configure which ride signals come from UNS/MQTT/manual sources. This controls what data is actively provided to downstream consumers.
+                      </p>
+                    </div>
+                    <RideSignalCapabilitiesPanel
+                      v-if="effectiveId"
+                      ref="rideSignalCapsPanelRef"
+                      :ride-asset-id="effectiveId"
+                      :asset-slug="String(state.basic.slug || '').trim()"
+                    />
+                    <p v-else class="text-xs text-amber-500">Save basic data first to configure signal usage.</p>
+                  </div>
                 </template>
-                <details class="rounded border border-slate-800 bg-slate-900/40 p-3 text-xs text-slate-500">
-                  <summary class="cursor-pointer text-slate-400">{{ t('wizardMl.legacySummary') }}</summary>
-                  <p class="mt-2 mb-2 text-amber-600/90">{{ t('wizardMl.legacyBody') }}</p>
-                  <div class="grid gap-3 sm:grid-cols-2">
-                    <label class="flex items-center gap-2 text-slate-400">
-                      <input v-model="state.mlTargets.mlEnabled" type="checkbox" disabled class="cursor-not-allowed rounded border-slate-600 opacity-70" />
-                      mlEnabled
-                    </label>
-                    <label class="flex items-center gap-2 text-slate-400">
-                      <input v-model="state.mlTargets.forecastEnabled" type="checkbox" disabled class="cursor-not-allowed rounded border-slate-600 opacity-70" />
-                      forecastEnabled
-                    </label>
-                  </div>
-                  <div v-if="tab === 'rides'" class="mt-2 grid gap-2 sm:grid-cols-2">
-                    <label v-for="lbl in ['weatherSensitive','rainSensitive','windSensitive']" :key="lbl" class="flex items-center gap-2 text-slate-400">
-                      <input v-model="state.mlTargets[lbl]" type="checkbox" disabled class="cursor-not-allowed rounded border-slate-600 opacity-70" />
-                      {{ lbl }}
-                    </label>
-                  </div>
-                </details>
               </section>
 
               <!-- Step 6 Review -->
@@ -871,11 +1017,9 @@ async function saveAll(final: boolean) {
           </div>
         </div>
 
-        <footer class="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 px-4 py-3">
-          <button type="button" class="text-sm text-slate-400 hover:text-white" @click="requestClose">Cancel</button>
+        <footer class="sticky bottom-0 z-10 flex flex-wrap items-center justify-end gap-2 border-t border-slate-800 bg-slate-950/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-slate-950/75">
           <div class="flex flex-wrap gap-2">
-            <button type="button" class="rounded border border-slate-600 px-3 py-2 text-sm text-slate-300" :disabled="step <= 1" @click="prevStep">Back</button>
-            <button type="button" class="rounded border border-slate-600 px-3 py-2 text-sm text-slate-300" :disabled="step >= 6" @click="nextStep">Next</button>
+            <button type="button" class="rounded border border-slate-600 px-3 py-2 text-sm text-slate-300" @click="requestClose">Cancel</button>
             <button type="button" class="rounded border border-slate-600 px-3 py-2 text-sm text-slate-300" @click="saveDraft">Save draft</button>
             <button
               type="button"

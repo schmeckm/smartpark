@@ -10,18 +10,21 @@
 const env = require('../config/env');
 const { publishMqtt } = require('./mqtt-connector.service');
 const { buildSparkplugTopic } = require('../modules/uns/sparkplug-topic-builder.service');
+const { resolveSparkplugEdgeFromParkProfile } = require('./sparkplug-edge-resolver.service');
 const { slugifyName } = require('../modules/uns/uns-topic-generator.service');
 const { registerThemeParksDeviceDomain } = require('../modules/uns/theme-parks-entity-domain.service');
 const { Op } = require('sequelize');
 const { OEE_REASON_CODES } = require('../constants/oee-reason-codes');
 const { logger } = require('../utils/logger');
 const { emitSimulatorOeeQueueAlert } = require('../sockets');
+const { getSimulatedOtExtensionMetrics } = require('./attraction-oee-simulator-ot-extensions');
 
 let Park;
 let ParkAsset;
+let ParkZone;
 let RideMasterData;
 try {
-  ({ Park, ParkAsset, RideMasterData } = require('../models'));
+  ({ Park, ParkAsset, ParkZone, RideMasterData } = require('../models'));
 } catch {
   /* tests may omit models */
 }
@@ -58,6 +61,28 @@ const SCENARIOS = Object.freeze([
 const RUNTIME_STATES = new Set(['STARTING', 'READY', 'LOADING', 'DISPATCHED', 'RUNNING', 'UNLOADING']);
 const DOWNTIME_STATES = new Set(['STOPPED', 'FAULT', 'MAINTENANCE', 'WEATHER_HOLD', 'OFF', 'NIGHT_SHUTDOWN']);
 
+/** Gleiche Logik wie `buildMetrics` → downtime_active (OFF zählt nicht). */
+function downtimeMirrorActive(site) {
+  return DOWNTIME_STATES.has(site.state) && site.state !== 'OFF';
+}
+
+function mirrorReasonCode(site) {
+  const c = site.downtimeReasonCode;
+  if (c && OEE_REASON_CODES.includes(c)) return c;
+  return 'UNPLANNED_OTHER';
+}
+
+function isoParseable(s) {
+  if (!s) return false;
+  const d = new Date(s);
+  return !Number.isNaN(d.getTime());
+}
+
+function getDowntimeService() {
+  const { AssetDowntimeService } = require('./asset-downtime.service');
+  return new AssetDowntimeService();
+}
+
 const SPARKPLUG_TAGS = Object.freeze({
   source: 'attraction_oee_simulator',
   source_system: 'SIMULATOR',
@@ -76,10 +101,25 @@ function mulberry32(seed) {
   };
 }
 
-function sparkplugRouting(parkSlug, edgeOverride) {
-  const groupId = env.sparkplugGroupId || slugifyName(parkSlug);
-  const edgeNodeId = edgeOverride || env.sparkplugEdgeNode || 'park_gateway';
-  return { groupId, edgeNodeId };
+/**
+ * Eigenständige Zufallsfolge je Fahrgeschäft bei gleichem globalen Seed — sonst wirken alle Attraktionen zu ähnlich.
+ * @param {number} globalSeed
+ * @param {string} slug
+ */
+function rngSeedForSite(globalSeed, slug) {
+  const base = Number(globalSeed);
+  const g = Number.isFinite(base) ? base >>> 0 : 42;
+  let h = g;
+  const s = String(slug || '');
+  for (let i = 0; i < s.length; i += 1) {
+    h = Math.imul(h ^ s.charCodeAt(i), 0x9e3779b9);
+  }
+  h = Math.imul(h ^ (h >>> 16), 0x85ebca6b);
+  return (h >>> 0) || 1;
+}
+
+function sparkplugGroupOnly(parkSlug) {
+  return env.sparkplugGroupId || slugifyName(parkSlug);
 }
 
 function pickFaultReason(rng) {
@@ -125,10 +165,20 @@ function clamp(n, lo, hi) {
 }
 
 /**
- * @param {Array<{ t: number; runtimeMs: number; downtimeMs: number; planned: number; actual: number; good: number; bad: number }>} hist
- * @param {number} windowMs
- * @param {number} now
+ * @param {string} parkId
+ * @returns {Promise<string|null>}
  */
+async function resolveParkSlugFromId(parkId) {
+  if (!Park || !parkId) return null;
+  try {
+    const row = await Park.findByPk(String(parkId).trim(), { attributes: ['slug'] });
+    const s = row?.slug != null ? String(row.slug).trim() : '';
+    return s || null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Resolve platform asset UUIDs to slugs for the active park (MD-driven simulator selection).
  * @param {{ parkId?: string | null; parkSlug: string; assetIds: string[] }} p
@@ -154,6 +204,11 @@ async function resolveAssetIdsToSlugs({ parkId, parkSlug, assetIds }) {
     .filter(Boolean);
 }
 
+/**
+ * @param {Array<{ t: number; runtimeMs: number; downtimeMs: number; planned: number; actual: number; good: number; bad: number }>} hist
+ * @param {number} windowMs
+ * @param {number} now
+ */
 function aggregateOeeWindow(hist, windowMs, now) {
   const from = now - windowMs;
   let runtimeMs = 0;
@@ -205,12 +260,16 @@ class AttractionSite {
    *   opcReferenceCycleTimeSec?: number | null;
    *   maxQueueGuests?: number | null;
    *   virtualLineEnabled?: boolean;
+   *   zoneSlug?: string | null; park_zones.slug from MD (park_assets.zone_id); with park sparkplug.edges selects MQTT edge segment.
    * }} p
-   */
+ */
   constructor(p) {
     this.slug = p.slug;
     this.displayName = p.displayName;
     this.assetId = p.assetId != null ? String(p.assetId) : null;
+    const zs = p.zoneSlug != null ? String(p.zoneSlug).trim() : '';
+    /** @type {string | null} */
+    this.zoneSlug = zs === '' ? null : zs;
     this.plannedCapacityPph = p.plannedCapacityPph;
     this.dispatchIntervalSec = p.dispatchIntervalSec;
     this.configuredTrains = p.configuredTrains;
@@ -226,6 +285,12 @@ class AttractionSite {
     this.maxQueueGuests =
       p.maxQueueGuests != null && Number.isFinite(Number(p.maxQueueGuests)) ? Number(p.maxQueueGuests) : null;
     this.virtualLineEnabled = Boolean(p.virtualLineEnabled);
+    /** @type {number|null} ms since epoch — letzte Abfahrt (Dispatch) für IST-Intervall */
+    this._prevDispatchAtMs = null;
+    /** @type {number|null} gleitender Mittelwert Abfertigungsintervall (s) */
+    this._actualDispatchIntervalEma = null;
+    /** @type {string|null} offenes asset_downtime_events.id bei DB-Spiegelung */
+    this._mirrorOpenEventId = null;
     this.state = 'OFF';
     this.stateUntil = 0;
     this.scenario = 'NORMAL_OPERATION';
@@ -246,6 +311,10 @@ class AttractionSite {
     this._lastQueueWarnAt = 0;
     /** @type {{ depth: number; cap: number; warn: boolean } | null} */
     this._lastQueueSnapshot = null;
+    /** @type {ReturnType<typeof mulberry32> | null} — ein PRNG pro Attraktion (nach Simulator-Start gesetzt). */
+    this.rng = null;
+    /** Edge node für Sparkplug-Topics — gesetzt in {@link AttractionOeeSimulator._resolveSparkplugEdgesForSites}. */
+    this.sparkplugEdgeNodeId = 'park_gateway';
   }
 
   /** MD: explicit cap, else heuristic from seats × trains (waiting area proxy). */
@@ -367,12 +436,23 @@ class AttractionSite {
         this.stateUntil = now + dispatchedMs;
         break;
       }
-      case 'DISPATCHED':
+      case 'DISPATCHED': {
+        if (this._prevDispatchAtMs != null) {
+          const gapSec = (now - this._prevDispatchAtMs) / 1000;
+          if (gapSec >= 3 && gapSec <= 7200) {
+            this._actualDispatchIntervalEma =
+              this._actualDispatchIntervalEma == null
+                ? gapSec
+                : this._actualDispatchIntervalEma * 0.88 + gapSec * 0.12;
+          }
+        }
+        this._prevDispatchAtMs = now;
         this.trainDispatchCounter += 1;
         this.state = 'RUNNING';
         this.cycleStartTs = new Date(now).toISOString();
         this.stateUntil = now + rideMs;
         break;
+      }
       case 'RUNNING':
         if (rng() < faultP * 0.9) {
           goFault();
@@ -454,8 +534,10 @@ class AttractionSite {
 
   theoreticalPph(trains) {
     const di = Math.max(1, this.dispatchIntervalSec);
-    const perTrain = (3600 / di) * 24 * trains;
-    return Math.min(this.plannedCapacityPph, Math.floor(perTrain));
+    // Use MD-based seats per cycle and train count; avoids fixed-car assumptions.
+    const seats = Math.max(1, Number(this.seatsPerCycle) || 1);
+    const pphByCycle = (3600 / di) * seats * Math.max(1, Number(trains) || 1);
+    return Math.min(this.plannedCapacityPph, Math.floor(pphByCycle));
   }
 
   actualPphEstimate(prof) {
@@ -500,6 +582,8 @@ class AttractionSite {
         ? Math.floor((now - new Date(this.downtimeStartedAt).getTime()) / 1000)
         : 0;
     const energy = 40 + trains * 18 + (this.state === 'RUNNING' ? 120 : 30) * prof.energyScale;
+    /** Illustrative €/day for SQDC cost pillar + MQTT (not billing); replace with metering on real edges. */
+    const electricityCostEurDayDemo = Math.max(0, Math.round(energy * 0.22 * 16 * 10) / 10);
     const rideCycleActive = ['DISPATCHED', 'RUNNING'].includes(this.state);
     const oee5 = aggregateOeeWindow(this.history, 5 * 60 * 1000, now);
 
@@ -527,6 +611,13 @@ class AttractionSite {
       },
       { name: 'downtime_duration_sec', value: durSec },
       { name: 'dispatch_interval_sec', value: this.dispatchIntervalSec },
+      {
+        name: 'actual_dispatch_interval_sec',
+        value:
+          this._actualDispatchIntervalEma != null
+            ? Math.round(this._actualDispatchIntervalEma * 10) / 10
+            : null,
+      },
       { name: 'planned_cycle_time_sec', value: this.plannedCycleTimeSec },
       { name: 'opc_reference_cycle_time_sec', value: this.opcReferenceCycleTimeSec },
       { name: 'cycle_time_sec', value: this.cycleTimeSec },
@@ -541,11 +632,13 @@ class AttractionSite {
       { name: 'oee_performance_5m', value: Math.round(oee5.performance * 10) / 10 },
       { name: 'oee_quality_5m', value: Math.round(oee5.quality * 10) / 10 },
       { name: 'energy_kw', value: Math.round(energy * 10) / 10 },
+      { name: 'electricity_cost_eur_day', value: electricityCostEurDayDemo },
       { name: 'source_system', value: 'SIMULATOR' },
       { name: 'quality', value: 'SIMULATED' },
       { name: 'aborted_cycles', value: this.abortedCycles },
       { name: 'completed_cycles', value: this.completedCycles },
       { name: 'guest_flow_mismatch', value: this.lastGuestMismatch },
+      ...getSimulatedOtExtensionMetrics(this, now, prof, rng),
     ];
   }
 }
@@ -561,8 +654,6 @@ class AttractionOeeSimulator {
     this.sites = new Map();
     this.running = false;
     this.timer = null;
-    /** @type {ReturnType<typeof mulberry32>|null} */
-    this.rng = null;
     this.config = {
       parkSlug: 'europa_park',
       edgeNodeId: null,
@@ -570,16 +661,20 @@ class AttractionOeeSimulator {
       scenario: 'NORMAL_OPERATION',
       randomSeed: 42,
     };
-    this._nbirthSent = false;
+    /** @type {Set<string>} */
+    this._nbirthSentEdges = new Set();
     this._groupId = '';
-    this._edgeNodeId = '';
   }
 
   resolveConfig(overrides = {}) {
     const e = env;
     const parkSlug = String(overrides.parkSlug || e.simOeeParkSlug || e.simParkId || 'europa_park').trim();
     const parkId = overrides.parkId != null && String(overrides.parkId).trim() !== '' ? String(overrides.parkId).trim() : null;
-    const edgeNodeId = overrides.edgeNodeId || e.simOeeEdgeNode || e.simEdgeNode || null;
+    /** Only API/body may pin one edge for all sites; env SIM_OEE_EDGE_NODE is ignored so zone-aware resolution runs. */
+    const edgeNodeId =
+      overrides.edgeNodeId != null && String(overrides.edgeNodeId).trim() !== ''
+        ? String(overrides.edgeNodeId).trim()
+        : null;
     const publishMs = Math.max(500, Number(overrides.publishMs || e.simOeePublishMs || e.simPublishMs) || 3000);
     const scenario = String(overrides.scenario || e.simOeeScenario || e.simScenario || 'NORMAL_OPERATION');
     const randomSeed = Number(overrides.randomSeed ?? e.simOeeRandomSeed ?? e.simRandomSeed ?? 42);
@@ -596,10 +691,12 @@ class AttractionOeeSimulator {
   }
 
   async loadSitesFromMasterData(cfg) {
+    const emptyProfile = {};
     const defaults = (slug) => ({
       slug,
       displayName: slug.replace(/_/g, ' '),
       assetId: null,
+      zoneSlug: null,
       plannedCapacityPph: 1200,
       dispatchIntervalSec: 90,
       configuredTrains: 3,
@@ -612,18 +709,38 @@ class AttractionOeeSimulator {
       virtualLineEnabled: false,
     });
     if (!Park || !ParkAsset || !RideMasterData) {
-      return cfg.attractions.map((slug) => new AttractionSite(defaults(slug)));
+      return {
+        sites: cfg.attractions.map((slug) => new AttractionSite(defaults(slug))),
+        parkMasterProfile: emptyProfile,
+      };
     }
     try {
-      const park = await Park.findOne({ where: { slug: cfg.parkSlug } });
+      const slugRaw = String(cfg.parkSlug || '').trim();
+      const slugNorm = slugifyName(slugRaw);
+      const park = await Park.findOne({
+        where: { [Op.or]: [{ slug: slugNorm }, { slug: slugRaw }] },
+        attributes: ['id', 'slug', 'masterProfile'],
+      });
       if (!park) {
-        return cfg.attractions.map((slug) => new AttractionSite(defaults(slug)));
+        return {
+          sites: cfg.attractions.map((slug) => new AttractionSite(defaults(slug))),
+          parkMasterProfile: emptyProfile,
+        };
       }
+      const zoneInclude =
+        ParkZone != null
+          ? [{ model: ParkZone, as: 'zone', attributes: ['slug'], required: false }]
+          : [];
       const assets = await ParkAsset.findAll({
         where: { parkId: park.id, slug: { [Op.in]: cfg.attractions } },
+        include: zoneInclude,
       });
       const bySlug = new Map(assets.map((a) => [a.slug, a]));
       const out = [];
+      const parkMasterProfileRaw =
+        typeof park.get === 'function' ? park.get('masterProfile') : park.masterProfile;
+      const parkMasterProfile =
+        parkMasterProfileRaw && typeof parkMasterProfileRaw === 'object' ? parkMasterProfileRaw : emptyProfile;
       for (const slug of cfg.attractions) {
         const row = bySlug.get(slug);
         if (!row) {
@@ -645,11 +762,14 @@ class AttractionOeeSimulator {
         const opcCyc = rm?.opcReferenceCycleTimeSec != null ? Number(rm.opcReferenceCycleTimeSec) : null;
         const maxQ = rm?.maxQueueGuests != null ? Number(rm.maxQueueGuests) : null;
         const vl = rm?.virtualLineEnabled === true || rm?.virtualLineEnabled === 1;
+        const z = row.zone;
+        const zoneSlug = z && z.slug != null ? String(z.slug).trim() || null : null;
         out.push(
           new AttractionSite({
             slug,
             assetId: row.assetId,
             displayName: row.name || slug,
+            zoneSlug,
             plannedCapacityPph: Number.isFinite(cap) ? cap : 1200,
             dispatchIntervalSec: Number.isFinite(di) ? di : 90,
             configuredTrains: Number.isFinite(trains) ? trains : 3,
@@ -663,10 +783,44 @@ class AttractionOeeSimulator {
           })
         );
       }
-      return out;
+      return { sites: out, parkMasterProfile };
     } catch (err) {
       logger.warn({ err: err.message }, 'attraction OEE sim: master data load failed, using defaults');
-      return cfg.attractions.map((slug) => new AttractionSite(defaults(slug)));
+      return {
+        sites: cfg.attractions.map((slug) => new AttractionSite(defaults(slug))),
+        parkMasterProfile: emptyProfile,
+      };
+    }
+  }
+
+  /**
+   * Sparkplug-Knoten pro Fahrt: Zone aus Stammdaten (`zoneSlug`) + Park `master_profile.sparkplug` → `edge_node_id`.
+   * Optional `cfg.edgeNodeId` setzt für alle Fahrten ein fixes Edge (Lab).
+   *
+   * @param {ReturnType<AttractionOeeSimulator['resolveConfig']>} cfg
+   * @param {Record<string, unknown>} parkMasterProfile
+   */
+  _resolveSparkplugEdgesForSites(cfg, parkMasterProfile) {
+    const explicit =
+      cfg.edgeNodeId != null && String(cfg.edgeNodeId).trim() !== '' ? String(cfg.edgeNodeId).trim() : null;
+    if (explicit) {
+      for (const site of this.sites.values()) site.sparkplugEdgeNodeId = explicit;
+      return;
+    }
+    const mp = parkMasterProfile && typeof parkMasterProfile === 'object' ? parkMasterProfile : {};
+    for (const site of this.sites.values()) {
+      const inner = resolveSparkplugEdgeFromParkProfile({
+        parkMasterProfile: mp,
+        zoneSlug: site.zoneSlug,
+      });
+      if (inner._warnZoneNoEdgeRow) {
+        logger.warn(
+          { slug: site.slug, zoneSlug: site.zoneSlug, edgeNodeId: inner.edgeNodeId },
+          'attraction OEE sim: zone set in master data but no matching sparkplug.edges row — fallback edge'
+        );
+        delete inner._warnZoneNoEdgeRow;
+      }
+      site.sparkplugEdgeNodeId = String(inner.edgeNodeId || 'park_gateway').trim() || 'park_gateway';
     }
   }
 
@@ -675,6 +829,10 @@ class AttractionOeeSimulator {
       return { ok: true, alreadyRunning: true, config: this.getStatus().config };
     }
     const ov = { ...(overrides || {}) };
+    if (ov.parkId && !ov.parkSlug) {
+      const ps = await resolveParkSlugFromId(String(ov.parkId).trim());
+      if (ps) ov.parkSlug = ps;
+    }
     if (Array.isArray(ov.assetIds) && ov.assetIds.length) {
       const slugs = await resolveAssetIdsToSlugs({
         parkId: ov.parkId || null,
@@ -690,14 +848,13 @@ class AttractionOeeSimulator {
     if (!cfg.attractions.length) {
       return { ok: false, error: 'no_attractions' };
     }
-    const { groupId, edgeNodeId } = sparkplugRouting(cfg.parkSlug, cfg.edgeNodeId);
-    this._groupId = groupId;
-    this._edgeNodeId = edgeNodeId;
-    this.config = { ...cfg, groupId, edgeNodeId, parkId: cfg.parkId || null };
-    this.rng = mulberry32(cfg.randomSeed);
-    const sites = await this.loadSitesFromMasterData(cfg);
+    this._groupId = sparkplugGroupOnly(cfg.parkSlug);
+    this.config = { ...cfg, groupId: this._groupId, parkId: cfg.parkId || null };
+    const { sites, parkMasterProfile } = await this.loadSitesFromMasterData(cfg);
     this.sites = new Map(sites.map((s) => [s.slug, s]));
+    this._resolveSparkplugEdgesForSites(cfg, parkMasterProfile);
     for (const s of this.sites.values()) {
+      s.rng = mulberry32(rngSeedForSite(cfg.randomSeed, s.slug));
       s.scenario = cfg.scenario;
       s.state = cfg.scenario === 'NIGHT_MODE' ? 'OFF' : 'OFF';
       s.stateUntil = 0;
@@ -711,31 +868,41 @@ class AttractionOeeSimulator {
     this.timer = setInterval(() => {
       this.tick(intervalMs).catch((e) => logger.warn({ err: e.message }, 'attraction OEE sim tick'));
     }, intervalMs);
-    logger.info({ attractions: [...this.sites.keys()], groupId, edgeNodeId }, 'attraction OEE simulator started');
+    logger.info(
+      {
+        attractions: [...this.sites.keys()],
+        groupId: this._groupId,
+        edgeNodesInUse: [...new Set([...this.sites.values()].map((s) => s.sparkplugEdgeNodeId))],
+      },
+      'attraction OEE simulator started'
+    );
     return { ok: true, config: this.getStatus().config };
   }
 
   async _ensureNbirth() {
-    if (this._nbirthSent) return;
-    const topic = buildSparkplugTopic({
-      groupId: this._groupId,
-      messageType: 'NBIRTH',
-      edgeNodeId: this._edgeNodeId,
-    });
-    const payload = {
-      timestamp: new Date().toISOString(),
-      metrics: [{ name: 'node_role', value: 'smart_park_attraction_oee_sim' }],
-      tags: { ...SPARKPLUG_TAGS },
-    };
-    await this._sendMqtt(topic, payload);
-    this._nbirthSent = true;
+    const edges = [...new Set([...this.sites.values()].map((s) => s.sparkplugEdgeNodeId))];
+    for (const edgeNodeId of edges) {
+      if (this._nbirthSentEdges.has(edgeNodeId)) continue;
+      const topic = buildSparkplugTopic({
+        groupId: this._groupId,
+        messageType: 'NBIRTH',
+        edgeNodeId,
+      });
+      const payload = {
+        timestamp: new Date().toISOString(),
+        metrics: [{ name: 'node_role', value: 'smart_park_attraction_oee_sim' }],
+        tags: { ...SPARKPLUG_TAGS },
+      };
+      await this._sendMqtt(topic, payload);
+      this._nbirthSentEdges.add(edgeNodeId);
+    }
   }
 
   async _publishDbirth(site) {
     const topic = buildSparkplugTopic({
       groupId: this._groupId,
       messageType: 'DBIRTH',
-      edgeNodeId: this._edgeNodeId,
+      edgeNodeId: site.sparkplugEdgeNodeId,
       deviceId: site.slug,
     });
     const payload = {
@@ -761,7 +928,7 @@ class AttractionOeeSimulator {
     const topic = buildSparkplugTopic({
       groupId: this._groupId,
       messageType: 'DDATA',
-      edgeNodeId: this._edgeNodeId,
+      edgeNodeId: site.sparkplugEdgeNodeId,
       deviceId: site.slug,
     });
     const payload = {
@@ -776,13 +943,53 @@ class AttractionOeeSimulator {
     await this._publishMqtt(topic, payload);
   }
 
+  /**
+   * Stillstände in asset_downtime_events spiegeln (Platform OEE / Auswertungen), wenn das Asset in den Stammdaten existiert.
+   * @param {AttractionSite} site
+   */
+  async _syncMirrorDowntimeDb(site, beforeActive, afterActive, now) {
+    if (!env.simOeeMirrorDowntimeDb || !site.assetId) return;
+    const svc = getDowntimeService();
+    const tsIso = new Date(now).toISOString();
+    try {
+      if (!beforeActive && afterActive) {
+        const code = mirrorReasonCode(site);
+        const planned = String(code).startsWith('PLANNED_');
+        const startedAt = isoParseable(site.downtimeStartedAt) ? site.downtimeStartedAt : tsIso;
+        const row = await svc.create(
+          site.assetId,
+          {
+            startedAt,
+            endedAt: null,
+            planned,
+            reasonCode: code,
+            notes: 'Attraction-OEE-Simulator (MQTT → DB-Spiegel)',
+            source: 'oee_sim',
+          },
+          { userId: null, parkScopeId: null }
+        );
+        site._mirrorOpenEventId = row.id;
+      } else if (beforeActive && !afterActive && site._mirrorOpenEventId) {
+        await svc.patch(site._mirrorOpenEventId, site.assetId, { endedAt: tsIso }, { parkScopeId: null });
+        site._mirrorOpenEventId = null;
+      }
+    } catch (err) {
+      logger.warn(
+        { err: err.message, slug: site.slug, assetId: site.assetId },
+        'attraction OEE sim: mirror downtime to DB failed'
+      );
+    }
+  }
+
   async tick(intervalMs) {
-    if (!this.running || !this.rng) return;
+    if (!this.running || !this.sites.size) return;
     const now = Date.now();
     const prof = scenarioProfile(this.config.scenario);
-    const rng = this.rng;
     for (const site of this.sites.values()) {
+      const rng = site.rng;
+      if (!rng) continue;
       site.scenario = this.config.scenario;
+      const beforeActive = downtimeMirrorActive(site);
       if (this.config.scenario === 'TECHNICAL_STOP' && site.state === 'RUNNING' && rng() < 0.15) {
         site.state = 'FAULT';
         site.downtimeReasonCode = 'UNPLANNED_CONTROLS';
@@ -792,6 +999,8 @@ class AttractionOeeSimulator {
       } else {
         site.step(intervalMs, now, rng, prof);
       }
+      const afterActive = downtimeMirrorActive(site);
+      await this._syncMirrorDowntimeDb(site, beforeActive, afterActive, now);
       const metrics = site.buildMetrics(now, prof, rng);
       await this._publishDdata(site, metrics);
       site.emitQueueOvercapacityIfNeeded(now, this.config.parkSlug, this._groupId);
@@ -830,15 +1039,19 @@ class AttractionOeeSimulator {
             }
           : null,
         oee: s.oeeSnapshot(now),
+        sparkplugEdgeNodeId: s.sparkplugEdgeNodeId,
+        zoneSlug: s.zoneSlug,
       };
     });
+    const edgeNodesInUse = [...new Set([...this.sites.values()].map((s) => s.sparkplugEdgeNodeId))];
     return {
       running: this.running,
       config: {
         parkSlug: this.config.parkSlug,
         parkId: this.config.parkId || null,
         groupId: this._groupId,
-        edgeNodeId: this._edgeNodeId,
+        edgeNodeId: edgeNodesInUse.length === 1 ? edgeNodesInUse[0] : null,
+        edgeNodesInUse,
         publishMs: this.config.publishMs,
         scenario: this.config.scenario,
         randomSeed: this.config.randomSeed,
@@ -866,11 +1079,24 @@ class AttractionOeeSimulator {
     }
     this.running = false;
     const ts = new Date().toISOString();
+    if (env.simOeeMirrorDowntimeDb) {
+      const svc = getDowntimeService();
+      for (const site of this.sites.values()) {
+        if (site._mirrorOpenEventId && site.assetId) {
+          try {
+            await svc.patch(site._mirrorOpenEventId, site.assetId, { endedAt: ts }, { parkScopeId: null });
+          } catch (err) {
+            logger.warn({ err: err.message, slug: site.slug }, 'attraction OEE sim: mirror downtime close on stop failed');
+          }
+          site._mirrorOpenEventId = null;
+        }
+      }
+    }
     for (const site of this.sites.values()) {
       const topicD = buildSparkplugTopic({
         groupId: this._groupId,
         messageType: 'DDEATH',
-        edgeNodeId: this._edgeNodeId,
+        edgeNodeId: site.sparkplugEdgeNodeId,
         deviceId: site.slug,
       });
       await this._sendMqtt(topicD, {
@@ -879,23 +1105,21 @@ class AttractionOeeSimulator {
         tags: { ...SPARKPLUG_TAGS },
       });
     }
-    if (this._nbirthSent) {
+    for (const edgeNodeId of [...this._nbirthSentEdges]) {
       const topicN = buildSparkplugTopic({
         groupId: this._groupId,
         messageType: 'NDEATH',
-        edgeNodeId: this._edgeNodeId,
+        edgeNodeId,
       });
       await this._sendMqtt(topicN, {
         timestamp: ts,
         metrics: [{ name: 'source_system', value: 'SIMULATOR' }],
         tags: { ...SPARKPLUG_TAGS },
       });
-      this._nbirthSent = false;
     }
+    this._nbirthSentEdges.clear();
     this.sites.clear();
-    this.rng = null;
     this._groupId = '';
-    this._edgeNodeId = '';
     logger.info('attraction OEE simulator stopped');
     return { ok: true, stopped: true };
   }
@@ -930,6 +1154,7 @@ module.exports = {
   AttractionOeeSimulator,
   scenarioProfile,
   aggregateOeeWindow,
+  rngSeedForSite,
   startAttractionOeeSimulator,
   stopAttractionOeeSimulator,
   setAttractionOeeScenario,

@@ -14,6 +14,7 @@ const zoneBody = Joi.object({
   code: Joi.string().trim().max(64).required(),
   name: Joi.string().trim().max(200).required(),
   sortOrder: Joi.number().integer().min(0).optional(),
+  zoneContext: Joi.object().unknown(true).optional(),
   legacyZoneId: uuid.allow(null),
 });
 

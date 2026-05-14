@@ -75,7 +75,7 @@ Environment:
 - `PLAYWRIGHT_START_WEB_SERVER=1` — optional `vite dev` auto-start from `playwright.config.ts`.
 - `E2E_ADMIN_EMAIL` / `E2E_ADMIN_PASSWORD` — default to seeded `admin@smartpark.com` / `Smartpark123!`.
 
-Tests live in `admin-dashboard/e2e/uns-hub.spec.ts`.
+Tests live in `admin-dashboard/tests/e2e/uns-hub.spec.ts`.
 
 ## Scope boundaries (non-goals)
 

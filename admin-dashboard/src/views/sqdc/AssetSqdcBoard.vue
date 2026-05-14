@@ -47,6 +47,40 @@ const rides = ref<MasterDataGridRow[]>([])
 const rideSearch = ref('')
 const loading = ref(false)
 
+const assetElectricityKwhDisplay = computed(() => {
+  const k = board.value?.delivery?.electricityKwhPerDay
+  return k != null && Number.isFinite(Number(k)) ? Number(k) : null
+})
+const assetElectricityEurDisplay = computed(() => {
+  const e = board.value?.delivery?.electricityCostEurPerDay
+  return e != null && Number.isFinite(Number(e)) ? Number(e) : null
+})
+
+const assetMaintenanceEurDisplay = computed(() => {
+  const e = board.value?.delivery?.maintenanceCostEurPerDay
+  return e != null && Number.isFinite(Number(e)) ? Number(e) : null
+})
+
+const assetCostEurForRing = computed(() => {
+  const d = board.value?.delivery
+  if (!d) return null
+  const t = d.totalCostEurPerDay
+  if (t != null && Number.isFinite(Number(t))) return Number(t)
+  const elec = d.electricityCostEurPerDay
+  const maint = d.maintenanceCostEurPerDay
+  let sum = 0
+  let any = false
+  if (elec != null && Number(elec) > 0) {
+    sum += Number(elec)
+    any = true
+  }
+  if (maint != null && Number(maint) > 0) {
+    sum += Number(maint)
+    any = true
+  }
+  return any ? Math.round(sum * 100) / 100 : null
+})
+
 const evTitle = ref('')
 const evType = ref<'SAFETY' | 'QUALITY' | 'DELIVERY' | 'CUSTOMER' | 'PEOPLE' | 'MAINTENANCE'>('DELIVERY')
 const evSeverity = ref<'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'>('MEDIUM')
@@ -91,6 +125,7 @@ const snapOee = ref('')
 const snapQueue = ref('')
 const snapElectricityKwh = ref('')
 const snapElectricityCostEur = ref('')
+const snapMaintenanceCostEur = ref('')
 
 function eventRowKey(ev: Record<string, unknown>, index: number) {
   const id = ev.id
@@ -143,7 +178,7 @@ const monthRingDays = computed(() => {
     scores: b.scores,
     costEurGreenMax: th?.ringCostEur.greenAtMost ?? 200,
     costEurAmberMax: th?.ringCostEur.amberAtMost ?? 500,
-    electricityCostEurPerDay: b.delivery?.electricityCostEurPerDay,
+    costEurPerDayForRing: assetCostEurForRing.value,
     peopleMoodGreenMin: th?.ringPeopleMood.greenAtLeast ?? 4,
     peopleMoodAmberMin: th?.ringPeopleMood.amberAtLeast ?? 3,
     moodAvgSelectedDay: todayMoodAvgAsset.value,
@@ -274,11 +309,10 @@ const assetRingHeroD = computed(() => {
 })
 
 const assetRingHeroC = computed(() => {
-  const b = board.value
   const days = monthRingDays.value
   const tr = ringToneTrendLabel(days, date.value, 'cost', assetRingTrendBundle())
   const tone = selectedDayRingRowAsset.value?.cost
-  const eur = b?.delivery?.electricityCostEurPerDay
+  const eur = assetCostEurForRing.value
   const has = eur != null && Number.isFinite(Number(eur))
   return {
     centerValue: has ? String(Math.round(Number(eur))) : null,
@@ -314,7 +348,7 @@ function todayPillarSub(key: 'safety' | 'quality' | 'delivery' | 'customer'): st
 }
 
 const todayCostSub = computed(() => {
-  const e = board.value?.delivery?.electricityCostEurPerDay
+  const e = assetCostEurForRing.value
   if (e == null || !Number.isFinite(Number(e))) return ''
   return `${t('sqdc.todayShort')}: ${e} €`
 })
@@ -483,6 +517,7 @@ async function saveSnapshot() {
   else delete deliveryJson.oee01
   const kwhRaw = snapElectricityKwh.value.trim()
   const eurRaw = snapElectricityCostEur.value.trim()
+  const maintRaw = snapMaintenanceCostEur.value.trim()
   if (kwhRaw !== '') {
     const k = Number(kwhRaw.replace(',', '.'))
     if (Number.isFinite(k)) deliveryJson.electricityKwhPerDay = k
@@ -493,6 +528,11 @@ async function saveSnapshot() {
     if (Number.isFinite(e)) deliveryJson.electricityCostEurPerDay = e
     else delete deliveryJson.electricityCostEurPerDay
   } else delete deliveryJson.electricityCostEurPerDay
+  if (maintRaw !== '') {
+    const m = Number(maintRaw.replace(',', '.'))
+    if (Number.isFinite(m)) deliveryJson.maintenanceCostEurPerDay = m
+    else delete deliveryJson.maintenanceCostEurPerDay
+  } else delete deliveryJson.maintenanceCostEurPerDay
   const customerJson: Record<string, unknown> = {}
   if (queueMinutes != null && Number.isFinite(queueMinutes)) customerJson.queueMinutes = queueMinutes
 
@@ -555,6 +595,10 @@ watch(
     snapElectricityCostEur.value =
       d.electricityCostEurPerDay != null && Number.isFinite(Number(d.electricityCostEurPerDay))
         ? String(d.electricityCostEurPerDay)
+        : ''
+    snapMaintenanceCostEur.value =
+      d.maintenanceCostEurPerDay != null && Number.isFinite(Number(d.maintenanceCostEurPerDay))
+        ? String(d.maintenanceCostEurPerDay)
         : ''
   }
 )
@@ -728,24 +772,23 @@ onUnmounted(() => {
           <dl class="mt-4 space-y-3 text-xs text-slate-300">
             <div class="flex justify-between gap-2 border-b border-slate-800/80 pb-2">
               <dt class="text-slate-500">{{ t('sqdc.electricityKwhDay') }}</dt>
-              <dd class="font-mono text-white">
-                {{
-                  board.delivery.electricityKwhPerDay != null && Number.isFinite(board.delivery.electricityKwhPerDay)
-                    ? board.delivery.electricityKwhPerDay
-                    : '—'
-                }}
-              </dd>
+              <dd class="font-mono text-white">{{ assetElectricityKwhDisplay != null ? assetElectricityKwhDisplay : '—' }}</dd>
             </div>
             <div class="flex justify-between gap-2">
               <dt class="text-slate-500">{{ t('sqdc.electricityCostEurDay') }}</dt>
               <dd class="font-mono text-white">
-                {{
-                  board.delivery.electricityCostEurPerDay != null &&
-                  Number.isFinite(board.delivery.electricityCostEurPerDay)
-                    ? `${board.delivery.electricityCostEurPerDay} €`
-                    : '—'
-                }}
+                {{ assetElectricityEurDisplay != null ? `${assetElectricityEurDisplay} €` : '—' }}
               </dd>
+            </div>
+            <div class="flex justify-between gap-2">
+              <dt class="text-slate-500">{{ t('sqdc.maintenanceCostEurDay') }}</dt>
+              <dd class="font-mono text-white">
+                {{ assetMaintenanceEurDisplay != null ? `${assetMaintenanceEurDisplay} €` : '—' }}
+              </dd>
+            </div>
+            <div class="flex justify-between gap-2 border-t border-slate-800/80 pt-2">
+              <dt class="text-slate-500">{{ t('sqdc.operatingCostTotalCringEurDay') }}</dt>
+              <dd class="font-mono text-white">{{ assetCostEurForRing != null ? `${assetCostEurForRing} €` : '—' }}</dd>
             </div>
           </dl>
         </section>
@@ -968,6 +1011,8 @@ onUnmounted(() => {
           <input v-model="snapElectricityKwh" type="text" class="mt-0.5 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs text-white" />
           <label class="mt-2 block text-[10px] text-slate-500">{{ t('sqdc.electricityCostEurDay') }} → delivery_json</label>
           <input v-model="snapElectricityCostEur" type="text" class="mt-0.5 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs text-white" />
+          <label class="mt-2 block text-[10px] text-slate-500">{{ t('sqdc.maintenanceCostEurDay') }} → delivery_json</label>
+          <input v-model="snapMaintenanceCostEur" type="text" class="mt-0.5 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs text-white" />
           <button type="button" class="mt-3 w-full rounded-md bg-brand-600 py-2 text-xs font-medium text-white hover:bg-brand-500" @click="saveSnapshot">
             {{ t('sqdc.saveSnapshot') }}
           </button>

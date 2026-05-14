@@ -62,7 +62,7 @@ onMounted(async () => {
     </nav>
     <h1 class="font-display text-xl font-semibold text-white">Asset explorer</h1>
     <p class="text-sm text-slate-400">
-      Stammdaten für <strong class="text-slate-200">Fahrgeschäfte (RIDE)</strong> bearbeitest du über die Spalte rechts
+      Asset-Daten für <strong class="text-slate-200">Fahrgeschäfte (RIDE)</strong> bearbeitest du über die Spalte rechts
       „Ride MDM“ — das öffnet die Seite „Ride master data“ mit Formular und Speichern.
       Andere Asset-Typen werden hier nur gelistet (Editor folgt).
     </p>

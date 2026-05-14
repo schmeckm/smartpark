@@ -20,6 +20,16 @@ const {
 
 const REGISTRY_SOURCE_MIRRORED = 'MIRRORED_FROM_LEGACY';
 
+/**
+ * Sparkplug DDATA metrics published by the attraction OEE simulator / real edges before a UNS leaf exists.
+ * Merged into mirror-derived metric names so registry mirror + signal catalog stay aligned with Addon Board / UNS Live.
+ */
+const CANONICAL_SPARKPLUG_METRIC_NAMES = ['actual_dispatch_interval_sec'];
+
+const CANONICAL_SIGNAL_LABELS = {
+  actual_dispatch_interval_sec: 'Actual dispatch interval (seconds)',
+};
+
 /** @typedef {import('../models').UnsRegistryEntity} UnsRegistryEntityModel */
 
 const ENTITY_KIND = {
@@ -328,23 +338,28 @@ class UnsRegistryMirrorService {
       }
 
       const metricNames = [
-        ...new Set(
-          unsNodes
+        ...new Set([
+          ...CANONICAL_SPARKPLUG_METRIC_NAMES,
+          ...unsNodes
             .map((n) => n.get('metric'))
             .filter((m) => m != null && String(m).trim() !== '')
-            .map((m) => String(m).trim())
-        ),
+            .map((m) => String(m).trim()),
+        ]),
       ];
 
       const sparkRows = metricNames.map((metricName) => ({
         registrySource: REGISTRY_SOURCE_MIRRORED,
         metricName,
         aliasOf: null,
-        dataType: null,
-        description: `Mirrored from uns_nodes.metric (${REGISTRY_SOURCE_MIRRORED})`,
+        dataType: CANONICAL_SPARKPLUG_METRIC_NAMES.includes(metricName) ? 'Float' : null,
+        description: CANONICAL_SPARKPLUG_METRIC_NAMES.includes(metricName)
+          ? `Canonical Sparkplug ride metric (${metricName}); IST dispatch cycle time / rolling interval from edge or simulator`
+          : `Mirrored from uns_nodes.metric (${REGISTRY_SOURCE_MIRRORED})`,
         isPrepared: false,
         isActive: false,
-        payloadJson: {},
+        payloadJson: CANONICAL_SPARKPLUG_METRIC_NAMES.includes(metricName)
+          ? { canonicalTelemetry: true }
+          : {},
       }));
       if (sparkRows.length) {
         await SparkplugMetricDefinition.bulkCreate(sparkRows, { ...opts });
@@ -353,11 +368,13 @@ class UnsRegistryMirrorService {
       const signalRows = metricNames.map((signalCode) => ({
         registrySource: REGISTRY_SOURCE_MIRRORED,
         signalCode,
-        label: signalCode,
-        description: `Derived metric / signal from UNS node leaves (${REGISTRY_SOURCE_MIRRORED})`,
-        unit: null,
-        category: 'uns_metric',
-        payloadJson: {},
+        label: CANONICAL_SIGNAL_LABELS[signalCode] || signalCode,
+        description: CANONICAL_SPARKPLUG_METRIC_NAMES.includes(signalCode)
+          ? `Sparkplug ride telemetry (${signalCode}); see simulator / MQTT DDATA`
+          : `Derived metric / signal from UNS node leaves (${REGISTRY_SOURCE_MIRRORED})`,
+        unit: signalCode === 'actual_dispatch_interval_sec' ? 's' : null,
+        category: CANONICAL_SPARKPLUG_METRIC_NAMES.includes(signalCode) ? 'ride_telemetry' : 'uns_metric',
+        payloadJson: CANONICAL_SPARKPLUG_METRIC_NAMES.includes(signalCode) ? { canonicalTelemetry: true } : {},
       }));
       let signalInstances = [];
       if (signalRows.length) {

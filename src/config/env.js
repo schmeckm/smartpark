@@ -56,6 +56,15 @@ module.exports = {
   ingestionMaxAgeMs: Number(process.env.INGESTION_MAX_AGE_MS) || 20 * 60 * 1000,
   aiSamplingEnabled: process.env.AI_SAMPLING_ENABLED === 'true' || process.env.AI_SAMPLING_ENABLED === '1',
   aiSamplingIntervalSeconds: Math.max(30, Number(process.env.AI_SAMPLING_INTERVAL_SECONDS) || 300),
+  /**
+   * ML / forecast phased evolution (Phase 0+). All default **off** — no change to prediction outputs until
+   * later phases connect consumers. Governed training data remains `ride_feature_snapshots_5m` / park snapshots;
+   * MQTT/UNS is never the ML SoR.
+   */
+  mlTraceEnabled: process.env.ML_TRACE_ENABLED === 'true' || process.env.ML_TRACE_ENABLED === '1',
+  mlProfileEnabled: process.env.ML_PROFILE_ENABLED === 'true' || process.env.ML_PROFILE_ENABLED === '1',
+  mlFeatureWeightsEnabled:
+    process.env.ML_FEATURE_WEIGHTS_ENABLED === 'true' || process.env.ML_FEATURE_WEIGHTS_ENABLED === '1',
   /** Open-Meteo poll per active park; persists weather_observations and optionally rebuilds feature snapshots. */
   weatherOpenMeteoEnabled:
     process.env.WEATHER_OPEN_METEO_ENABLED === 'true' || process.env.WEATHER_OPEN_METEO_ENABLED === '1',
@@ -72,7 +81,7 @@ module.exports = {
   externalParkDataEnabled:
     process.env.EXTERNAL_PARK_DATA_ENABLED === 'true' || process.env.EXTERNAL_PARK_DATA_ENABLED === '1',
   externalParkDataPollIntervalSeconds:
-    Math.max(30, Number(process.env.EXTERNAL_PARK_DATA_POLL_INTERVAL_SECONDS) || 300),
+    Math.max(30, Number(process.env.EXTERNAL_PARK_DATA_POLL_INTERVAL_SECONDS) || 120),
   externalParkDataDefaultProvider: process.env.EXTERNAL_PARK_DATA_DEFAULT_PROVIDER || 'themeparks_wiki',
   adapterSchedulerEnabled:
     process.env.ADAPTER_SCHEDULER_ENABLED === 'true' || process.env.ADAPTER_SCHEDULER_ENABLED === '1',
@@ -105,11 +114,29 @@ module.exports = {
     process.env.SIM_AUTO_START === 'true' ||
     process.env.SIM_AUTO_START === '1',
   simOeeParkSlug: process.env.SIM_OEE_PARK_ID || process.env.SIM_PARK_ID || 'europa_park',
+  /** Read for ops / feature flags only. OEE sim Sparkplug edge comes from park `master_profile.sparkplug` + asset zone (see sparkplug-edge-resolver); use POST `/simulator/attraction-oee/start` body `edgeNodeId` to pin one edge for all rides. */
   simOeeEdgeNode: process.env.SIM_OEE_EDGE_NODE || process.env.SIM_EDGE_NODE || '',
   simOeePublishMs: Math.max(500, Number(process.env.SIM_OEE_PUBLISH_MS || process.env.SIM_PUBLISH_MS) || 3000),
   simOeeAttractions: process.env.SIM_OEE_ATTRACTIONS || process.env.SIM_ATTRACTIONS || 'blue_fire,silver_star',
   simOeeScenario: process.env.SIM_OEE_SCENARIO || process.env.SIM_SCENARIO || 'NORMAL_OPERATION',
   simOeeRandomSeed: Number(process.env.SIM_OEE_RANDOM_SEED || process.env.SIM_RANDOM_SEED) || 42,
+  /** Stillstände des Attraktion-OEE-Simulators in asset_downtime_events spiegeln → Platform „OEE — Verfügbarkeit“ sieht Buchungen. Abschalten: SIM_OEE_MIRROR_DOWNTIME_DB=false */
+  simOeeMirrorDowntimeDb:
+    process.env.SIM_OEE_MIRROR_DOWNTIME_DB === 'false' || process.env.SIM_OEE_MIRROR_DOWNTIME_DB === '0'
+      ? false
+      : true,
+  /**
+   * Adapter WAIT_TIME / ENTITY_STATUS → rides.status; bei Wechsel zu „geschlossen“ während geplanter Parköffnung
+   * ein ungeplantes Stillstandsevent (UNPLANNED_ADAPTER_UNAVAILABLE) in asset_downtime_events. Abschalten: ADAPTER_STATUS_MIRROR_OEE_DOWNTIME=false
+   */
+  adapterStatusMirrorOeeDowntime:
+    process.env.ADAPTER_STATUS_MIRROR_OEE_DOWNTIME === 'false' ||
+    process.env.ADAPTER_STATUS_MIRROR_OEE_DOWNTIME === '0'
+      ? false
+      : true,
+  /** Extra per-ride OT-style Sparkplug metrics (lift current, vibration, …). Off: SIM_OEE_OT_METRICS=false */
+  simOeeOtMetrics:
+    process.env.SIM_OEE_OT_METRICS === 'false' || process.env.SIM_OEE_OT_METRICS === '0' ? false : true,
 
   /** Phase 8 — registry MQTT publisher pilot (legacy publishing unchanged). */
   registryPublishEnabled: process.env.REGISTRY_PUBLISH_ENABLED === 'true' || process.env.REGISTRY_PUBLISH_ENABLED === '1',
@@ -127,4 +154,18 @@ module.exports = {
   ),
   /** Phase 11 — when > 0, health requires stability_window_started_at to be at least this many days old. */
   registrySignalStabilityDays: Math.max(0, Number(process.env.REGISTRY_SIGNAL_STABILITY_DAYS) || 0),
+
+  /** InfluxDB 2.x — optional OT historian for numeric Sparkplug DDATA (see docker-compose influxdb service). */
+  influxEnabled: process.env.INFLUX_ENABLED === 'true' || process.env.INFLUX_ENABLED === '1',
+  influxUrl: process.env.INFLUX_URL || '',
+  influxToken: process.env.INFLUX_TOKEN || '',
+  influxOrg: process.env.INFLUX_ORG || 'smartpark',
+  influxBucket: process.env.INFLUX_BUCKET || 'ot_metrics',
+  influxFloatEpsilon: (() => {
+    const x = process.env.INFLUX_FLOAT_EPSILON;
+    if (x === undefined || x === '') return 1e-9;
+    const n = Number(x);
+    return Number.isFinite(n) && n >= 0 ? n : 1e-9;
+  })(),
+  influxMinWriteIntervalMs: Math.max(0, Number(process.env.INFLUX_MIN_WRITE_INTERVAL_MS) || 0),
 };

@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-05-08T09:18:44.412Z",
+  "generatedAt": "2026-05-13T05:31:13.855Z",
   "apiPrefix": "/api/v1",
-  "duplicateKeyCount": 6,
+  "duplicateKeyCount": 13,
   "duplicates": [
     {
       "key": "DELETE /api/v1/integrations/installed-adapters/:id",
@@ -10,6 +10,69 @@
       "registrationCount": 2,
       "mountOrigins": [
         "src/app.js"
+      ]
+    },
+    {
+      "key": "GET /api/v1/ai/ml/forecast-accuracy",
+      "method": "GET",
+      "path": "/api/v1/ai/ml/forecast-accuracy",
+      "registrationCount": 2,
+      "mountOrigins": [
+        "src/routes/v1/index.js"
+      ]
+    },
+    {
+      "key": "GET /api/v1/ai/ml/forecast-accuracy/:id",
+      "method": "GET",
+      "path": "/api/v1/ai/ml/forecast-accuracy/:id",
+      "registrationCount": 2,
+      "mountOrigins": [
+        "src/routes/v1/index.js"
+      ]
+    },
+    {
+      "key": "GET /api/v1/ai/ml/forecast-accuracy/kpis",
+      "method": "GET",
+      "path": "/api/v1/ai/ml/forecast-accuracy/kpis",
+      "registrationCount": 2,
+      "mountOrigins": [
+        "src/routes/v1/index.js"
+      ]
+    },
+    {
+      "key": "GET /api/v1/ai/ml/prediction-traces",
+      "method": "GET",
+      "path": "/api/v1/ai/ml/prediction-traces",
+      "registrationCount": 2,
+      "mountOrigins": [
+        "src/routes/v1/index.js"
+      ]
+    },
+    {
+      "key": "GET /api/v1/ai/ml/prediction-traces/:predictionId",
+      "method": "GET",
+      "path": "/api/v1/ai/ml/prediction-traces/:predictionId",
+      "registrationCount": 2,
+      "mountOrigins": [
+        "src/routes/v1/index.js"
+      ]
+    },
+    {
+      "key": "GET /api/v1/ai/ml/prediction-traces/:predictionId/coefficients",
+      "method": "GET",
+      "path": "/api/v1/ai/ml/prediction-traces/:predictionId/coefficients",
+      "registrationCount": 2,
+      "mountOrigins": [
+        "src/routes/v1/index.js"
+      ]
+    },
+    {
+      "key": "GET /api/v1/ai/ml/prediction-traces/filter-options",
+      "method": "GET",
+      "path": "/api/v1/ai/ml/prediction-traces/filter-options",
+      "registrationCount": 2,
+      "mountOrigins": [
+        "src/routes/v1/index.js"
       ]
     },
     {

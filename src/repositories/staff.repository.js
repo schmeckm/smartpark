@@ -1,10 +1,18 @@
-const { Staff, Zone } = require('../models');
+const { Staff, Zone, Ride } = require('../models');
 
 function buildIncludes(options = {}) {
-  const { includeZone = false, includeSupervisor = true } = options;
+  const { includeZone = false, includeRide = false, includeSupervisor = true } = options;
   const include = [];
   if (includeZone) {
     include.push({ model: Zone, as: 'currentZone', required: false });
+  }
+  if (includeRide) {
+    include.push({
+      model: Ride,
+      as: 'currentRide',
+      required: false,
+      attributes: ['id', 'name', 'zoneId'],
+    });
   }
   if (includeSupervisor) {
     include.push({
@@ -23,6 +31,7 @@ class StaffRepository {
       order: [['lastName', 'ASC'], ['firstName', 'ASC']],
       include: buildIncludes({
         includeZone: options.includeZone,
+        includeRide: options.includeRide !== false,
         includeSupervisor: options.includeSupervisor !== false,
       }),
     });
@@ -32,6 +41,7 @@ class StaffRepository {
     return Staff.findByPk(id, {
       include: buildIncludes({
         includeZone: options.includeZone,
+        includeRide: options.includeRide !== false,
         includeSupervisor: options.includeSupervisor !== false,
       }),
     });

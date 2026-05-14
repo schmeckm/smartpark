@@ -111,7 +111,10 @@ export type MergeLiveSqdcRingScoresOpts = {
   scores: { safety?: number | null; quality?: number | null; delivery?: number | null } | null | undefined
   costEurGreenMax: number
   costEurAmberMax: number
-  electricityCostEurPerDay: number | null | undefined
+  /** Positive sum (electricity + maintenance) from `delivery_json`; drives C-ring when set. */
+  costEurPerDayForRing?: number | null | undefined
+  /** @deprecated Prefer `costEurPerDayForRing`. */
+  electricityCostEurPerDay?: number | null | undefined
   peopleMoodGreenMin: number
   peopleMoodAmberMin: number
   moodAvgSelectedDay: number | null | undefined
@@ -138,7 +141,8 @@ export function mergeLiveScoresIntoMonthRingDays(
     const dq = scoreToRingToneFromScore(opts.scores?.delivery, opts.scoreGreenMin, opts.scoreAmberMin)
     if (next.delivery === 'empty' && dq) next.delivery = dq
 
-    const c = costEurToRingTone(opts.electricityCostEurPerDay, opts.costEurGreenMax, opts.costEurAmberMax)
+    const ringCostEur = opts.costEurPerDayForRing ?? opts.electricityCostEurPerDay
+    const c = costEurToRingTone(ringCostEur, opts.costEurGreenMax, opts.costEurAmberMax)
     if (next.cost === 'empty' && c) next.cost = c
 
     const p = moodAvgToPeopleRingTone(opts.moodAvgSelectedDay, opts.peopleMoodGreenMin, opts.peopleMoodAmberMin)

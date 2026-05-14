@@ -70,6 +70,12 @@ const flagsSchema = Joi.object({
     samplingIntervalSeconds: positiveInt.default(300),
   }).required(),
 
+  mlForecast: Joi.object({
+    traceEnabled: Joi.boolean().default(false),
+    profileEnabled: Joi.boolean().default(false),
+    featureWeightsEnabled: Joi.boolean().default(false),
+  }).required(),
+
   weather: Joi.object({
     openMeteoEnabled: Joi.boolean().default(false),
     openMeteoIntervalSeconds: positiveInt.default(300),

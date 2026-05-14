@@ -17,11 +17,23 @@ const {
   resolveThemeParksPublicationDomain,
   registerThemeParksDeviceDomain,
 } = require('../modules/uns/theme-parks-entity-domain.service');
+const { resolveSparkplugEdgeNodeForAsset } = require('./sparkplug-edge-resolver.service');
 
-function sparkplugRouting(parkSlug) {
-  const groupId = env.sparkplugGroupId || slugifyName(parkSlug);
-  const edgeNodeId = env.sparkplugEdgeNode || 'park_gateway';
-  return { groupId, edgeNodeId };
+function sparkplugGroupIdOnly(parkSlug) {
+  return env.sparkplugGroupId || slugifyName(parkSlug);
+}
+
+async function sparkplugRoutingForDevice(parkSlug, entitySlug, adapterContext, explicitEdgeNodeId) {
+  const groupId = sparkplugGroupIdOnly(parkSlug);
+  const edgeRes = await resolveSparkplugEdgeNodeForAsset({
+    parkSlug,
+    assetSlug: entitySlug,
+    adapterContext: adapterContext && typeof adapterContext === 'object' ? adapterContext : {},
+    explicitEdgeNodeId: explicitEdgeNodeId != null && String(explicitEdgeNodeId).trim() !== ''
+      ? String(explicitEdgeNodeId).trim()
+      : null,
+  });
+  return { groupId, edgeNodeId: edgeRes.edgeNodeId, sparkplugResolution: edgeRes };
 }
 
 function metricsFromObject(obj) {
@@ -71,8 +83,8 @@ class CanonicalToSparkplugPublisher {
     this._dbirthSent = new Set();
   }
 
-  _dbirthKey(parkSlug, deviceId) {
-    return `${slugifyName(parkSlug)}::${slugifyName(deviceId)}`;
+  _dbirthKey(parkSlug, deviceId, edgeNodeId) {
+    return `${slugifyName(parkSlug)}::${slugifyName(deviceId)}::${slugifyName(edgeNodeId)}`;
   }
 
   /**
@@ -86,8 +98,20 @@ class CanonicalToSparkplugPublisher {
       return { published: false, reason: 'invalid_event' };
     }
     const deviceId = slugifyName(entitySlug);
-    const key = this._dbirthKey(parkSlug, deviceId);
-    const { groupId, edgeNodeId } = sparkplugRouting(parkSlug);
+    const adapterContext = evt.adapterContext && typeof evt.adapterContext === 'object' ? evt.adapterContext : {};
+    const explicit =
+      evt.explicitSparkplugEdgeNodeId != null && String(evt.explicitSparkplugEdgeNodeId).trim() !== ''
+        ? String(evt.explicitSparkplugEdgeNodeId).trim()
+        : evt.edgeNodeId != null && String(evt.edgeNodeId).trim() !== ''
+          ? String(evt.edgeNodeId).trim()
+          : null;
+    const { groupId, edgeNodeId } = await sparkplugRoutingForDevice(
+      parkSlug,
+      entitySlug,
+      adapterContext,
+      explicit
+    );
+    const key = this._dbirthKey(parkSlug, deviceId, edgeNodeId);
     const domain = resolveThemeParksPublicationDomain(evt.entityName, evt.entityType);
     const source = evt.source != null ? String(evt.source) : 'canonical';
     const displayName = evt.entityName != null ? String(evt.entityName) : deviceId;
@@ -143,8 +167,14 @@ class CanonicalToSparkplugPublisher {
     for (const row of merged) {
       if (!row.metrics || !Object.keys(row.metrics).length) continue;
       const deviceId = row.entitySlug || slugifyName(row.entityName || row.externalEntityId);
-      const key = this._dbirthKey(parkSlug, deviceId);
-      const { groupId, edgeNodeId } = sparkplugRouting(parkSlug);
+      const slugForRes = typeof row.entitySlug === 'string' && row.entitySlug.trim() ? row.entitySlug.trim() : deviceId;
+      const { groupId, edgeNodeId } = await sparkplugRoutingForDevice(
+        parkSlug,
+        slugForRes,
+        row.adapterContext,
+        row.explicitSparkplugEdgeNodeId != null ? String(row.explicitSparkplugEdgeNodeId).trim() : null
+      );
+      const key = this._dbirthKey(parkSlug, deviceId, edgeNodeId);
       const domain = resolveThemeParksPublicationDomain(row.entityName, row.entityType);
       if (!this._dbirthSent.has(key)) {
         await this._publishDbirth({
@@ -180,13 +210,15 @@ class CanonicalToSparkplugPublisher {
   async publishFromEntitySyncMessages({ parkSlug, provider, messages }) {
     if (!Array.isArray(messages) || !messages.length) return { births: 0 };
     let births = 0;
-    const { groupId, edgeNodeId } = sparkplugRouting(parkSlug);
     const src = String(provider || 'integration');
     for (const m of messages) {
       if (!m || m.messageType !== 'PARK_ENTITY_SYNCED') continue;
       const p = m.payload || {};
+      const slugRaw =
+        typeof p.slug === 'string' && p.slug.trim() ? p.slug.trim() : p.externalEntityName || m.externalEntityId || '';
       const deviceId = slugifyName(p.slug || p.externalEntityName || m.externalEntityId || 'entity');
-      const key = this._dbirthKey(parkSlug, deviceId);
+      const { groupId, edgeNodeId } = await sparkplugRoutingForDevice(parkSlug, slugRaw || deviceId, {});
+      const key = this._dbirthKey(parkSlug, deviceId, edgeNodeId);
       const domain = resolveThemeParksPublicationDomain(
         m.payload?.externalEntityName || m.externalEntityId,
         m.entityType
@@ -213,7 +245,7 @@ class CanonicalToSparkplugPublisher {
    */
   async publishDdeath({ parkSlug, entitySlug, source }) {
     const deviceId = slugifyName(entitySlug);
-    const { groupId, edgeNodeId } = sparkplugRouting(parkSlug);
+    const { groupId, edgeNodeId } = await sparkplugRoutingForDevice(parkSlug, entitySlug, {}, null);
     const topic = buildSparkplugTopic({ groupId, messageType: 'DDEATH', edgeNodeId, deviceId });
     const src = String(source || 'canonical');
     const payload = {
@@ -222,7 +254,7 @@ class CanonicalToSparkplugPublisher {
       tags: { source: src },
     };
     const mqtt = await publishMqtt(topic, payload);
-    this._dbirthSent.delete(this._dbirthKey(parkSlug, deviceId));
+    this._dbirthSent.delete(this._dbirthKey(parkSlug, deviceId, edgeNodeId));
     return { published: mqtt.published, topic };
   }
 

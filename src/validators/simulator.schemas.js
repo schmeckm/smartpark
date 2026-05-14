@@ -11,6 +11,7 @@ const runScenarioSchema = Joi.object({
       'SILVER_COMET_LINE'
     )
     .required(),
+  parkId: Joi.string().uuid().optional(),
 });
 
 module.exports = { runScenarioSchema };

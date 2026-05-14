@@ -29,6 +29,7 @@ import {
   type AddonBoardZonesListPayload,
   type AddonBoardZoneSummary,
   type OperationFactRide,
+  type AssetPredictiveMaintenancePayload,
 } from '@/api/client'
 import OperationsFactsRidePilotPanel from '@/components/operations/OperationsFactsRidePilotPanel.vue'
 import BoardSignalSourcePicker from '@/components/addon-board/BoardSignalSourcePicker.vue'
@@ -39,6 +40,7 @@ import {
 import { useParkContextStore } from '@/stores/parkContext'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
+import { askConfirm } from '@/composables/useConfirmDialog'
 
 const { t } = useI18n()
 const parkCtx = useParkContextStore()
@@ -76,7 +78,6 @@ const promoteWidgetBusy = ref(false)
 const renamingWidgetId = ref<string | null>(null)
 const renameDraftTitle = ref('')
 const customWidgetActionBusyId = ref<string | null>(null)
-
 const parkId = computed(() => parkCtx.activeParkId)
 const canUpdateRides = computed(() => auth.hasPermission('rides', 'update'))
 
@@ -140,6 +141,78 @@ function formatWidgetSourceLiveValue(v: unknown): string {
 
 const rideSwdec = computed(() => (rideDetail.value?.swdec as Record<string, unknown>) || {})
 const rideWait = computed(() => (rideSwdec.value.waitingTime as Record<string, unknown>) || {})
+const rideOperations = computed(() => (rideSwdec.value.rideOperations as Record<string, unknown>) || {})
+const rideWeather = computed(() => (rideSwdec.value.weatherContext as Record<string, unknown>) || {})
+const rideCrossAsset = computed(() => (rideSwdec.value.crossAssetContext as Record<string, unknown>) || {})
+const rideCrossHints = computed(() => {
+  const h = rideCrossAsset.value.hints
+  if (!Array.isArray(h)) return [] as { code: string; severity?: string }[]
+  return h.filter((x): x is { code: string; severity?: string } => {
+    return Boolean(x && typeof x === 'object' && typeof (x as { code?: unknown }).code === 'string')
+  })
+})
+
+function venueTripletNumeric(v: unknown): { r: number; s: number; sh: number } {
+  const o = v && typeof v === 'object' ? (v as Record<string, unknown>) : {}
+  return {
+    r: Number(o.restaurants) || 0,
+    s: Number(o.shops) || 0,
+    sh: Number(o.shows) || 0,
+  }
+}
+
+function venueTripletTotal(v: unknown): number {
+  const { r, s, sh } = venueTripletNumeric(v)
+  return r + s + sh
+}
+
+function formatVenueTripletLine(v: unknown): string {
+  const { r, s, sh } = venueTripletNumeric(v)
+  const parts: string[] = []
+  if (r) parts.push(`${r} ${t('addonBoard.venuesRestaurantsShort')}`)
+  if (s) parts.push(`${s} ${t('addonBoard.venuesShopsShort')}`)
+  if (sh) parts.push(`${sh} ${t('addonBoard.venuesShowsShort')}`)
+  return parts.join(' · ')
+}
+
+function crossHintLabel(code: string): string {
+  return t(`addonBoard.crossHints.${code}`)
+}
+
+function hasRideCrossAssetDetail(cx: Record<string, unknown>): boolean {
+  if (venueTripletTotal(cx.zoneVenues) > 0) return true
+  const h = cx.hints
+  return Array.isArray(h) && h.length > 0
+}
+
+function formatWeatherBannerLine(wx: Record<string, unknown> | null | undefined): string {
+  if (!wx || typeof wx !== 'object') return ''
+  const parts: string[] = []
+  if (wx.temperatureC != null) parts.push(`${wx.temperatureC}°C`)
+  if (wx.precipitationMm != null) parts.push(`${wx.precipitationMm} mm`)
+  if (wx.windSpeedKmh != null) parts.push(`${wx.windSpeedKmh} km/h`)
+  const cond = wx.weatherCondition != null ? String(wx.weatherCondition).trim() : ''
+  if (cond) parts.push(cond)
+  if (wx.rainProbabilityPercent != null) parts.push(`${wx.rainProbabilityPercent}%`)
+  return parts.join(' · ')
+}
+
+function hasRideWeatherDetail(wx: Record<string, unknown>): boolean {
+  return Boolean(
+    formatWeatherBannerLine(wx) ||
+      wx.rainSensitive != null ||
+      wx.weatherSensitive != null ||
+      wx.weatherSensitivityScore != null ||
+      wx.contextAsOf != null ||
+      (Array.isArray(wx.dataLayers) && wx.dataLayers.length > 0)
+  )
+}
+
+function weatherLayersLabel(wx: Record<string, unknown>): string {
+  const layers = wx.dataLayers
+  if (!Array.isArray(layers)) return ''
+  return layers.map(String).join(', ')
+}
 const rideMlFactors = computed(() => {
   const raw = rideDetail.value?.mlTopFactors
   return Array.isArray(raw) ? (raw as { feature: string; impact: string }[]) : []
@@ -173,6 +246,42 @@ const hotspotRows = computed(() => {
   return h.slice(0, 10)
 })
 
+/** ML / baseline horizons — same order as “Wartezeit-Prognosen” card. */
+function swdecForecastHorizonsLine(wt: Record<string, unknown>): string {
+  const parts: string[] = []
+  if (wt.forecastWaitTime5 != null) parts.push(`5′ ${wt.forecastWaitTime5}`)
+  if (wt.forecastWaitTime10 != null) parts.push(`10′ ${wt.forecastWaitTime10}`)
+  if (wt.forecastWaitTime15 != null) parts.push(`15′ ${wt.forecastWaitTime15}`)
+  if (wt.forecastWaitTime30 != null) parts.push(`30′ ${wt.forecastWaitTime30}`)
+  if (wt.forecastWaitTime60 != null) parts.push(`60′ ${wt.forecastWaitTime60}`)
+  return parts.join(' · ')
+}
+
+function swdecDeliveryPill(wt: Record<string, unknown>, del: Record<string, unknown>): { primary: string; secondary: string } {
+  const forecastLine = swdecForecastHorizonsLine(wt)
+  const waitPrimary = wt.currentWaitTimeMinutes != null ? `${wt.currentWaitTimeMinutes}′` : null
+  const throughputPrimary =
+    del.actualThroughputPph != null ? `${del.actualThroughputPph} pph` : null
+  const maxCap =
+    del.theoreticalCapacityPph != null ? `max ${del.theoreticalCapacityPph}` : ''
+
+  if (waitPrimary != null) {
+    const throughputHint = [throughputPrimary, maxCap].filter(Boolean).join(' · ')
+    const secondary = forecastLine || throughputHint
+    return { primary: waitPrimary, secondary }
+  }
+
+  if (forecastLine) {
+    if (throughputPrimary != null) return { primary: throughputPrimary, secondary: forecastLine }
+    return { primary: forecastLine, secondary: maxCap }
+  }
+
+  return {
+    primary: throughputPrimary ?? '—',
+    secondary: maxCap,
+  }
+}
+
 const swdecPills = computed(() => {
   const s = rideSwdec.value
   if (!s || !Object.keys(s).length) return []
@@ -182,6 +291,7 @@ const swdecPills = computed(() => {
   const eff = (s.efficiency as Record<string, unknown>) || {}
   const crew = (s.costCrew as Record<string, unknown>) || {}
   const inc = safety.incidentsToday != null ? String(safety.incidentsToday) : '—'
+  const deliveryPill = swdecDeliveryPill(wt, del)
   return [
     { key: 'S', labelKey: 'swdecS' as const, primary: String(safety.status ?? '—'), secondary: `${inc}` },
     {
@@ -193,14 +303,28 @@ const swdecPills = computed(() => {
     {
       key: 'D',
       labelKey: 'swdecD' as const,
-      primary: del.actualThroughputPph != null ? `${del.actualThroughputPph} pph` : '—',
-      secondary: del.theoreticalCapacityPph != null ? `max ${del.theoreticalCapacityPph}` : '',
+      primary: deliveryPill.primary,
+      secondary: deliveryPill.secondary,
     },
     {
       key: 'E',
       labelKey: 'swdecE' as const,
       primary: eff.rideOeePercent != null ? `${eff.rideOeePercent}%` : '—',
-      secondary: eff.performancePercent != null ? `perf ${eff.performancePercent}%` : '',
+      secondary:
+        eff.rideOeeSource === 'MQTT_SPARKPLUG'
+          ? [
+              t('addonBoard.oeeFromMqttShort'),
+              eff.performancePercent != null ? `perf ${eff.performancePercent}%` : '',
+              eff.availabilityPercent != null ? `${t('addonBoard.availabilityShort')} ${eff.availabilityPercent}%` : '',
+            ]
+              .filter(Boolean)
+              .join(' · ')
+          : [
+              eff.performancePercent != null ? `perf ${eff.performancePercent}%` : '',
+              eff.availabilityPercent != null ? `${t('addonBoard.availabilityShort')} ${eff.availabilityPercent}%` : '',
+            ]
+              .filter(Boolean)
+              .join(' · '),
     },
     {
       key: 'C',
@@ -425,7 +549,13 @@ async function toggleCustomWidgetEnabled(cw: AddonBoardRideCustomWidget, ev: Eve
 
 async function removeCustomWidget(cw: AddonBoardRideCustomWidget) {
   if (!rideId.value) return
-  if (!globalThis.confirm(t('addonBoard.customWidgetRemoveConfirm'))) return
+  const ok = await askConfirm({
+    message: t('addonBoard.customWidgetRemoveConfirm'),
+    confirmLabel: 'Ja',
+    cancelLabel: 'Abbrechen',
+    variant: 'danger',
+  })
+  if (!ok) return
   customWidgetActionBusyId.value = cw.widgetId
   try {
     await deleteAddonBoardRideCustomWidget(rideId.value, cw.widgetId)
@@ -585,6 +715,19 @@ function sevClass(sev: string) {
   return 'text-slate-300'
 }
 
+function pdmRiskClass(risk: string) {
+  if (risk === 'CRITICAL') return 'text-rose-400'
+  if (risk === 'HIGH') return 'text-amber-300'
+  if (risk === 'MEDIUM') return 'text-sky-300'
+  return 'text-slate-400'
+}
+
+function ridePdmPayload(r: AddonBoardRideCard): AssetPredictiveMaintenancePayload | null {
+  const p = r.predictiveMaintenance
+  if (!p || typeof p !== 'object') return null
+  return p as AssetPredictiveMaintenancePayload
+}
+
 const rideSeverity = computed(() => String(rideDetail.value?.severity || 'LOW'))
 
 function pillWrapClassFromSeverity(sev: string) {
@@ -628,7 +771,7 @@ function swdecPillWrapClass(pillKey: string) {
     if (st === 'WARNING') return 'border-amber-500/70 bg-amber-950/30'
     return pillWrapClassFromSeverity(rideSeverity.value)
   }
-  if (pillKey === 'W') {
+  if (pillKey === 'W' || pillKey === 'D') {
     const wt = (rideSwdec.value.waitingTime as Record<string, unknown>) || {}
     const w = wt.currentWaitTimeMinutes
     const n = typeof w === 'number' ? w : Number(w)
@@ -733,6 +876,43 @@ function swdecPillWrapClass(pillKey: string) {
           </div>
         </div>
 
+        <div
+          v-if="summary.weatherContext && formatWeatherBannerLine(summary.weatherContext as Record<string, unknown>)"
+          class="rounded-lg border border-sky-900/40 bg-sky-950/20 px-4 py-3"
+        >
+          <div class="text-[10px] font-semibold uppercase tracking-wide text-sky-400/90">
+            {{ t('addonBoard.weatherContextTitle') }} · {{ t('addonBoard.scopePark') }}
+          </div>
+          <p class="mt-1 text-sm text-slate-200">
+            {{ formatWeatherBannerLine(summary.weatherContext as Record<string, unknown>) }}
+          </p>
+          <p v-if="summary.weatherContext.contextAsOf" class="mt-1 text-[11px] text-slate-500">
+            {{ t('addonBoard.weatherAsOf') }}: {{ summary.weatherContext.contextAsOf }}
+          </p>
+        </div>
+
+        <div
+          v-if="summary.crossAssetContext"
+          class="rounded-lg border border-amber-900/35 bg-amber-950/15 px-4 py-3"
+        >
+          <div class="text-[10px] font-semibold uppercase tracking-wide text-amber-200/90">
+            {{ t('addonBoard.crossAssetContextTitle') }}
+          </div>
+          <p class="mt-1 text-sm text-slate-200">
+            {{ formatVenueTripletLine(summary.crossAssetContext.parkVenues) }}
+            <span
+              v-if="summary.crossAssetContext.zonesWithVenues != null"
+              class="text-slate-500"
+            >
+              ·
+              {{
+                t('addonBoard.venuesZonesWithVenues', { n: summary.crossAssetContext.zonesWithVenues })
+              }}
+            </span>
+          </p>
+          <p class="mt-1 text-[11px] text-slate-500">{{ t('addonBoard.crossAssetContextHint') }}</p>
+        </div>
+
         <div class="grid gap-4 sm:grid-cols-2">
           <div class="rounded-lg border border-slate-800 bg-slate-900/60 p-4">
             <div class="text-xs font-medium uppercase tracking-wide text-slate-500">
@@ -802,6 +982,7 @@ function swdecPillWrapClass(pillKey: string) {
                   <th class="px-4 py-2">{{ t('addonBoard.wait') }}</th>
                   <th class="px-4 py-2">{{ t('addonBoard.f60') }}</th>
                   <th class="px-4 py-2">{{ t('addonBoard.severity') }}</th>
+                  <th class="px-4 py-2">{{ t('addonBoard.pdmColumnShort') }}</th>
                   <th class="px-4 py-2">{{ t('addonBoard.links') }}</th>
                 </tr>
               </thead>
@@ -816,6 +997,9 @@ function swdecPillWrapClass(pillKey: string) {
                     {{ addonSwdecWaitField(r.swdec, 'forecastWaitTime60') }}
                   </td>
                   <td class="px-4 py-2 font-medium" :class="sevClass(r.severity)">{{ r.severity }}</td>
+                  <td class="px-4 py-2 font-medium" :class="pdmRiskClass(ridePdmPayload(r)?.riskLevel ?? 'LOW')">
+                    {{ ridePdmPayload(r)?.riskLevel ?? '—' }}
+                  </td>
                   <td class="px-4 py-2">
                     <div class="flex flex-wrap gap-x-3 gap-y-1 text-sky-400">
                       <RouterLink class="hover:underline" :to="`/platform/rides/${r.rideId}`">
@@ -831,7 +1015,7 @@ function swdecPillWrapClass(pillKey: string) {
                   </td>
                 </tr>
                 <tr v-if="!critical.length">
-                  <td class="px-4 py-6 text-center opacity-70" colspan="6">—</td>
+                  <td class="px-4 py-6 text-center opacity-70" colspan="7">—</td>
                 </tr>
               </tbody>
             </table>
@@ -904,6 +1088,37 @@ function swdecPillWrapClass(pillKey: string) {
             <div class="mt-2 text-xl font-semibold">{{ zoneSummary.zoneDemandForecastIndex }}</div>
           </div>
         </div>
+        <div
+          v-if="
+            zoneSummary?.weatherContext &&
+            formatWeatherBannerLine(zoneSummary.weatherContext as Record<string, unknown>)
+          "
+          class="rounded-lg border border-sky-900/40 bg-sky-950/20 px-4 py-3"
+        >
+          <div class="text-[10px] font-semibold uppercase tracking-wide text-sky-400/90">
+            {{ t('addonBoard.weatherContextTitle') }} · {{ t('addonBoard.scopePark') }}
+          </div>
+          <p class="mt-1 text-sm text-slate-200">
+            {{ formatWeatherBannerLine(zoneSummary.weatherContext as Record<string, unknown>) }}
+          </p>
+          <p v-if="zoneSummary.weatherContext.contextAsOf" class="mt-1 text-[11px] text-slate-500">
+            {{ t('addonBoard.weatherAsOf') }}: {{ zoneSummary.weatherContext.contextAsOf }}
+          </p>
+        </div>
+        <div
+          v-if="zoneSummary?.crossAssetContext"
+          class="rounded-lg border border-amber-900/35 bg-amber-950/15 px-4 py-3"
+        >
+          <div class="text-[10px] font-semibold uppercase tracking-wide text-amber-200/90">
+            {{ t('addonBoard.crossAssetZoneTitle') }}
+          </div>
+          <p class="mt-1 text-sm text-slate-200">
+            {{ formatVenueTripletLine(zoneSummary.crossAssetContext.zoneVenues) }}
+          </p>
+          <p class="mt-1 text-xs text-slate-400">
+            {{ t('addonBoard.crossAssetParkTotals') }}: {{ formatVenueTripletLine(zoneSummary.crossAssetContext.parkVenues) }}
+          </p>
+        </div>
       </div>
 
       <!-- L3 -->
@@ -917,6 +1132,55 @@ function swdecPillWrapClass(pillKey: string) {
             <option v-for="r in ridesPayload?.rides ?? []" :key="r.rideId" :value="r.rideId">{{ r.rideName }}</option>
           </select>
         </div>
+
+        <div
+          v-if="
+            ridesPayload?.weatherContext &&
+            formatWeatherBannerLine(ridesPayload.weatherContext as Record<string, unknown>)
+          "
+          class="rounded-lg border border-sky-900/40 bg-sky-950/20 px-4 py-3"
+        >
+          <div class="text-[10px] font-semibold uppercase tracking-wide text-sky-400/90">
+            {{ t('addonBoard.weatherContextTitle') }} · {{ t('addonBoard.scopePark') }}
+          </div>
+          <p class="mt-1 text-sm text-slate-200">
+            {{ formatWeatherBannerLine(ridesPayload.weatherContext as Record<string, unknown>) }}
+          </p>
+          <p v-if="ridesPayload.weatherContext.contextAsOf" class="mt-1 text-[11px] text-slate-500">
+            {{ t('addonBoard.weatherAsOf') }}: {{ ridesPayload.weatherContext.contextAsOf }}
+          </p>
+        </div>
+
+        <div
+          v-if="ridesPayload?.crossAssetContext"
+          class="rounded-lg border border-amber-900/35 bg-amber-950/15 px-4 py-3"
+        >
+          <div class="text-[10px] font-semibold uppercase tracking-wide text-amber-200/90">
+            {{ t('addonBoard.crossAssetContextTitle') }}
+          </div>
+          <p class="mt-1 text-sm text-slate-200">
+            {{ formatVenueTripletLine(ridesPayload.crossAssetContext.parkVenues) }}
+            <span
+              v-if="ridesPayload.crossAssetContext.zonesWithVenues != null"
+              class="text-slate-500"
+            >
+              ·
+              {{
+                t('addonBoard.venuesZonesWithVenues', { n: ridesPayload.crossAssetContext.zonesWithVenues })
+              }}
+            </span>
+          </p>
+        </div>
+
+        <p v-if="rideId" class="text-xs text-slate-500">
+          {{ t('addonBoard.pdmBoardHint') }}
+          <RouterLink
+            class="text-brand-400 hover:underline"
+            :to="{ path: '/operations/predictive-maintenance', query: { assetId: rideId } }"
+          >
+            {{ t('menu.predictiveMaintenance') }}
+          </RouterLink>
+        </p>
 
         <div
           v-if="addonBoardSignalSourcePickerEnabled && rideId"
@@ -1278,6 +1542,14 @@ function swdecPillWrapClass(pillKey: string) {
               <h3 class="text-sm font-semibold text-white">{{ t('addonBoard.fcstShort') }}</h3>
               <dl class="mt-2 space-y-1 text-sm">
                 <div class="flex justify-between gap-2">
+                  <dt class="text-slate-500">5′</dt>
+                  <dd>{{ rideWait.forecastWaitTime5 ?? '—' }}</dd>
+                </div>
+                <div class="flex justify-between gap-2">
+                  <dt class="text-slate-500">10′</dt>
+                  <dd>{{ rideWait.forecastWaitTime10 ?? '—' }}</dd>
+                </div>
+                <div class="flex justify-between gap-2">
                   <dt class="text-slate-500">15′</dt>
                   <dd>{{ rideWait.forecastWaitTime15 ?? '—' }}</dd>
                 </div>
@@ -1288,6 +1560,13 @@ function swdecPillWrapClass(pillKey: string) {
                 <div class="flex justify-between gap-2">
                   <dt class="text-slate-500">60′</dt>
                   <dd>{{ rideWait.forecastWaitTime60 ?? '—' }}</dd>
+                </div>
+                <div
+                  v-if="rideWait.queueOccupancyLive != null"
+                  class="mt-2 flex justify-between gap-2 border-t border-slate-700/80 pt-2 text-sm"
+                >
+                  <dt class="text-slate-500">{{ t('addonBoard.queueOccupancyLive') }}</dt>
+                  <dd>{{ rideWait.queueOccupancyLive }}</dd>
                 </div>
               </dl>
             </div>
@@ -1310,6 +1589,156 @@ function swdecPillWrapClass(pillKey: string) {
               </ul>
               <p v-else class="mt-2 text-xs text-slate-500">—</p>
             </div>
+          </div>
+          <div
+            v-if="hasRideWeatherDetail(rideWeather)"
+            class="rounded-lg border border-sky-900/35 bg-slate-900/60 p-4"
+          >
+            <h3 class="text-sm font-semibold text-white">{{ t('addonBoard.weatherContextTitle') }}</h3>
+            <p class="mt-1 text-[11px] text-slate-500">{{ t('addonBoard.weatherContextHint') }}</p>
+            <dl class="mt-3 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
+              <div class="flex justify-between gap-2 rounded-md border border-slate-800/80 bg-slate-950/30 px-3 py-2">
+                <dt class="text-slate-500">{{ t('addonBoard.weatherTemp') }}</dt>
+                <dd class="text-right font-medium">{{ rideWeather.temperatureC != null ? `${rideWeather.temperatureC}°C` : '—' }}</dd>
+              </div>
+              <div class="flex justify-between gap-2 rounded-md border border-slate-800/80 bg-slate-950/30 px-3 py-2">
+                <dt class="text-slate-500">{{ t('addonBoard.weatherPrecip') }}</dt>
+                <dd class="text-right font-medium">{{ rideWeather.precipitationMm != null ? `${rideWeather.precipitationMm} mm` : '—' }}</dd>
+              </div>
+              <div class="flex justify-between gap-2 rounded-md border border-slate-800/80 bg-slate-950/30 px-3 py-2">
+                <dt class="text-slate-500">{{ t('addonBoard.weatherWind') }}</dt>
+                <dd class="text-right font-medium">{{ rideWeather.windSpeedKmh != null ? `${rideWeather.windSpeedKmh} km/h` : '—' }}</dd>
+              </div>
+              <div class="flex justify-between gap-2 rounded-md border border-slate-800/80 bg-slate-950/30 px-3 py-2 sm:col-span-2">
+                <dt class="text-slate-500">{{ t('addonBoard.weatherCondition') }}</dt>
+                <dd class="text-right font-medium">{{ rideWeather.weatherCondition ?? '—' }}</dd>
+              </div>
+              <div class="flex justify-between gap-2 rounded-md border border-slate-800/80 bg-slate-950/30 px-3 py-2">
+                <dt class="text-slate-500">{{ t('addonBoard.weatherRainProb') }}</dt>
+                <dd class="text-right font-medium">{{ rideWeather.rainProbabilityPercent != null ? `${rideWeather.rainProbabilityPercent}%` : '—' }}</dd>
+              </div>
+              <div class="flex justify-between gap-2 rounded-md border border-slate-800/80 bg-slate-950/30 px-3 py-2">
+                <dt class="text-slate-500">{{ t('addonBoard.weatherRainSensitive') }}</dt>
+                <dd class="text-right font-medium">{{ rideWeather.rainSensitive != null ? String(rideWeather.rainSensitive) : '—' }}</dd>
+              </div>
+              <div class="flex justify-between gap-2 rounded-md border border-slate-800/80 bg-slate-950/30 px-3 py-2">
+                <dt class="text-slate-500">{{ t('addonBoard.weatherWeatherSensitive') }}</dt>
+                <dd class="text-right font-medium">{{ rideWeather.weatherSensitive != null ? String(rideWeather.weatherSensitive) : '—' }}</dd>
+              </div>
+              <div class="flex justify-between gap-2 rounded-md border border-slate-800/80 bg-slate-950/30 px-3 py-2">
+                <dt class="text-slate-500">{{ t('addonBoard.weatherSensitivityScore') }}</dt>
+                <dd class="text-right font-medium">{{ rideWeather.weatherSensitivityScore ?? '—' }}</dd>
+              </div>
+              <div class="flex justify-between gap-2 rounded-md border border-slate-800/80 bg-slate-950/30 px-3 py-2 sm:col-span-2 lg:col-span-3">
+                <dt class="text-slate-500">{{ t('addonBoard.weatherDataLayers') }}</dt>
+                <dd class="text-right font-mono text-[11px] text-slate-300">{{ weatherLayersLabel(rideWeather) || '—' }}</dd>
+              </div>
+              <div class="flex justify-between gap-2 rounded-md border border-slate-800/80 bg-slate-950/30 px-3 py-2 sm:col-span-2 lg:col-span-3">
+                <dt class="text-slate-500">{{ t('addonBoard.weatherAsOf') }}</dt>
+                <dd class="text-right text-[11px] text-slate-400">{{ rideWeather.contextAsOf ?? '—' }}</dd>
+              </div>
+            </dl>
+          </div>
+          <div
+            v-if="hasRideCrossAssetDetail(rideCrossAsset)"
+            class="rounded-lg border border-amber-900/35 bg-slate-900/60 p-4"
+          >
+            <h3 class="text-sm font-semibold text-white">{{ t('addonBoard.crossAssetZoneTitle') }}</h3>
+            <p class="mt-1 text-[11px] text-slate-500">{{ t('addonBoard.crossAssetContextHint') }}</p>
+            <p class="mt-2 text-sm text-slate-200">{{ formatVenueTripletLine(rideCrossAsset.zoneVenues) }}</p>
+            <div v-if="rideCrossHints.length" class="mt-3 flex flex-wrap gap-2">
+              <span
+                v-for="(hint, hi) in rideCrossHints"
+                :key="hi"
+                class="rounded-full bg-amber-950/50 px-2.5 py-1 text-[11px] text-amber-100 ring-1 ring-amber-800/40"
+              >
+                {{ crossHintLabel(hint.code) }}
+              </span>
+            </div>
+          </div>
+          <div class="rounded-lg border border-slate-800 bg-slate-900/60 p-4">
+            <h3 class="text-sm font-semibold text-white">{{ t('addonBoard.rideOperationsCard') }}</h3>
+            <dl class="mt-3 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
+              <div class="flex justify-between gap-2 rounded-md border border-slate-800/80 bg-slate-950/30 px-3 py-2">
+                <dt class="text-slate-500">{{ t('addonBoard.operationalStatus') }}</dt>
+                <dd class="text-right font-medium text-white">
+                  {{ rideOperations.operationalStatus ?? '—' }}
+                  <span
+                    v-if="rideOperations.operationalStatusSource"
+                    class="block text-[10px] font-normal text-slate-500"
+                  >
+                    {{ rideOperations.operationalStatusSource }}
+                  </span>
+                </dd>
+              </div>
+              <div class="flex justify-between gap-2 rounded-md border border-slate-800/80 bg-slate-950/30 px-3 py-2">
+                <dt class="text-slate-500">{{ t('addonBoard.availabilityToday') }}</dt>
+                <dd class="text-right font-medium">
+                  {{
+                    rideOperations.availabilityPercentToday != null
+                      ? `${rideOperations.availabilityPercentToday}%`
+                      : '—'
+                  }}
+                </dd>
+              </div>
+              <div class="flex justify-between gap-2 rounded-md border border-slate-800/80 bg-slate-950/30 px-3 py-2">
+                <dt class="text-slate-500">{{ t('addonBoard.unplannedDowntimeToday') }}</dt>
+                <dd class="text-right font-medium">
+                  {{
+                    rideOperations.unplannedDowntimeMinutesToday != null
+                      ? `${rideOperations.unplannedDowntimeMinutesToday}′`
+                      : '—'
+                  }}
+                </dd>
+              </div>
+              <div class="flex justify-between gap-2 rounded-md border border-slate-800/80 bg-slate-950/30 px-3 py-2">
+                <dt class="text-slate-500">{{ t('addonBoard.plannedDowntimeToday') }}</dt>
+                <dd class="text-right font-medium">
+                  {{
+                    rideOperations.plannedDowntimeMinutesToday != null
+                      ? `${rideOperations.plannedDowntimeMinutesToday}′`
+                      : '—'
+                  }}
+                </dd>
+              </div>
+              <div class="flex justify-between gap-2 rounded-md border border-slate-800/80 bg-slate-950/30 px-3 py-2">
+                <dt class="text-slate-500">{{ t('addonBoard.mttr') }}</dt>
+                <dd class="text-right font-medium">
+                  {{ rideOperations.mttrMinutes != null ? `${rideOperations.mttrMinutes}′` : '—' }}
+                </dd>
+              </div>
+              <div class="flex justify-between gap-2 rounded-md border border-slate-800/80 bg-slate-950/30 px-3 py-2">
+                <dt class="text-slate-500">{{ t('addonBoard.mtbf') }}</dt>
+                <dd class="text-right font-medium">
+                  {{ rideOperations.mtbfHours != null ? `${rideOperations.mtbfHours} h` : '—' }}
+                </dd>
+              </div>
+              <div class="flex justify-between gap-2 rounded-md border border-slate-800/80 bg-slate-950/30 px-3 py-2 sm:col-span-2 lg:col-span-1">
+                <dt class="text-slate-500">{{ t('addonBoard.dispatchTarget') }}</dt>
+                <dd class="text-right font-medium">
+                  {{ rideOperations.dispatchIntervalTargetSec != null ? `${rideOperations.dispatchIntervalTargetSec}s` : '—' }}
+                </dd>
+              </div>
+              <div class="flex justify-between gap-2 rounded-md border border-slate-800/80 bg-slate-950/30 px-3 py-2">
+                <dt class="text-slate-500">{{ t('addonBoard.dispatchActual') }}</dt>
+                <dd class="text-right font-medium">
+                  {{ rideOperations.dispatchIntervalActualSec != null ? `${rideOperations.dispatchIntervalActualSec}s` : '—' }}
+                </dd>
+              </div>
+              <div class="flex justify-between gap-2 rounded-md border border-slate-800/80 bg-slate-950/30 px-3 py-2">
+                <dt class="text-slate-500">{{ t('addonBoard.dispatchEfficiency') }}</dt>
+                <dd class="text-right font-medium">
+                  {{
+                    rideOperations.dispatchEfficiencyPercent != null
+                      ? `${rideOperations.dispatchEfficiencyPercent}%`
+                      : '—'
+                  }}
+                </dd>
+              </div>
+            </dl>
+            <p class="mt-2 text-[11px] text-slate-500">
+              {{ t('addonBoard.reliabilityWindowHint', { days: rideOperations.reliabilityLookbackDays ?? '—' }) }}
+            </p>
           </div>
           <div class="grid gap-4 lg:grid-cols-2">
             <div class="rounded-lg border border-slate-800 bg-slate-900/60 p-4">

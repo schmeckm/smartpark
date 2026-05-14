@@ -224,6 +224,7 @@ class MdmService {
       code: body.code,
       name: body.name,
       sortOrder: body.sortOrder ?? 0,
+      zoneContext: body.zoneContext && typeof body.zoneContext === 'object' ? body.zoneContext : {},
       legacyZoneId: body.legacyZoneId || null,
       createdBy: userId || null,
       updatedBy: userId || null,

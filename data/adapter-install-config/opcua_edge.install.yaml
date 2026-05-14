@@ -2,7 +2,7 @@
 schemaVersion: 1
 adapterKey: opcua_edge
 installedAt: '2026-05-03T17:46:25.958Z'
-updatedAt: '2026-05-03T17:46:25.961Z'
+updatedAt: '2026-05-08T10:51:05.286Z'
 configJson:
   live: false
   securityMode: None
@@ -14,5 +14,5 @@ outputProfiles:
   - SPARKPLUG_JSON
   - CANONICAL_HISTORIAN
 emitEnabled: true
-ingestCanonicalEnabled: true
+ingestCanonicalEnabled: false
 scheduleCron: '*/5 * * * *'

@@ -7,6 +7,10 @@ const { AppSettingRepository } = require('../repositories/app-setting.repository
 const { DEFAULT_AI_FACTOR_CONFIGS } = require('../constants/ai-factor-config');
 const { applyXLayerToForecast } = require('./ai-forecast-x-adjustments.service');
 const { mergeMlEnterpriseLayer } = require('./ml-forecast-layer.service');
+const {
+  buildAdrForecastExplainability,
+  finalizeExplainabilityMvpEnvelope,
+} = require('./ai/prediction-explanation-normalizer.service');
 
 const AI_FACTOR_SETTING_KEY = 'ai.forecast.factorConfigs';
 
@@ -167,8 +171,17 @@ class AiParkForecastService {
       }
       slope = den ? num / den : 0;
     }
-    const base15 = Math.max(0, Math.round(current + slope * 3));
-    const base60 = Math.max(0, Math.round(current + slope * 12));
+    // Raw slope extrapolation
+    const raw15 = current + slope * 3;
+    const raw60 = current + slope * 12;
+
+    // Anchor: forecast must not drop below 40% of current value (slope alone
+    // can predict near-zero when a recent spike contrasts with hours of low
+    // wait times).  For increases the slope is trusted as-is.
+    const floor15 = current * 0.4;
+    const floor60 = current * 0.25;
+    const base15 = Math.max(0, Math.round(Math.max(raw15, floor15)));
+    const base60 = Math.max(0, Math.round(Math.max(raw60, floor60)));
     const adj15 = this.applyFactorAdjustments(base15, factors, { scope });
     const adj60 = this.applyFactorAdjustments(base60, factors, { scope });
     const confidence = Math.max(0.1, Math.min(0.95, 0.3 + Math.min(1, n / 30) * 0.6));
@@ -186,6 +199,14 @@ class AiParkForecastService {
       factors: adj60.factors,
       model: { modelName: 'baseline-park-feature', modelType: 'BASELINE', version: 'v2-factors' },
       degraded: false,
+      _decomp: {
+        trendBase15: base15,
+        trendBase60: base60,
+        factorAdj15: adj15.adjusted,
+        factorAdj60: adj60.adjusted,
+        factorAdjDelta15: adj15.adjusted - base15,
+        factorAdjDelta60: adj60.adjusted - base60,
+      },
     };
   }
 
@@ -355,7 +376,7 @@ class AiParkForecastService {
     const base = summary.currentAvgWaitMinutes || 0;
     const finalPrediction = horizon <= 15 ? summary.forecast15Minutes : summary.forecast60Minutes;
     const delta = (finalPrediction || 0) - base;
-    return {
+    const legacy = {
       externalParkId,
       provider,
       horizonMinutes: horizon,
@@ -372,6 +393,57 @@ class AiParkForecastService {
       finalPrediction,
       confidence: summary.confidence,
     };
+    const explainability = finalizeExplainabilityMvpEnvelope(
+      buildAdrForecastExplainability({
+        track: 'ADR_FORECAST',
+        scope: 'park',
+        summary,
+        legacyExplanation: legacy,
+        horizonMinutes: horizon,
+      }),
+    );
+    return { ...legacy, explainability };
+  }
+
+  /**
+   * Per-entity forecast explanation (same enrichment path as entity summary).
+   * @param {string} externalEntityId
+   * @param {{ provider?: string, externalParkId: string, entityType?: string, horizon?: number }} opts
+   */
+  async getEntityExplanation(externalEntityId, { provider = 'themeparks_wiki', externalParkId, entityType, horizon = 60 } = {}) {
+    const summary = await this.getEntitySummary(externalEntityId, { provider, externalParkId, entityType });
+    const base = summary.currentAvgWaitMinutes || 0;
+    const finalPrediction = horizon <= 15 ? summary.forecast15Minutes : summary.forecast60Minutes;
+    const delta = (finalPrediction || 0) - base;
+    const legacy = {
+      externalEntityId,
+      externalParkId: externalParkId || summary.externalParkId || null,
+      provider,
+      horizonMinutes: horizon,
+      baseValue: base,
+      adjustments: [
+        { factor: 'trend', direction: delta >= 0 ? 'UP' : 'DOWN', magnitude: Math.abs(delta), reason: 'Recent wait-time slope over last snapshots' },
+        {
+          factor: 'open_ratio',
+          direction: toNum(summary?.factors?.[1]?.value) < 0.8 ? 'UP' : 'DOWN',
+          magnitude: Math.round((1 - toNum(summary?.factors?.[1]?.value, 1)) * 10),
+          reason: 'Lower open ratio tends to increase waits',
+        },
+      ],
+      finalPrediction,
+      confidence: summary.confidence,
+      basis: summary.basis || null,
+    };
+    const explainability = finalizeExplainabilityMvpEnvelope(
+      buildAdrForecastExplainability({
+        track: 'ADR_FORECAST',
+        scope: 'entity',
+        summary,
+        legacyExplanation: legacy,
+        horizonMinutes: horizon,
+      }),
+    );
+    return { ...legacy, explainability };
   }
 }
 

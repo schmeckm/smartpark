@@ -15,6 +15,7 @@ import type { ExternalDestinationOption, ExternalParkOption } from '@/api/client
 import AdapterUiBanner from '@/components/adapter/AdapterUiBanner.vue'
 import type { AdapterPackageDto, AdapterRunLocalBody, AdapterRunLocalDebug, AdapterRunLocalResult } from '@/types/api'
 import { useToast } from '@/composables/useToast'
+import { askConfirm } from '@/composables/useConfirmDialog'
 import { defaultsFromConfigSchema, fillMissingConfigDefaults } from '@/utils/adapterConfigDefaults'
 
 const route = useRoute()
@@ -612,9 +613,12 @@ async function saveConfiguration() {
 
 async function removeIntegration() {
   if (!pkg.value) return
-  const ok = window.confirm(
-    `Integration „${pkg.value.name}“ wirklich entfernen? Die YAML-Konfiguration auf dem Server wird gelöscht.`
-  )
+  const ok = await askConfirm({
+    message: `Integration „${pkg.value.name}“ wirklich entfernen? Die YAML-Konfiguration auf dem Server wird gelöscht.`,
+    confirmLabel: 'Ja',
+    cancelLabel: 'Abbrechen',
+    variant: 'danger',
+  })
   if (!ok) return
   removeLoading.value = true
   try {
@@ -748,7 +752,7 @@ function formatValue(v: unknown): string {
       class="text-sm text-brand-400 hover:text-brand-300"
       @click="router.push({ name: 'devices-services' })"
     >
-      ← Devices &amp; Services
+      ← Adapter
     </button>
 
     <div v-if="loading" class="rounded-xl border border-slate-800 bg-slate-900/50 p-8 text-center text-sm text-slate-500">
@@ -786,7 +790,7 @@ function formatValue(v: unknown): string {
         </div>
       </div>
 
-      <section v-if="pkg.readmeAssetUrl" class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+      <section id="package-readme" v-if="pkg.readmeAssetUrl" class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
         <h2 class="text-sm font-semibold text-white">Package README</h2>
         <p v-if="readmeLoading" class="mt-2 text-xs text-slate-500">Loading README…</p>
         <p v-else-if="readmeError" class="mt-2 text-xs text-rose-400">{{ readmeError }}</p>

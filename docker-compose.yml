@@ -27,6 +27,23 @@ services:
       - ./docker/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
     command: mosquitto -c /mosquitto/config/mosquitto.conf
 
+  # InfluxDB 2 OSS — OT metric historian (Sparkplug DDATA numerics). Start with: docker compose up -d influxdb
+  # UI: http://127.0.0.1:8086 (dev token matches INFLUX_TOKEN default in .env.example when using compose).
+  influxdb:
+    image: influxdb:2.7-alpine
+    restart: unless-stopped
+    ports:
+      - '8086:8086'
+    volumes:
+      - influxdata:/var/lib/influxdb2
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: admin
+      DOCKER_INFLUXDB_INIT_PASSWORD: smartpark_admin_change_me
+      DOCKER_INFLUXDB_INIT_ORG: smartpark
+      DOCKER_INFLUXDB_INIT_BUCKET: ot_metrics
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: smart-park-local-dev-influx-token-not-for-prod
+
   api:
     build: .
     restart: unless-stopped
@@ -55,16 +72,31 @@ services:
       MQTT_ENABLED: 'true'
       MQTT_BROKER_URL: mqtt://mqtt:1883
       MQTT_CLIENT_ID: smart-park-os-api
+      # ML observability / metadata (Phase 1–4). Compose defaults all three on for local E2E (profiles → trace → Weighted X).
+      # Override in .env for prod-like runs (e.g. ML_FEATURE_WEIGHTS_ENABLED=false). See docs/architecture/ml-forecast-phased-roadmap.md
+      ML_TRACE_ENABLED: ${ML_TRACE_ENABLED:-true}
+      ML_PROFILE_ENABLED: ${ML_PROFILE_ENABLED:-true}
+      ML_FEATURE_WEIGHTS_ENABLED: ${ML_FEATURE_WEIGHTS_ENABLED:-true}
       # Pass through from project .env (Compose loads .env for substitution). Enables Open-Meteo → weather_observations.
       WEATHER_OPEN_METEO_ENABLED: ${WEATHER_OPEN_METEO_ENABLED:-true}
       WEATHER_OPEN_METEO_INTERVAL_SECONDS: ${WEATHER_OPEN_METEO_INTERVAL_SECONDS:-300}
       WEATHER_OPEN_METEO_REBUILD_SNAPSHOTS: ${WEATHER_OPEN_METEO_REBUILD_SNAPSHOTS:-true}
       WEATHER_OPEN_METEO_FETCH_RETRIES: ${WEATHER_OPEN_METEO_FETCH_RETRIES:-3}
       WEATHER_OPEN_METEO_RETRY_BASE_MS: ${WEATHER_OPEN_METEO_RETRY_BASE_MS:-500}
+      # Influx (optional): set INFLUX_ENABLED=true when influxdb service is running (see .env.example).
+      INFLUX_ENABLED: ${INFLUX_ENABLED:-false}
+      INFLUX_URL: ${INFLUX_URL:-http://influxdb:8086}
+      INFLUX_TOKEN: ${INFLUX_TOKEN:-smart-park-local-dev-influx-token-not-for-prod}
+      INFLUX_ORG: ${INFLUX_ORG:-smartpark}
+      INFLUX_BUCKET: ${INFLUX_BUCKET:-ot_metrics}
+      INFLUX_FLOAT_EPSILON: ${INFLUX_FLOAT_EPSILON:-1e-9}
+      INFLUX_MIN_WRITE_INTERVAL_MS: ${INFLUX_MIN_WRITE_INTERVAL_MS:-0}
     depends_on:
       db:
         condition: service_healthy
       mqtt:
+        condition: service_started
+      influxdb:
         condition: service_started
 
   frontend:
@@ -83,8 +115,11 @@ services:
       GIT_COMMIT: ${GIT_COMMIT:-}
     volumes:
       - ./admin-dashboard:/app
+      # Vite resolves `@smartpark-root-utils/*` from here (parent `src/utils` is not visible under `/app` only).
+      - ./src/utils:/app/monorepo-src-utils:ro
       - frontend_node_modules:/app/node_modules
 
 volumes:
   pgdata:
+  influxdata:
   frontend_node_modules:

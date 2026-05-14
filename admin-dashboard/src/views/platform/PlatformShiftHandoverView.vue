@@ -50,6 +50,10 @@ const shiftLabelCustom = ref('')
 const notes = ref('')
 const includeDowntimeSnapshot = ref(true)
 const includeIncidentSnapshot = ref(true)
+const reminderDelayMin = ref(60)
+const taskDraftTitle = ref('')
+const taskDraftDue = ref('')
+const followUpTasks = ref<Array<{ id: string; title: string; dueAt: string | null; status: 'OPEN' | 'DONE' | 'CANCELLED' }>>([])
 
 /** Optional: ein Park-Objekt — Snapshots + Eintrag sind dann nur für dieses Asset */
 const formLinkedParkAssetId = ref('')
@@ -248,6 +252,23 @@ function alignEndDateToStart() {
   shiftDayEnd.value = shiftDayStart.value
 }
 
+function addTaskDraft() {
+  const title = taskDraftTitle.value.trim()
+  if (!title) return
+  followUpTasks.value.push({
+    id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    title,
+    dueAt: taskDraftDue.value ? joinIsoUtc(taskDraftDue.value, '23:59') : null,
+    status: 'OPEN',
+  })
+  taskDraftTitle.value = ''
+  taskDraftDue.value = ''
+}
+
+function removeTask(id: string) {
+  followUpTasks.value = followUpTasks.value.filter((x) => x.id !== id)
+}
+
 async function submitHandover() {
   if (!canEdit.value || !parkId.value) return
   const wf = joinIsoUtc(shiftDayStart.value, winFromTime.value)
@@ -274,10 +295,18 @@ async function submitHandover() {
       notes: notes.value.trim() || null,
       includeDowntimeSnapshot: includeDowntimeSnapshot.value,
       includeIncidentSnapshot: includeIncidentSnapshot.value,
+      followUpTasks: followUpTasks.value.map((x) => ({
+        id: x.id,
+        title: x.title,
+        dueAt: x.dueAt,
+        status: x.status,
+      })),
+      reminderDelayMin: reminderDelayMin.value,
       ...(lid ? { linkedParkAssetId: lid } : {}),
     })
     push('Schichtübergabe gespeichert', 'success')
     notes.value = ''
+    followUpTasks.value = []
     await loadEntries()
   } catch (e) {
     push(e instanceof Error ? e.message : 'Speichern fehlgeschlagen', 'error')
@@ -355,15 +384,15 @@ onMounted(async () => {
           <strong class="text-slate-300">Dokumentation</strong>: festes Zeitfenster + Freitext — was die nächste Schicht wissen muss.
         </li>
         <li>
-          <strong class="text-slate-300">Bezug</strong>: <strong class="text-slate-200">ganzer Park</strong> oder ein{' '}
+          <strong class="text-slate-300">Bezug</strong>: <strong class="text-slate-200">ganzer Park</strong> oder ein
           <strong class="text-slate-200">Park-Objekt</strong> (Fahrgeschäft, Restaurant, Show, Shop …); Snapshots sind dann auf dieses Objekt begrenzt (<span class="font-mono text-xs">PARK_ASSET</span>).
         </li>
         <li>
-          <strong class="text-slate-300">Stillstands-Snapshot</strong> (optional): Stillstände im Fenster — aus{' '}
+          <strong class="text-slate-300">Stillstands-Snapshot</strong> (optional): Stillstände im Fenster — aus
           <span class="font-mono text-xs">asset_downtime_events</span>.
         </li>
         <li>
-          <strong class="text-slate-300">Vorfalls-Snapshot</strong> (optional): neue Vorfälle im Fenster + aktuell offene (OPEN/IN_PROGRESS), davon hoch/kritisch — aus{' '}
+          <strong class="text-slate-300">Vorfalls-Snapshot</strong> (optional): neue Vorfälle im Fenster + aktuell offene (OPEN/IN_PROGRESS), davon hoch/kritisch — aus
           <span class="font-mono text-xs">incidents</span> (mit Objektbezug nur für dieses Objekt).
         </li>
         <li>
@@ -394,12 +423,12 @@ onMounted(async () => {
           <option v-for="p in parks" :key="p.id" :value="p.id">{{ p.name }}</option>
         </select>
         <p class="mt-2 max-w-2xl text-[11px] leading-relaxed text-slate-500">
-          Zuerst den <strong class="text-slate-400">Park</strong> wählen. Unter „Neue Übergabe“ können Sie optional ein{' '}
+          Zuerst den <strong class="text-slate-400">Park</strong> wählen. Unter „Neue Übergabe“ können Sie optional ein
           <strong class="text-slate-400">konkretes Park-Objekt</strong> setzen — sonst gilt die Übergabe für den gesamten Park (wie bisher).
         </p>
         <p v-if="parks.length <= 1" class="mt-1 max-w-2xl text-[11px] text-amber-500/90">
           In der Datenbank ist aktuell nur dieser eine Park hinterlegt — deshalb erscheint nur eine Option. Weitere Parks legen Sie unter
-          <RouterLink to="/admin/master-data/parks" class="text-brand-400 hover:underline">Stammdaten → Parks</RouterLink>
+          <RouterLink to="/admin/master-data/parks" class="text-brand-400 hover:underline">{{ t('menu.masterData') }} → Parks</RouterLink>
           an (Berechtigung je nach Rolle).
         </p>
       </div>
@@ -515,6 +544,46 @@ onMounted(async () => {
           <input v-model="includeIncidentSnapshot" type="checkbox" class="rounded border-slate-600" />
           Vorfälle (Incidents)
         </label>
+        <div class="sm:col-span-2 grid gap-2 rounded-lg border border-slate-800 bg-slate-900/40 p-3">
+          <p class="text-xs font-medium text-slate-300">Folgeaufgaben</p>
+          <div class="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+            <input
+              v-model="taskDraftTitle"
+              type="text"
+              class="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+              placeholder="Aufgabe (z. B. Sensor X prüfen)"
+            />
+            <input
+              v-model="taskDraftDue"
+              type="date"
+              class="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white [color-scheme:dark]"
+            />
+            <button
+              type="button"
+              class="rounded border border-slate-600 px-3 py-2 text-xs text-slate-300 hover:bg-slate-800"
+              @click="addTaskDraft"
+            >
+              Aufgabe hinzufügen
+            </button>
+          </div>
+          <ul v-if="followUpTasks.length" class="space-y-1 text-xs text-slate-300">
+            <li v-for="tItem in followUpTasks" :key="tItem.id" class="flex items-center justify-between gap-3 rounded bg-slate-900 px-2 py-1.5">
+              <span>{{ tItem.title }}<span v-if="tItem.dueAt"> · fällig {{ formatDateTime(tItem.dueAt) }}</span></span>
+              <button type="button" class="text-slate-400 hover:text-red-300" @click="removeTask(tItem.id)">Entfernen</button>
+            </li>
+          </ul>
+        </div>
+        <div class="sm:col-span-2">
+          <label for="sh-reminder-delay" class="block text-xs text-slate-500">Erinnerung nach Schichtende (Minuten)</label>
+          <input
+            id="sh-reminder-delay"
+            v-model.number="reminderDelayMin"
+            type="number"
+            min="0"
+            max="20160"
+            class="mt-1 w-full max-w-xs rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+          />
+        </div>
       </div>
       <button
         type="button"
@@ -650,7 +719,7 @@ onMounted(async () => {
     <p class="text-xs text-slate-600">
       <RouterLink to="/platform/shift-handover/logbook" class="text-brand-400 hover:underline">Schicht-Logbuch (Druck/PDF)</RouterLink>
       ·
-      <RouterLink to="/platform/oee" class="text-brand-400 hover:underline">OEE / Stillstände</RouterLink>
+      <RouterLink to="/platform/oee" class="text-brand-400 hover:underline">OEE — Verfügbarkeit &amp; Stillstände</RouterLink>
       ·
       <RouterLink to="/incidents" class="text-brand-400 hover:underline">Vorfälle</RouterLink>
     </p>

@@ -1,0 +1,88 @@
+/agent/preflight:
+  post:
+    tags:
+      - Agent
+    summary: 'Phase C pre-flight checklist for an agent skill'
+    description: "Needs **`agent.run`**, **`X-Park-Id`**, and body **`parkId`** matching park context.\nReturns a checklist including a **read-path dry-run** (executes the same read tools as the target skill with small limits — no new `agent_runs` row), optional comparison to **`sourceRunId`**, then **`approval_rate_gate`** vs **`AGENT_APPROVAL_GATE_MIN`** (see `GET /agent/approval-metrics`). Response includes **`dryRun`** (`tools[]`, `allOk`, `skipped`). Attraction OEE / scenario simulators remain future work.\n"
+    parameters:
+      -
+        in: header
+        name: X-Park-Id
+        required: true
+        schema:
+          type: string
+          format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - skillId
+              - parkId
+            properties:
+              parkId:
+                type: string
+                format: uuid
+              skillId:
+                type: string
+                enum:
+                  - daily_executive_brief
+                  - crowd_spike_triage
+                  - mapping_assistant
+                  - weather_pivot
+                  - ride_down_response
+              sourceRunId:
+                type: string
+                format: uuid
+                nullable: true
+                description: 'Optional prior `agent_runs.id` in the same park for regression comparison.'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '404':
+        description: Source run not found (when `sourceRunId` set)
+
+'/agent/runs/{id}/replay':
+  post:
+    tags:
+      - Agent
+    summary: 'Replay a completed agent run (creates a new run)'
+    description: "Needs **`agent.run`** and **`X-Park-Id`**. Loads the source run's **`skillId`** and **`input_json`** (`crowdEventId`, `rideId`), then executes the skill again with **`triggerType: replay`** and **`meta_json.replayOfRunId`**.\n"
+    parameters:
+      -
+        in: header
+        name: X-Park-Id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      -
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '201':
+        description: Created
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '404':
+        description: Source run not found

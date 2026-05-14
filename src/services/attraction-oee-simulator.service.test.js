@@ -93,3 +93,28 @@ test('TECHNICAL_STOP profile raises fault rate vs normal', () => {
   const n = scenarioProfile('NORMAL_OPERATION');
   assert.ok(t.faultRate > n.faultRate);
 });
+
+test('silver_star DDATA includes per-ride OT extension metrics', async () => {
+  const publishes = [];
+  const sim = createAttractionOeeSimulatorForTests({
+    publishMqtt: async (topic, payload) => {
+      publishes.push({ topic, payload });
+    },
+  });
+  await sim.start({
+    parkSlug: 'test_park',
+    attractions: ['silver_star'],
+    publishMs: 60_000,
+    randomSeed: 3,
+    scenario: 'NORMAL_OPERATION',
+  });
+  clearInterval(sim.timer);
+  sim.timer = null;
+  await sim.tick(5000);
+  const ddata = publishes.filter((p) => p.topic.includes('/DDATA/') && p.topic.endsWith('/silver_star'));
+  assert.ok(ddata.length > 0);
+  const names = new Set(ddata[ddata.length - 1].payload.metrics.map((m) => m.name));
+  assert.ok(names.has('lift_motor_current_a'));
+  assert.ok(names.has('brake_temperature_c'));
+  await sim.stop();
+});

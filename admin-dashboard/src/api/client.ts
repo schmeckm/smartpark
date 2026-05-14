@@ -5,6 +5,13 @@ import type {
   AdapterPackagesResponse,
   AdapterRunLocalBody,
   AdapterRunLocalResult,
+  AgentApprovalMetricsPayload,
+  AgentPendingActionsPayload,
+  AgentPreflightPayload,
+  AgentRunActionRow,
+  AgentRunDetail,
+  AgentRunsListPayload,
+  AgentSkillId,
   AssetRuntimeOverride,
   CanonicalInboundMessage,
   ExternalEntityMapping,
@@ -12,7 +19,6 @@ import type {
   MdmParkZone,
   MdmRideMaster,
   MdmRideProfile,
-  MdmRideTemplate,
   MdmRideType,
   PlatformAsset,
   PlatformObservation,
@@ -133,6 +139,10 @@ export function getAccessToken(): string | null {
   return localStorage.getItem('sp_access_token')
 }
 
+function isPublicApiPath(path: string): boolean {
+  return path === '/api/v1/health' || path === '/api/v1/health/ready'
+}
+
 export async function fetchAdapterAssetText(assetUrl: string): Promise<string> {
   const token = getAccessToken()
   const res = await fetch(url(assetUrl), {
@@ -150,6 +160,10 @@ export async function fetchAdapterAssetText(assetUrl: string): Promise<string> {
 
 async function fetchEnvelope<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getAccessToken()
+  if (!token && !isPublicApiPath(path)) {
+    globalThis.dispatchEvent(new CustomEvent('sp:unauthorized'))
+    throw new ApiRequestError('Authentication required', 401, 'UNAUTHORIZED')
+  }
   const res = await fetch(url(path), {
     ...init,
     headers: {
@@ -209,6 +223,8 @@ export type StaffWritePayload = {
   supervisorId?: string | null
   role: Staff['role']
   currentZoneId?: string | null
+  /** When set, server derives currentZoneId from the ride's zone. */
+  currentRideId?: string | null
   available?: boolean
   skillLevel?: number
 }
@@ -363,6 +379,19 @@ export async function getMqttStatus(): Promise<MqttStatus> {
   return fetchEnvelope<MqttStatus>('/api/v1/mqtt/status')
 }
 
+export type ApiHealthSummary = {
+  status: string
+  service: string
+  timestamp: string
+  version: string
+  apiVersion?: string
+  gitCommit?: string
+}
+
+export async function getApiHealthSummary(): Promise<ApiHealthSummary> {
+  return fetchEnvelope<ApiHealthSummary>('/api/v1/health')
+}
+
 export type IntegrationLog = {
   id: string
   eventType: string | null
@@ -454,18 +483,21 @@ export async function getSimulatorStatus(): Promise<{ running: boolean; scenario
   return fetchEnvelope('/api/v1/simulator/status')
 }
 
-export async function startSimulator(): Promise<unknown> {
-  return fetchEnvelope('/api/v1/simulator/start', { method: 'POST' })
+export async function startSimulator(body?: { parkId?: string | null }): Promise<unknown> {
+  return fetchEnvelope('/api/v1/simulator/start', {
+    method: 'POST',
+    body: JSON.stringify(body || {}),
+  })
 }
 
 export async function stopSimulator(): Promise<unknown> {
   return fetchEnvelope('/api/v1/simulator/stop', { method: 'POST' })
 }
 
-export async function runScenario(name: string): Promise<unknown> {
+export async function runScenario(name: string, opts?: { parkId?: string | null }): Promise<unknown> {
   return fetchEnvelope('/api/v1/simulator/scenario', {
     method: 'POST',
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, parkId: opts?.parkId || undefined }),
   })
 }
 
@@ -500,6 +532,10 @@ export type AttractionOeeSimAttractionStatus = {
     shift: AttractionOeeSimOeeWindow
     daily: AttractionOeeSimOeeWindow
   }
+  /** Sparkplug 4th topic segment for this ride (zone + park master_profile.sparkplug edges). */
+  sparkplugEdgeNodeId?: string | null
+  /** Stammdaten: Parkzone (`park_zones.slug`) des Assets. */
+  zoneSlug?: string | null
 }
 
 export type AttractionOeeSimStatus = {
@@ -508,7 +544,10 @@ export type AttractionOeeSimStatus = {
     parkSlug: string
     parkId?: string | null
     groupId: string
-    edgeNodeId: string
+    /** Set when exactly one edge is used for all rides, or POST body pinned `edgeNodeId`; otherwise null. */
+    edgeNodeId: string | null
+    /** Distinct edge_node_ids used (multi-zone Parks). */
+    edgeNodesInUse?: string[]
     publishMs: number
     scenario: string
     randomSeed: number
@@ -856,6 +895,23 @@ export type ParkForecastSummary = {
   degraded?: boolean
   basis?: 'ENTITY' | 'ENTITY_TYPE' | 'PARK' | 'NONE'
   entityType?: string
+  forecastDecomposition?: ForecastDecomposition
+}
+
+export type ForecastDecomposition = {
+  currentWait: number | null
+  trendBase15: number | null
+  trendBase60: number | null
+  factorAdjDelta15: number
+  factorAdjDelta60: number
+  xLayerDelta15: number
+  xLayerDelta60: number
+  xLayerFactors: ForecastInfluencingFactor[]
+  mlDelta15: number
+  mlDelta60: number
+  mlFactors: ForecastInfluencingFactor[]
+  final15: number | null
+  final60: number | null
 }
 
 export type AiFactorConfig = {
@@ -866,7 +922,8 @@ export type AiFactorConfig = {
   weight: number
   lagMinutes: number
   value: number
-  source: 'manual' | 'derived'
+  source: 'manual' | 'derived' | 'adapter'
+  provider?: string | null
 }
 
 export async function getParkForecastSummary(
@@ -907,6 +964,580 @@ export async function getEntityForecastSummary(
   return fetchEnvelope<ParkForecastSummary>(
     `/api/v1/ai/entities/${encodeURIComponent(externalEntityId)}/forecast/summary?${q.toString()}`
   )
+}
+
+/** Normalized explainability payload (ADR / ridge / AI Studio tracks). */
+export type PredictionExplainability = {
+  target: string
+  prediction: number | null
+  unit: string
+  confidence: number
+  baseline: number | null
+  adjustedPrediction: number | null
+  featureContributions: Array<{
+    feature: string
+    value: unknown
+    impact: number
+    direction: string
+    source: string
+    explanation: string
+  }>
+  summary: string
+  recommendation: string
+  modelInfo: {
+    track: string
+    modelId?: string | null
+    modelVersion?: string | null
+    algorithm?: string
+    basis?: string | null
+    scope?: string
+  }
+  /** Ridge: feature keys zeroed by explicit `use_for_ml: false` on mapped catalog signals. */
+  mlCapabilityMaskedFeatures?: string[]
+}
+
+export type EntityForecastExplanation = {
+  externalEntityId: string
+  externalParkId: string | null
+  provider: string
+  horizonMinutes: number
+  baseValue: number
+  adjustments: Array<{ factor: string; direction: string; magnitude: number; reason: string }>
+  finalPrediction: number | null
+  confidence: number
+  basis?: string | null
+  explainability: PredictionExplainability
+}
+
+export async function getEntityForecastExplanation(
+  externalEntityId: string,
+  params: { externalParkId: string; provider?: string; entityType?: string; horizon?: number }
+): Promise<EntityForecastExplanation> {
+  const q = new URLSearchParams()
+  q.set('externalParkId', params.externalParkId)
+  if (params.provider) q.set('provider', params.provider)
+  if (params.entityType) q.set('entityType', params.entityType)
+  if (params.horizon != null) q.set('horizon', String(params.horizon))
+  return fetchEnvelope<EntityForecastExplanation>(
+    `/api/v1/ai/entities/${encodeURIComponent(externalEntityId)}/forecast/explanation?${q.toString()}`
+  )
+}
+
+export type RideMlPredictResponse = {
+  rideId: string
+  timestamp: string
+  predictionMode: string
+  modelId: string | null
+  confidence: number
+  predictions: Array<{
+    horizonMinutes: number
+    value: number
+    unit: string
+    source: string
+    challengerValue?: number
+    challengerModel?: string
+  }>
+  topFactors: Array<{ feature: string; impact: string }>
+  note?: string
+  snapshotWaitForExplain?: number
+  featureValuesForExplain?: Record<string, number>
+  explanation?: PredictionExplainability
+}
+
+export async function getRideMlRideWaitPredict(
+  rideId: string,
+  params?: { horizon?: string; explain?: boolean }
+): Promise<RideMlPredictResponse> {
+  const q = new URLSearchParams()
+  if (params?.horizon) q.set('horizon', params.horizon)
+  if (params?.explain === true) q.set('explain', '1')
+  const qs = q.toString()
+  return fetchEnvelope<RideMlPredictResponse>(
+    `/api/v1/ai/ml/predict/rides/${encodeURIComponent(rideId)}${qs ? `?${qs}` : ''}`
+  )
+}
+
+/** Phase 4 weighted X explainability (parallel to numeric `featureVectorJson`; does not change ridge input unless wired later). */
+export type MlWeightedFeatureTraceEntry = {
+  rawValue: number | null
+  normalizedValue: number
+  weight: number
+  weightedValue: number
+  source: string
+  status: string
+}
+
+/** Phase 1 ML prediction trace row (Sequelize plain JSON from `/ai/ml/prediction-traces`). */
+export type MlPredictionTraceRow = {
+  id: string
+  predictionId: string
+  parkId: string | null
+  rideId: string | null
+  modelName: string
+  modelVersion: string | null
+  targetName: string
+  horizonMinutes: number | null
+  featureVectorJson: Record<string, number>
+  featureSourcesJson: Record<string, string>
+  featureStatusJson: Record<string, string>
+  missingFeaturesJson: string[]
+  fallbackUsed: boolean
+  predictionInputHash: string | null
+  /** Phase 4 — present when API had `ML_TRACE_ENABLED` + `ML_FEATURE_WEIGHTS_ENABLED` and weights resolved. */
+  weightedFeatureVectorJson?: Record<string, MlWeightedFeatureTraceEntry>
+  /** Present when forecast used closed-period governed snapshot (PARK_CLOSED / RIDE_CLOSED). */
+  governedSnapshotQualityReason?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type MlPredictionResultRow = {
+  id: string
+  predictionId: string
+  parkId: string | null
+  rideId: string | null
+  modelName: string
+  modelVersion: string | null
+  targetName: string
+  horizonMinutes: number | null
+  predictedValue: string | null
+  actualValue: string | null
+  confidenceScore: string | null
+  reasonCodesJson: unknown[]
+  fallbackUsed: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export type MlLearnedCoefficientRow = {
+  feature: string
+  coefficient: number
+  direction: 'positive' | 'negative' | 'neutral'
+  absImpactRank: number
+}
+
+export type MlLearnedCoefficientsPayload = {
+  modelId: string
+  kind: string
+  horizonMinutes: number | null
+  modelType: string | null
+  scopeType: string | null
+  scopeId: string | null
+  intercept: number | null
+  rows: MlLearnedCoefficientRow[]
+}
+
+export type MlManualBusinessWeightsPayload = {
+  merged: Record<string, number>
+  sources: Record<string, 'default' | 'park_profile' | 'ride_profile'>
+}
+
+export type MlPredictionTraceDetailPayload = {
+  trace: MlPredictionTraceRow | null
+  results: MlPredictionResultRow[]
+  learnedCoefficients?: MlLearnedCoefficientsPayload | null
+  manualBusinessWeights?: MlManualBusinessWeightsPayload | null
+}
+
+/** Phase 5 — ridge coefficients from ml_model_registry (`GET .../prediction-traces/:id/coefficients`). */
+export type MlPredictionTraceCoefficientsRow = {
+  feature: string
+  coefficient: number
+  direction: 'positive' | 'negative' | 'neutral'
+  absoluteRank: number
+}
+
+export type MlPredictionTraceCoefficientsPayload = {
+  predictionId: string
+  modelName: string
+  modelVersion: string | null
+  coefficients: MlPredictionTraceCoefficientsRow[]
+}
+
+/** Distinct trace header values for Feature Monitor filters (`GET .../prediction-traces/filter-options`). */
+export type MlPredictionTraceFilterOptions = {
+  modelNames: string[]
+  targetNames: string[]
+}
+
+export async function listMlPredictionTraces(filters?: {
+  rideId?: string
+  modelName?: string
+  targetName?: string
+  from?: string | Date
+  to?: string | Date
+  limit?: number
+}): Promise<MlPredictionTraceRow[]> {
+  const q = new URLSearchParams()
+  if (filters?.rideId?.trim()) q.set('rideId', filters.rideId.trim())
+  const mn = filters?.modelName?.trim()
+  if (mn) q.set('modelName', mn)
+  const tn = filters?.targetName?.trim()
+  if (tn) q.set('targetName', tn)
+  if (filters?.from) q.set('from', filters.from instanceof Date ? filters.from.toISOString() : String(filters.from))
+  if (filters?.to) q.set('to', filters.to instanceof Date ? filters.to.toISOString() : String(filters.to))
+  if (filters?.limit != null) q.set('limit', String(filters.limit))
+  const qs = q.toString()
+  return fetchEnvelope<MlPredictionTraceRow[]>(
+    `/api/v1/ai/ml/prediction-traces${qs ? `?${qs}` : ''}`
+  )
+}
+
+export async function getMlPredictionTraceFilterOptions(): Promise<MlPredictionTraceFilterOptions> {
+  return fetchEnvelope<MlPredictionTraceFilterOptions>(
+    '/api/v1/ai/ml/prediction-traces/filter-options'
+  )
+}
+
+export async function getMlPredictionTrace(predictionId: string): Promise<MlPredictionTraceDetailPayload> {
+  return fetchEnvelope<MlPredictionTraceDetailPayload>(
+    `/api/v1/ai/ml/prediction-traces/${encodeURIComponent(predictionId)}`
+  )
+}
+
+export async function getMlPredictionTraceCoefficients(
+  predictionId: string
+): Promise<MlPredictionTraceCoefficientsPayload> {
+  return fetchEnvelope<MlPredictionTraceCoefficientsPayload>(
+    `/api/v1/ai/ml/prediction-traces/${encodeURIComponent(predictionId)}/coefficients`
+  )
+}
+
+/** Forecast accuracy logs — observational; populated from traces + governed snapshots. */
+export type MlForecastAccuracyKpis = {
+  avgAbsoluteError: number | null
+  avgPercentageError: number | null
+  rmse: number | null
+  bias: number | null
+  totalEvaluations: number
+  okCount: number
+  warningCount: number
+  criticalCount: number
+  unknownCount: number
+  /** UNKNOWN evaluations tied to closed park/ride governed snapshots (not scored as CRITICAL model failure). */
+  closedPeriodUnknownCount: number
+}
+
+export type MlForecastAccuracyLogRow = {
+  id: string
+  predictionId: string | null
+  parkId: string | null
+  rideId: string | null
+  modelName: string | null
+  modelVersion: string | null
+  targetName: string
+  horizonMinutes: number
+  predictedValue: string | null
+  actualValue: string | null
+  absoluteError: string | null
+  percentageError: string | null
+  squaredError: string | null
+  bias: string | null
+  accuracyStatus: string | null
+  evaluatedAt: string
+  /** UNKNOWN evaluations only — e.g. PARK_CLOSED when governed snapshots were ineligible for accuracy. */
+  evaluationReason?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export async function listMlForecastAccuracyLogs(filters?: {
+  rideId?: string
+  modelName?: string
+  targetName?: string
+  horizonMinutes?: number
+  from?: string | Date
+  to?: string | Date
+  limit?: number
+  /** When true, exclude UNKNOWN rows (no usable Ist for comparison). */
+  comparableOnly?: boolean
+}): Promise<MlForecastAccuracyLogRow[]> {
+  const q = new URLSearchParams()
+  if (filters?.rideId?.trim()) q.set('rideId', filters.rideId.trim())
+  const mn = filters?.modelName?.trim()
+  if (mn) q.set('modelName', mn)
+  const tn = filters?.targetName?.trim()
+  if (tn) q.set('targetName', tn)
+  if (filters?.horizonMinutes != null && Number.isFinite(Number(filters.horizonMinutes))) {
+    q.set('horizonMinutes', String(filters.horizonMinutes))
+  }
+  if (filters?.from) q.set('from', filters.from instanceof Date ? filters.from.toISOString() : String(filters.from))
+  if (filters?.to) q.set('to', filters.to instanceof Date ? filters.to.toISOString() : String(filters.to))
+  if (filters?.limit != null) q.set('limit', String(filters.limit))
+  if (filters?.comparableOnly === true) q.set('comparableOnly', 'true')
+  const qs = q.toString()
+  return fetchEnvelope<MlForecastAccuracyLogRow[]>(
+    `/api/v1/ai/ml/forecast-accuracy${qs ? `?${qs}` : ''}`
+  )
+}
+
+export async function getMlForecastAccuracyKpis(filters?: {
+  rideId?: string
+  modelName?: string
+  targetName?: string
+  horizonMinutes?: number
+  from?: string | Date
+  to?: string | Date
+  comparableOnly?: boolean
+}): Promise<MlForecastAccuracyKpis> {
+  const q = new URLSearchParams()
+  if (filters?.rideId?.trim()) q.set('rideId', filters.rideId.trim())
+  const mn = filters?.modelName?.trim()
+  if (mn) q.set('modelName', mn)
+  const tn = filters?.targetName?.trim()
+  if (tn) q.set('targetName', tn)
+  if (filters?.horizonMinutes != null && Number.isFinite(Number(filters.horizonMinutes))) {
+    q.set('horizonMinutes', String(filters.horizonMinutes))
+  }
+  if (filters?.from) q.set('from', filters.from instanceof Date ? filters.from.toISOString() : String(filters.from))
+  if (filters?.to) q.set('to', filters.to instanceof Date ? filters.to.toISOString() : String(filters.to))
+  if (filters?.comparableOnly === true) q.set('comparableOnly', 'true')
+  const qs = q.toString()
+  return fetchEnvelope<MlForecastAccuracyKpis>(
+    `/api/v1/ai/ml/forecast-accuracy/kpis${qs ? `?${qs}` : ''}`
+  )
+}
+
+export type ModelWinRateStat = {
+  modelName: string
+  evaluations: number
+  winRate: number
+  avgAbsoluteError: number | null
+  rmse: number | null
+  avgBias: number | null
+}
+
+export async function getMlModelWinRateStats(): Promise<ModelWinRateStat[]> {
+  return fetchEnvelope<ModelWinRateStat[]>('/api/v1/ai/ml/forecast-accuracy/model-win-rates')
+}
+
+export type RetroLookbackRow = {
+  horizon: number
+  predictedAt: string
+  predictedValue: number
+  modelName: string
+}
+
+export async function getMlRetroLookback(rideId: string): Promise<RetroLookbackRow[]> {
+  return fetchEnvelope<RetroLookbackRow[]>(
+    `/api/v1/ai/ml/forecast-accuracy/retro-lookback?rideId=${encodeURIComponent(rideId)}`
+  )
+}
+
+export async function getMlForecastAccuracyLog(id: string): Promise<MlForecastAccuracyLogRow> {
+  return fetchEnvelope<MlForecastAccuracyLogRow>(
+    `/api/v1/ai/ml/forecast-accuracy/${encodeURIComponent(id)}`
+  )
+}
+
+export type FsReadinessStatusUpper = 'OK' | 'WARNING' | 'CRITICAL'
+
+export type MlFeatureStoreReadinessScheduler = {
+  enabled: boolean
+  source: string
+  status: FsReadinessStatusUpper
+}
+
+export type MlFeatureStoreReadinessPipeline = {
+  lastRunAt: string | null
+  rideSnapshotsWritten: number
+  featureStoreError: string | null
+  status: FsReadinessStatusUpper
+}
+
+export type MlFeatureStoreReadinessSnapshot = {
+  totalRows: number
+  latestSnapshotAt: string | null
+  ridesWithSnapshots: number
+  status: FsReadinessStatusUpper
+}
+
+export type MlFeatureStoreReadinessWait = {
+  rowsWithWaitTime: number
+  rowsWithoutWaitTime: number
+  coveragePercent: number
+  status: FsReadinessStatusUpper
+}
+
+export type MlFeatureStoreReadinessAccuracyReasonRow = {
+  reason: string
+  count: number
+}
+
+export type MlFeatureStoreReadinessAccuracy = {
+  eligibleRows: number
+  ineligibleRows: number
+  topReasons: MlFeatureStoreReadinessAccuracyReasonRow[]
+  status: FsReadinessStatusUpper
+}
+
+export type MlFeatureStoreReadinessPayload = {
+  scheduler: MlFeatureStoreReadinessScheduler
+  lastPipelineRun: MlFeatureStoreReadinessPipeline
+  snapshotCoverage: MlFeatureStoreReadinessSnapshot
+  waitTimeCoverage: MlFeatureStoreReadinessWait
+  accuracyEligibility: MlFeatureStoreReadinessAccuracy
+}
+
+export async function getMlFeatureStoreReadiness(filters?: {
+  rideId?: string
+  from?: string | Date
+  to?: string | Date
+}): Promise<MlFeatureStoreReadinessPayload> {
+  const q = new URLSearchParams()
+  if (filters?.rideId?.trim()) q.set('rideId', filters.rideId.trim())
+  if (filters?.from) q.set('from', filters.from instanceof Date ? filters.from.toISOString() : String(filters.from))
+  if (filters?.to) q.set('to', filters.to instanceof Date ? filters.to.toISOString() : String(filters.to))
+  const qs = q.toString()
+  return fetchEnvelope<MlFeatureStoreReadinessPayload>(
+    `/api/v1/ai/ml/feature-store-readiness${qs ? `?${qs}` : ''}`
+  )
+}
+
+export type MlFeatureStoreSnapshotDebugRow = {
+  snapshotAt: string | null
+  waitTime: string | null
+  currentWaitTimeMin: string | null
+  accuracyEligible: boolean | null
+  dataQualityReason: string | null
+  parkIsOpen: boolean | null
+  rideIsOpen: boolean | null
+  /** mm — from snapshot row; null if pipeline did not populate */
+  precipitationMm: string | null
+  temperatureC: string | null
+  isSchoolHoliday: boolean | null
+  isPublicHoliday: boolean | null
+  parkCrowdIndex: string | null
+  /** Sat/Sun by UTC calendar day (diagnostic only) */
+  isWeekendUtc: boolean | null
+}
+
+export type MlFeatureStoreSnapshotDebugPayload = {
+  rideId: string
+  windowHours: number
+  windowStart: string
+  windowEnd: string
+  rowsLastWindow: number
+  rowsWithNumericWaitInWindow: number
+  rowsAccuracyEligibleInWindow: number
+  latestSnapshotAtInWindow: string | null
+  latestSnapshotAtOverall: string | null
+  latestSnapshots: MlFeatureStoreSnapshotDebugRow[]
+}
+
+export async function getMlFeatureStoreSnapshotDebug(filters: {
+  rideId: string
+  windowHours?: number
+}): Promise<MlFeatureStoreSnapshotDebugPayload> {
+  const q = new URLSearchParams({ rideId: filters.rideId.trim() })
+  if (filters.windowHours != null && Number.isFinite(Number(filters.windowHours))) {
+    q.set('windowHours', String(filters.windowHours))
+  }
+  return fetchEnvelope<MlFeatureStoreSnapshotDebugPayload>(
+    `/api/v1/ai/ml/feature-store-snapshot-debug?${q}`
+  )
+}
+
+/** Phase 3 — ML metadata profiles (`ml_park_profiles` / `ml_ride_profiles`), gated by ML_PROFILE_ENABLED. */
+export type MlParkProfileRow = {
+  id: string
+  parkId: string
+  profileName: string
+  profileVersion: string
+  enabled: boolean
+  crowdProfileJson: Record<string, unknown>
+  weatherProfileJson: Record<string, unknown>
+  calendarProfileJson: Record<string, unknown>
+  seasonalityProfileJson: Record<string, unknown>
+  eventProfileJson: Record<string, unknown>
+  visitorMixProfileJson: Record<string, unknown>
+  /** Phase 4 — manual business weights (TRAINING_FEATURE_NAMES keys; optional, default 1.0 at merge). */
+  featureWeightsJson?: Record<string, number>
+  notes: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type MlRideProfileRow = {
+  id: string
+  parkId: string
+  rideId: string
+  profileName: string
+  profileVersion: string
+  enabled: boolean
+  rideType: string | null
+  capacityProfileJson: Record<string, unknown>
+  popularityProfileJson: Record<string, unknown>
+  queueBehaviorProfileJson: Record<string, unknown>
+  weatherSensitivityJson: Record<string, unknown>
+  downtimeSensitivityJson: Record<string, unknown>
+  staffingDependencyJson: Record<string, unknown>
+  throughputProfileJson: Record<string, unknown>
+  /** Phase 4 */
+  featureWeightsJson?: Record<string, number>
+  notes: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export async function listMlParkProfiles(params?: {
+  profileName?: string
+  enabled?: boolean
+}): Promise<MlParkProfileRow[]> {
+  const q = new URLSearchParams()
+  if (params?.profileName) q.set('profileName', params.profileName)
+  if (params?.enabled === true || params?.enabled === false) q.set('enabled', String(params.enabled))
+  const qs = q.toString()
+  return fetchEnvelope<MlParkProfileRow[]>(`/api/v1/ai/ml/park-profiles${qs ? `?${qs}` : ''}`)
+}
+
+export async function getMlParkProfile(id: string): Promise<MlParkProfileRow> {
+  return fetchEnvelope<MlParkProfileRow>(`/api/v1/ai/ml/park-profiles/${encodeURIComponent(id)}`)
+}
+
+export async function postMlParkProfile(body: Record<string, unknown>): Promise<MlParkProfileRow> {
+  return fetchEnvelope<MlParkProfileRow>('/api/v1/ai/ml/park-profiles', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export async function putMlParkProfile(id: string, body: Record<string, unknown>): Promise<MlParkProfileRow> {
+  return fetchEnvelope<MlParkProfileRow>(`/api/v1/ai/ml/park-profiles/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  })
+}
+
+export async function listMlRideProfiles(params?: {
+  profileName?: string
+  rideId?: string
+  enabled?: boolean
+}): Promise<MlRideProfileRow[]> {
+  const q = new URLSearchParams()
+  if (params?.profileName) q.set('profileName', params.profileName)
+  if (params?.rideId) q.set('rideId', params.rideId)
+  if (params?.enabled === true || params?.enabled === false) q.set('enabled', String(params.enabled))
+  const qs = q.toString()
+  return fetchEnvelope<MlRideProfileRow[]>(`/api/v1/ai/ml/ride-profiles${qs ? `?${qs}` : ''}`)
+}
+
+export async function getMlRideProfile(id: string): Promise<MlRideProfileRow> {
+  return fetchEnvelope<MlRideProfileRow>(`/api/v1/ai/ml/ride-profiles/${encodeURIComponent(id)}`)
+}
+
+export async function postMlRideProfile(body: Record<string, unknown>): Promise<MlRideProfileRow> {
+  return fetchEnvelope<MlRideProfileRow>('/api/v1/ai/ml/ride-profiles', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export async function putMlRideProfile(id: string, body: Record<string, unknown>): Promise<MlRideProfileRow> {
+  return fetchEnvelope<MlRideProfileRow>(`/api/v1/ai/ml/ride-profiles/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  })
 }
 
 export async function getAiFactorConfigs(): Promise<AiFactorConfig[]> {
@@ -962,6 +1593,32 @@ export type MlGlobalFactorPatch = Partial<{
   validTo: string | null
   notes: string | null
 }>
+
+export type MlGlobalFactorCreateBody = {
+  factorCode: string
+  factorName: string
+  factorGroup?: string | null
+  description?: string | null
+  activeFlag?: boolean
+  weight?: number
+  lagMinutes?: number
+  defaultValue?: number | null
+  currentValue?: number | null
+  sourceType?: 'MANUAL' | 'API' | 'DERIVED' | 'CALCULATED'
+  adapterKey?: string | null
+  mqttTopic?: string | null
+  unit?: string | null
+  validFrom?: string | null
+  validTo?: string | null
+  notes?: string | null
+}
+
+export async function postMlGlobalFactor(body: MlGlobalFactorCreateBody): Promise<MlGlobalFactorRow> {
+  return fetchEnvelope<MlGlobalFactorRow>('/api/v1/ai/global-factors', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
 
 export async function patchMlGlobalFactor(id: string, body: MlGlobalFactorPatch): Promise<MlGlobalFactorRow> {
   return fetchEnvelope<MlGlobalFactorRow>(`/api/v1/ai/global-factors/${encodeURIComponent(id)}`, {
@@ -2372,6 +3029,8 @@ export type UnsMqttLiveStatus = {
   mqtt: Record<string, unknown>
   buffer: { bufferSize: number; eventsPerSec: number; lastEventTime: string | null }
   adapterSimulationActive: boolean
+  /** Lowercase Sparkplug group segment (matches DDATA rows); honors API `SPARKPLUG_GROUP_ID` when set. */
+  mqttGroupId?: string
 }
 
 export async function getUnsMqttLiveEvents(
@@ -2436,6 +3095,38 @@ export async function getUnsTopics(
   if (params?.sparkplugMessageType) q.set('sparkplugMessageType', params.sparkplugMessageType)
   const qs = q.toString() ? `?${q.toString()}` : ''
   return fetchEnvelope<UnsTopicRow[]>(`/api/v1/uns/parks/${encodeURIComponent(parkId)}/topics${qs}`)
+}
+
+export type SparkplugTopicPreviewPayload = {
+  assetSlug: string | null
+  zoneSlug: string | null
+  edgeNodeId: string
+  topicPreview: string
+  source: string
+  fallbackUsed: boolean
+  fallbackWarning?: string | null
+  groupId?: string
+  parkSlug?: string | null
+  parkId?: string | null
+  assetId?: string | null
+  matchedEdge?: unknown
+  reason?: string
+  messageType?: string
+}
+
+/** Zone-aware Sparkplug `edge_node_id` + DDATA-style topic preview (same resolver as publishers). */
+export async function getSparkplugTopicPreviewForAsset(
+  parkId: string,
+  params: { assetId?: string; assetSlug?: string; messageType?: string }
+): Promise<SparkplugTopicPreviewPayload> {
+  const q = new URLSearchParams()
+  if (params.assetId) q.set('assetId', params.assetId)
+  if (params.assetSlug) q.set('assetSlug', params.assetSlug)
+  if (params.messageType) q.set('messageType', params.messageType)
+  const qs = q.toString() ? `?${q.toString()}` : ''
+  return fetchEnvelope<SparkplugTopicPreviewPayload>(
+    `/api/v1/uns/parks/${encodeURIComponent(parkId)}/sparkplug-topic-preview${qs}`
+  )
 }
 
 export async function publishUnsTest(topic: string, payload: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -2739,6 +3430,10 @@ export type RideSignalCapabilitySignalRow = {
   isPreparedSparkplug: boolean
   isActiveSparkplug: boolean
   sparkplugRowId: string | null
+  /** Optional per-signal ML feature gating flag (backend rollout). */
+  useForMl?: boolean
+  /** Optional per-signal forecast feature gating flag (backend rollout). */
+  useForForecast?: boolean
 }
 
 export type RideTopicActivationStatus = {
@@ -2759,6 +3454,63 @@ export type RideSignalCapabilitiesPayload = {
   signals: RideSignalCapabilitySignalRow[]
 }
 
+export type SignalCatalogAdminRow = {
+  id: string
+  signalCode: string
+  label: string | null
+  description: string | null
+  unit: string | null
+  category: string | null
+  registrySource: string
+  readOnly: boolean
+  createdAt?: string
+  updatedAt?: string
+}
+
+export type SignalCatalogListPayload = {
+  signals: SignalCatalogAdminRow[]
+}
+
+export async function listSignalCatalog(): Promise<SignalCatalogListPayload> {
+  return fetchEnvelope<SignalCatalogListPayload>('/api/v1/master-data/signal-catalog')
+}
+
+export async function createSignalCatalog(body: {
+  signalCode: string
+  label?: string | null
+  description?: string | null
+  unit?: string | null
+  category?: string | null
+}): Promise<SignalCatalogAdminRow> {
+  return fetchEnvelope<SignalCatalogAdminRow>('/api/v1/master-data/signal-catalog', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export async function patchSignalCatalog(
+  catalogId: string,
+  body: Partial<{
+    signalCode: string
+    label: string | null
+    description: string | null
+    unit: string | null
+    category: string | null
+  }>
+): Promise<SignalCatalogAdminRow> {
+  return fetchEnvelope<SignalCatalogAdminRow>(
+    `/api/v1/master-data/signal-catalog/${encodeURIComponent(catalogId)}`,
+    { method: 'PATCH', body: JSON.stringify(body) }
+  )
+}
+
+export async function deleteSignalCatalog(catalogId: string): Promise<{ ok: boolean; id: string }> {
+  return fetchEnvelope<{ ok: boolean; id: string }>(
+    `/api/v1/master-data/signal-catalog/${encodeURIComponent(catalogId)}`,
+    { method: 'DELETE' }
+  )
+}
+
 export async function getRideSignalCapabilities(rideAssetId: string): Promise<RideSignalCapabilitiesPayload> {
   return fetchEnvelope<RideSignalCapabilitiesPayload>(
     `/api/v1/master-data/rides/${encodeURIComponent(rideAssetId)}/signal-capabilities`
@@ -2767,7 +3519,15 @@ export async function getRideSignalCapabilities(rideAssetId: string): Promise<Ri
 
 export async function putRideSignalCapabilities(
   rideAssetId: string,
-  body: { capabilities: { signalCatalogId: string; signalSource: RideSignalSource; valueType?: string }[] }
+  body: {
+    capabilities: {
+      signalCatalogId: string
+      signalSource: RideSignalSource
+      valueType?: string
+      useForMl?: boolean
+      useForForecast?: boolean
+    }[]
+  }
 ): Promise<RideSignalCapabilitiesPayload> {
   return fetchEnvelope<RideSignalCapabilitiesPayload>(
     `/api/v1/master-data/rides/${encodeURIComponent(rideAssetId)}/signal-capabilities`,
@@ -3077,27 +3837,6 @@ export async function getMdmRideTypes(): Promise<MdmRideType[]> {
   return fetchEnvelope<MdmRideType[]>('/api/v1/mdm/ride-types')
 }
 
-export async function getMdmRideTemplates(params?: { rideTypeId?: string }): Promise<MdmRideTemplate[]> {
-  const q = new URLSearchParams()
-  if (params?.rideTypeId) q.set('rideTypeId', params.rideTypeId)
-  const qs = q.toString()
-  return fetchEnvelope<MdmRideTemplate[]>(`/api/v1/mdm/ride-templates${qs ? `?${qs}` : ''}`)
-}
-
-export async function getMdmRideTemplate(id: string): Promise<MdmRideTemplate> {
-  return fetchEnvelope<MdmRideTemplate>(`/api/v1/mdm/ride-templates/${encodeURIComponent(id)}`)
-}
-
-export async function putMdmRideTemplate(
-  id: string,
-  body: Partial<Pick<MdmRideTemplate, 'displayName' | 'defaultProfile' | 'isSystem' | 'rideTypeId' | 'code'>>
-): Promise<MdmRideTemplate> {
-  return fetchEnvelope<MdmRideTemplate>(`/api/v1/mdm/ride-templates/${encodeURIComponent(id)}`, {
-    method: 'PUT',
-    body: JSON.stringify(body),
-  })
-}
-
 export async function getMdmRides(params?: {
   parkId?: string
   parkZoneId?: string
@@ -3183,16 +3922,6 @@ export async function patchMdmRideActive(id: string, activeFlag: boolean): Promi
   })
 }
 
-export async function postMdmCloneRideFromTemplate(
-  templateId: string,
-  body: { parkZoneId: string; name: string; externalId?: string | null; shortName?: string | null; description?: string | null }
-): Promise<MdmRideMaster> {
-  return fetchEnvelope<MdmRideMaster>(
-    `/api/v1/mdm/ride-templates/${encodeURIComponent(templateId)}/clone-ride`,
-    { method: 'POST', body: JSON.stringify(body) }
-  )
-}
-
 export async function getMdmCapacityModel(id: string): Promise<Record<string, unknown>> {
   return fetchEnvelope<Record<string, unknown>>(`/api/v1/mdm/rides/${encodeURIComponent(id)}/capacity-model`)
 }
@@ -3210,6 +3939,21 @@ export async function patchMdmRideZone(id: string, parkZoneId: string): Promise<
 
 export async function getPlatformParks(): Promise<PlatformPark[]> {
   return fetchEnvelope<PlatformPark[]>('/api/v1/parks')
+}
+
+/** Platform `park_zones` rows for a park (UUID) — matches `park_assets.zone_id`. */
+export type PlatformParkZoneRow = {
+  id: string
+  parkId: string
+  name: string
+  slug: string
+  parentZoneId?: string | null
+  sortOrder?: number
+  externalEntityId?: string | null
+}
+
+export async function getPlatformParkZones(parkId: string): Promise<PlatformParkZoneRow[]> {
+  return fetchEnvelope<PlatformParkZoneRow[]>(`/api/v1/parks/${encodeURIComponent(parkId)}/zones`)
 }
 
 export async function listTrafficCorridors(parkId: string): Promise<TrafficCorridorRow[]> {
@@ -3319,6 +4063,56 @@ export async function getPlatformParkOperationalContext(
   )
 }
 
+export type PlatformParkLevel0PatchBody = Partial<{
+  name: string
+  slug: string
+  timezone: string | null
+  latitude: number | null
+  longitude: number | null
+  level0: {
+    openingHoursNotes?: string | null
+    seasonNotes?: string | null
+    baselineOpenTime?: string | null
+    baselineCloseTime?: string | null
+    annualOpenFrom?: string | null
+    annualOpenUntil?: string | null
+    keyFacts?: {
+      annualVisitorsTarget?: number | null
+      areaHectares?: number | null
+      maxDailyCapacity?: number | null
+      parkingSpaces?: number | null
+      openingYear?: number | null
+      operatorName?: string | null
+      emergencyPhone?: string | null
+      websiteUrl?: string | null
+    }
+  }
+  sparkplug?: {
+    documentationNotes?: string | null
+    defaultEdgeNodeId?: string | null
+    edges?: Array<{
+      id: string
+      label?: string | null
+      edgeNodeId: string
+      zoneKey?: string | null
+      role?: 'PRIMARY' | 'ZONE' | 'VIRTUAL_LAB' | 'BACKUP' | 'OTHER'
+      notes?: string | null
+    }>
+  }
+}>
+
+export async function patchPlatformParkLevel0(
+  parkId: string,
+  body: PlatformParkLevel0PatchBody,
+  init?: RequestInit
+): Promise<PlatformPark> {
+  return fetchEnvelope<PlatformPark>(`/api/v1/parks/${encodeURIComponent(parkId)}/level0`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+    ...init,
+  })
+}
+
 export async function listIncidents(params?: {
   status?: IncidentStatus
   limit?: number
@@ -3382,6 +4176,102 @@ export async function patchIncident(
 export async function deleteIncident(id: string): Promise<{ deleted: boolean; id: string }> {
   return fetchEnvelope<{ deleted: boolean; id: string }>(`/api/v1/incidents/${encodeURIComponent(id)}`, {
     method: 'DELETE',
+  })
+}
+
+export async function listAgentPendingActions(params?: {
+  limit?: number
+  offset?: number
+}): Promise<AgentPendingActionsPayload> {
+  const q = new URLSearchParams()
+  if (params?.limit != null) q.set('limit', String(params.limit))
+  if (params?.offset != null) q.set('offset', String(params.offset))
+  const qs = q.toString()
+  return fetchEnvelope<AgentPendingActionsPayload>(`/api/v1/agent/actions${qs ? `?${qs}` : ''}`)
+}
+
+export async function approveAgentAction(id: string): Promise<AgentRunActionRow> {
+  return fetchEnvelope<AgentRunActionRow>(`/api/v1/agent/actions/${encodeURIComponent(id)}/approve`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  })
+}
+
+export async function rejectAgentAction(id: string, reason?: string | null): Promise<AgentRunActionRow> {
+  return fetchEnvelope<AgentRunActionRow>(`/api/v1/agent/actions/${encodeURIComponent(id)}/reject`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: reason ?? null }),
+  })
+}
+
+export async function listAgentRuns(params?: {
+  limit?: number
+  offset?: number
+  skillId?: string
+  status?: string
+}): Promise<AgentRunsListPayload> {
+  const q = new URLSearchParams()
+  if (params?.limit != null) q.set('limit', String(params.limit))
+  if (params?.offset != null) q.set('offset', String(params.offset))
+  if (params?.skillId) q.set('skillId', params.skillId)
+  if (params?.status) q.set('status', params.status)
+  const qs = q.toString()
+  return fetchEnvelope<AgentRunsListPayload>(`/api/v1/agent/runs${qs ? `?${qs}` : ''}`)
+}
+
+export async function getAgentRun(id: string): Promise<AgentRunDetail> {
+  return fetchEnvelope<AgentRunDetail>(`/api/v1/agent/runs/${encodeURIComponent(id)}`)
+}
+
+export async function createAgentRun(body: {
+  skillId: AgentSkillId
+  parkId: string
+  triggerType?: string
+  crowdEventId?: string | null
+  rideId?: string | null
+}): Promise<AgentRunDetail> {
+  return fetchEnvelope<AgentRunDetail>('/api/v1/agent/runs', {
+    method: 'POST',
+    body: JSON.stringify({
+      skillId: body.skillId,
+      parkId: body.parkId,
+      triggerType: body.triggerType ?? 'manual',
+      crowdEventId: body.crowdEventId ?? null,
+      rideId: body.rideId ?? null,
+    }),
+  })
+}
+
+export async function postAgentPreflight(body: {
+  parkId: string
+  skillId: AgentSkillId
+  sourceRunId?: string | null
+}): Promise<AgentPreflightPayload> {
+  return fetchEnvelope<AgentPreflightPayload>('/api/v1/agent/preflight', {
+    method: 'POST',
+    body: JSON.stringify({
+      parkId: body.parkId,
+      skillId: body.skillId,
+      sourceRunId: body.sourceRunId ?? null,
+    }),
+  })
+}
+
+export async function getAgentApprovalMetrics(params?: {
+  skillId?: AgentSkillId
+  sinceDays?: number
+}): Promise<AgentApprovalMetricsPayload> {
+  const q = new URLSearchParams()
+  if (params?.skillId) q.set('skillId', params.skillId)
+  if (params?.sinceDays != null) q.set('sinceDays', String(params.sinceDays))
+  const qs = q.toString()
+  return fetchEnvelope<AgentApprovalMetricsPayload>(`/api/v1/agent/approval-metrics${qs ? `?${qs}` : ''}`)
+}
+
+export async function replayAgentRun(sourceRunId: string): Promise<AgentRunDetail> {
+  return fetchEnvelope<AgentRunDetail>(`/api/v1/agent/runs/${encodeURIComponent(sourceRunId)}/replay`, {
+    method: 'POST',
+    body: JSON.stringify({}),
   })
 }
 
@@ -3552,6 +4442,10 @@ export type SqdcParkBoardResponse = {
   overallScoreHistory?: SqdcScoreHistoryPoint[]
   /** Selected day PARK snapshot `delivery_json` electricity cost (EUR), when present. */
   electricityCostEurPerDay?: number | null
+  /** PARK snapshot `delivery_json.maintenanceCostEurPerDay` (EUR/day), when present. */
+  maintenanceCostEurPerDay?: number | null
+  /** Sum of positive electricity + maintenance EUR/day — same basis as month-ring cost (C). */
+  totalCostEurPerDay?: number | null
   /** Effective band thresholds (from platform_settings); UI + rings stay aligned with API. */
   uiThresholds?: SqdcUiThresholds
 }
@@ -3592,6 +4486,8 @@ export type SqdcAssetBoardResponse = {
     /** kWh per UTC day; from `delivery_json` until energy metering integration. */
     electricityKwhPerDay?: number | null
     electricityCostEurPerDay?: number | null
+    maintenanceCostEurPerDay?: number | null
+    totalCostEurPerDay?: number | null
   }
   /** Persisted ASSET `delivery_json` (merge client-side when saving snapshots). */
   deliveryJson?: Record<string, unknown>
@@ -3679,6 +4575,26 @@ export async function postSqdcDailySnapshot(body: {
   return fetchEnvelope(`/api/v1/sqdc/daily-snapshots`, { method: 'POST', body: JSON.stringify(body) })
 }
 
+/** Phase 3 — venue counts (master-data assets), no POS. */
+export type AddonBoardVenueTriplet = {
+  restaurants: number
+  shops: number
+  shows: number
+}
+
+export type AddonBoardCrossAssetParkSummary = {
+  schemaVersion: number
+  parkVenues: AddonBoardVenueTriplet
+  zonesWithVenues: number
+}
+
+export type AddonBoardCrossAssetZoneSummary = {
+  schemaVersion: number
+  parkVenues: AddonBoardVenueTriplet
+  zoneVenues: AddonBoardVenueTriplet
+  zonesWithVenues: number
+}
+
 /** Add-on Board (L0/L1/L3) — park-scoped via `X-Park-Id`. */
 export type AddonBoardParkSummary = {
   parkId: string
@@ -3695,6 +4611,55 @@ export type AddonBoardParkSummary = {
   averageForecastWaitTime60?: number | null
   actualThroughputPph: number | null
   forecastDemandIndex: string
+  /** Latest park weather slice from `park_feature_snapshots_5m` (Phase 2 context). */
+  weatherContext?: Record<string, unknown> | null
+  /** Active RESTAURANT / SHOP / SHOW asset counts (Phase 3). */
+  crossAssetContext?: AddonBoardCrossAssetParkSummary | null
+}
+
+export type AssetPdmSignalStatus = 'OK' | 'WARN' | 'CRITICAL' | 'NO_DATA'
+
+export type AssetPdmSignalEvaluation = {
+  ruleId: string
+  metricName: string
+  label: string | null
+  unit: string | null
+  value: number | null
+  liveReceivedAt: string | null
+  sparkplugDeviceId: string | null
+  status: AssetPdmSignalStatus
+  thresholds: {
+    warnAbove: number | null
+    criticalAbove: number | null
+    warnBelow: number | null
+    criticalBelow: number | null
+  }
+}
+
+export type AssetPredictiveMaintenancePayload = {
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
+  recommendation: { title: string; detail: string }
+  evaluatedAt: string
+  enabledRuleCount: number
+  signals: AssetPdmSignalEvaluation[]
+}
+
+export type AssetPdmRuleRow = {
+  id: string
+  assetId: string
+  parkId: string
+  label: string | null
+  metricName: string
+  warnAbove: number | null
+  criticalAbove: number | null
+  warnBelow: number | null
+  criticalBelow: number | null
+  unit: string | null
+  enabled: boolean
+  sortOrder: number
+  notes: string | null
+  createdAt: string
+  updatedAt: string
 }
 
 export type AddonBoardRideCard = {
@@ -3710,12 +4675,15 @@ export type AddonBoardRideCard = {
   mlModelId?: string | null
   mlForecastConfidence?: number | null
   mlTopFactors?: { feature: string; impact: string }[]
+  predictiveMaintenance?: AssetPredictiveMaintenancePayload | null
 }
 
 export type AddonBoardRidesPayload = {
   parkId: string
   timestamp: string
   rides: AddonBoardRideCard[]
+  weatherContext?: Record<string, unknown> | null
+  crossAssetContext?: AddonBoardCrossAssetParkSummary | null
 }
 
 export type AddonBoardZoneSummary = {
@@ -3725,12 +4693,14 @@ export type AddonBoardZoneSummary = {
   timestamp: string
   zoneHealthScore: number
   zoneAverageWaitTimeMinutes: number | null
+  weatherContext?: Record<string, unknown> | null
   zoneForecastWaitTime60: number | null
   /** Open rides in zone with 60m forecast ≥ threshold. */
   zoneForecastCriticalRides: number
   forecastCriticalAtMinutes?: number
   zoneDemandForecastIndex?: string
   ridesInZone: number
+  crossAssetContext?: AddonBoardCrossAssetZoneSummary | null
 }
 
 export type AddonBoardZoneListRow = {
@@ -4233,6 +5203,59 @@ export async function getPlatformAssets(params?: {
   return fetchEnvelope<PlatformAsset[]>(`/api/v1/assets${qs ? `?${qs}` : ''}`)
 }
 
+export type AssetZoneNormalizationRow = {
+  assetId: string
+  assetName: string
+  assetSlug: string | null
+  venueName?: string | null
+  currentZoneSlug: string | null
+  currentZoneName: string | null
+  proposedZoneSlug: string | null
+  proposedZoneName: string | null
+  zoneSlugFoundInPark: boolean
+  matchType: string
+  confidence: string
+  reason: string
+  zoneQuality: 'ASSIGNED' | 'VENUE_ASSIGNED' | 'HEURISTIC_ASSIGNED' | 'LOW_CONFIDENCE' | 'MISSING' | 'INVALID'
+  edgeNodeId: string
+  topicPreview: string
+}
+
+export type AssetZoneNormalizationPreview = {
+  park: { id: string; slug: string; name: string }
+  rows: AssetZoneNormalizationRow[]
+}
+
+export async function getAssetZoneNormalizationPreview(params: {
+  parkSlug: string
+  type?: 'RESTAURANT' | 'SHOW'
+}): Promise<AssetZoneNormalizationPreview> {
+  const q = new URLSearchParams()
+  q.set('parkSlug', params.parkSlug)
+  q.set('type', params.type || 'RESTAURANT')
+  return fetchEnvelope<AssetZoneNormalizationPreview>(`/api/v1/assets/zone-normalization/preview?${q.toString()}`)
+}
+
+export async function postAssetZoneNormalizationApply(body: {
+  parkSlug: string
+  type?: 'RESTAURANT' | 'SHOW'
+  dryRun?: boolean
+  overrides?: Array<{ assetId: string; zoneSlug?: string | null }>
+}): Promise<{ dryRun: boolean; updated: number; rows: AssetZoneNormalizationRow[] }> {
+  return fetchEnvelope<{ dryRun: boolean; updated: number; rows: AssetZoneNormalizationRow[] }>(
+    '/api/v1/assets/zone-normalization/apply',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        parkSlug: body.parkSlug,
+        type: body.type || 'RESTAURANT',
+        dryRun: body.dryRun !== false,
+        overrides: body.overrides || [],
+      }),
+    }
+  )
+}
+
 /** @param parkKey Park slug or internal UUID (same resolver as other geo routes). */
 export async function getGeoPressureLive(
   parkKey: string,
@@ -4373,6 +5396,118 @@ export async function deleteAssetDowntimeEvent(assetId: string, eventId: string)
   )
 }
 
+export async function listAssetPdmRules(assetId: string): Promise<{ rules: AssetPdmRuleRow[] }> {
+  return fetchEnvelope<{ rules: AssetPdmRuleRow[] }>(
+    `/api/v1/assets/${encodeURIComponent(assetId)}/pdm-rules`
+  )
+}
+
+export async function createAssetPdmRule(
+  assetId: string,
+  body: {
+    metricName: string
+    label?: string | null
+    warnAbove?: number | null
+    criticalAbove?: number | null
+    warnBelow?: number | null
+    criticalBelow?: number | null
+    unit?: string | null
+    notes?: string | null
+    enabled?: boolean
+    sortOrder?: number
+  }
+): Promise<AssetPdmRuleRow> {
+  return fetchEnvelope<AssetPdmRuleRow>(`/api/v1/assets/${encodeURIComponent(assetId)}/pdm-rules`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export type AssetPdmRulePatchBody = {
+  metricName?: string
+  label?: string | null
+  warnAbove?: number | null
+  criticalAbove?: number | null
+  warnBelow?: number | null
+  criticalBelow?: number | null
+  unit?: string | null
+  notes?: string | null
+  enabled?: boolean
+  sortOrder?: number
+}
+
+export async function patchAssetPdmRule(
+  assetId: string,
+  ruleId: string,
+  body: AssetPdmRulePatchBody
+): Promise<AssetPdmRuleRow> {
+  return fetchEnvelope<AssetPdmRuleRow>(
+    `/api/v1/assets/${encodeURIComponent(assetId)}/pdm-rules/${encodeURIComponent(ruleId)}`,
+    { method: 'PATCH', body: JSON.stringify(body) }
+  )
+}
+
+export async function deleteAssetPdmRule(assetId: string, ruleId: string): Promise<void> {
+  await fetchEnvelope<void>(
+    `/api/v1/assets/${encodeURIComponent(assetId)}/pdm-rules/${encodeURIComponent(ruleId)}`,
+    { method: 'DELETE' }
+  )
+}
+
+export type AssetPdmSparkplugMetricRow = {
+  metricName: string
+  sparkplugDeviceId: string
+  lastReceivedAt: string
+  lastValue: unknown
+}
+
+export type AssetPdmSparkplugMetricsPayload = {
+  groupId: string
+  edgeNodeId: string
+  deviceCandidates: string[]
+  metrics: AssetPdmSparkplugMetricRow[]
+  bufferHint: string
+}
+
+export async function getAssetPdmSparkplugMetrics(assetId: string): Promise<AssetPdmSparkplugMetricsPayload> {
+  return fetchEnvelope<AssetPdmSparkplugMetricsPayload>(
+    `/api/v1/assets/${encodeURIComponent(assetId)}/pdm-sparkplug-metrics`
+  )
+}
+
+export async function getAssetPredictiveMaintenance(assetId: string): Promise<{
+  rules: AssetPdmRuleRow[]
+  evaluation: AssetPredictiveMaintenancePayload | null
+}> {
+  return fetchEnvelope<{
+    rules: AssetPdmRuleRow[]
+    evaluation: AssetPredictiveMaintenancePayload | null
+  }>(`/api/v1/assets/${encodeURIComponent(assetId)}/predictive-maintenance`)
+}
+
+export type AssetPdmEvaluationLogRow = {
+  id: string
+  assetId: string
+  parkId: string
+  source: string
+  evaluatedAt: string
+  riskLevel: string
+  fingerprint: string
+  snapshot: AssetPredictiveMaintenancePayload
+}
+
+export async function listAssetPdmEvaluationLogs(
+  assetId: string,
+  params?: { limit?: number }
+): Promise<{ logs: AssetPdmEvaluationLogRow[] }> {
+  const q = new URLSearchParams()
+  if (params?.limit != null) q.set('limit', String(params.limit))
+  const qs = q.toString()
+  return fetchEnvelope<{ logs: AssetPdmEvaluationLogRow[] }>(
+    `/api/v1/assets/${encodeURIComponent(assetId)}/pdm-evaluation-logs${qs ? `?${qs}` : ''}`
+  )
+}
+
 export async function getAssetAvailabilitySummary(
   assetId: string,
   params: { from: string; to: string }
@@ -4433,12 +5568,71 @@ export async function createShiftHandover(
     includeIncidentSnapshot?: boolean
     /** Optional: nur dieses Park-Objekt (Attraktion, Restaurant, Show, …) */
     linkedParkAssetId?: string | null
+    followUpTasks?: Array<{
+      id?: string
+      title: string
+      ownerUserId?: string | null
+      dueAt?: string | null
+      status?: 'OPEN' | 'DONE' | 'CANCELLED'
+    }>
+    reminderDelayMin?: number
   }
 ): Promise<ShiftHandoverRow> {
   return fetchEnvelope<ShiftHandoverRow>(`/api/v1/parks/${encodeURIComponent(parkId)}/shift-handovers`, {
     method: 'POST',
     body: JSON.stringify(body),
   })
+}
+
+export async function acknowledgeShiftHandover(
+  parkId: string,
+  entryId: string,
+  body?: { note?: string | null }
+): Promise<ShiftHandoverRow> {
+  return fetchEnvelope<ShiftHandoverRow>(
+    `/api/v1/parks/${encodeURIComponent(parkId)}/shift-handovers/${encodeURIComponent(entryId)}/acknowledge`,
+    { method: 'POST', body: JSON.stringify(body || {}) }
+  )
+}
+
+export async function patchShiftHandoverTasks(
+  parkId: string,
+  entryId: string,
+  tasks: Array<{
+    id?: string
+    title: string
+    ownerUserId?: string | null
+    dueAt?: string | null
+    status?: 'OPEN' | 'DONE' | 'CANCELLED'
+  }>
+): Promise<ShiftHandoverRow> {
+  return fetchEnvelope<ShiftHandoverRow>(
+    `/api/v1/parks/${encodeURIComponent(parkId)}/shift-handovers/${encodeURIComponent(entryId)}/tasks`,
+    { method: 'PATCH', body: JSON.stringify({ tasks }) }
+  )
+}
+
+export async function listShiftHandoverDueReminders(
+  parkId: string,
+  limit = 30
+): Promise<ShiftHandoverRow[]> {
+  return fetchEnvelope<ShiftHandoverRow[]>(
+    `/api/v1/parks/${encodeURIComponent(parkId)}/shift-handovers/reminders/due?limit=${encodeURIComponent(String(limit))}`
+  )
+}
+
+export async function markShiftHandoverReminderSent(
+  parkId: string,
+  entryId: string
+): Promise<ShiftHandoverRow> {
+  return fetchEnvelope<ShiftHandoverRow>(
+    `/api/v1/parks/${encodeURIComponent(parkId)}/shift-handovers/${encodeURIComponent(entryId)}/reminders/mark-sent`,
+    { method: 'POST', body: JSON.stringify({}) }
+  )
+}
+
+export function shiftHandoverPdfUrl(parkId: string, entryId: string): string {
+  return url(`/api/v1/parks/${encodeURIComponent(parkId)}/shift-handovers/${encodeURIComponent(entryId)}/pdf`)
 }
 
 export async function putPlatformRideMaster(
@@ -4567,6 +5761,10 @@ export type MasterDataGridRow = {
   templateId?: string | null
   templateCode?: string | null
   enrichmentStatus: string
+  /** Keys from entity template `requiredFieldsJson` (list API). */
+  templateRequiredFields?: string[]
+  /** Subset of template keys still empty per server completeness check. */
+  missingProfileFieldKeys?: string[]
   lastSyncedAt: string | null
   updatedAt: string | null
 }
@@ -4758,7 +5956,8 @@ export async function getMasterDataDetail(
   id: string
 ): Promise<Record<string, unknown>> {
   return fetchEnvelope<Record<string, unknown>>(
-    `/api/v1/master-data/${encodeURIComponent(entityType)}/${encodeURIComponent(id)}`
+    `/api/v1/master-data/${encodeURIComponent(entityType)}/${encodeURIComponent(id)}`,
+    { cache: 'no-store' }
   )
 }
 
@@ -4798,7 +5997,9 @@ export async function getMasterDataAssetEnrichment(assetId: string): Promise<{
   enrichment: Record<string, unknown>
   locks: Record<string, unknown>
 }> {
-  return fetchEnvelope(`/api/v1/master-data/assets/${encodeURIComponent(assetId)}/enrichment`)
+  return fetchEnvelope(`/api/v1/master-data/assets/${encodeURIComponent(assetId)}/enrichment`, {
+    cache: 'no-store',
+  })
 }
 
 export async function patchMasterDataAssetEnrichment(

@@ -6,6 +6,9 @@ const predictRideMerged = Joi.object({
     .pattern(/^[\d,\s]+$/)
     .optional()
     .default('15,30,60'),
+  explain: Joi.alternatives()
+    .try(Joi.boolean(), Joi.string().valid('1', '0', 'true', 'false', 'TRUE', 'FALSE'))
+    .optional(),
 });
 
 const rideIdPathParams = Joi.object({
@@ -30,10 +33,57 @@ const parkMlSummaryQuery = Joi.object({
   offset: Joi.number().integer().min(0).max(500).optional(),
 });
 
+const mlPredictionTracesQuery = Joi.object({
+  rideId: Joi.string().uuid().optional(),
+  modelName: Joi.string().max(160).optional(),
+  targetName: Joi.string().max(160).optional(),
+  from: Joi.date().iso().optional(),
+  to: Joi.date().iso().optional(),
+  limit: Joi.number().integer().min(1).max(500).optional(),
+});
+
+const predictionTraceIdParams = Joi.object({
+  predictionId: Joi.string().uuid().required(),
+});
+
+const mlForecastAccuracyQuery = Joi.object({
+  rideId: Joi.string().uuid().optional(),
+  modelName: Joi.string().max(160).optional(),
+  targetName: Joi.string().max(160).optional(),
+  horizonMinutes: Joi.number().integer().min(0).max(24 * 60).optional(),
+  from: Joi.date().iso().optional(),
+  to: Joi.date().iso().optional(),
+  limit: Joi.number().integer().min(1).max(500).optional(),
+  comparableOnly: Joi.alternatives()
+    .try(Joi.boolean(), Joi.string().valid('true', 'false', '1', '0'), Joi.number().valid(0, 1))
+    .optional(),
+});
+
+const mlForecastAccuracyLogIdParams = Joi.object({
+  id: Joi.string().uuid().required(),
+});
+
+const mlFeatureStoreReadinessQuery = Joi.object({
+  rideId: Joi.string().uuid().optional(),
+  from: Joi.date().iso().optional(),
+  to: Joi.date().iso().optional(),
+});
+
+const mlFeatureStoreSnapshotDebugQuery = Joi.object({
+  rideId: Joi.string().uuid().required(),
+  windowHours: Joi.number().integer().min(1).max(72).optional(),
+});
+
 module.exports = {
   predictRideMerged,
   rideIdPathParams,
   trainGlobalWaitBody,
   datasetStatsQuery,
   parkMlSummaryQuery,
+  mlPredictionTracesQuery,
+  predictionTraceIdParams,
+  mlForecastAccuracyQuery,
+  mlForecastAccuracyLogIdParams,
+  mlFeatureStoreReadinessQuery,
+  mlFeatureStoreSnapshotDebugQuery,
 };

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { getIntegrationSettings, getUnsTopics, type UnsTopicRow } from '@/api/client'
+import { getIntegrationSettings, getSparkplugTopicPreviewForAsset, getUnsTopics, type UnsTopicRow } from '@/api/client'
 import {
   buildSparkplugTopic,
   SPARKPLUG_ADVANCED_EXTRA_TYPES,
@@ -20,6 +20,38 @@ const search = ref('')
 const domainQuick = ref<string>('')
 const viewMode = ref<'business' | 'technical'>('business')
 const showAdvancedSparkplug = ref(false)
+const edgeByAssetSlug = ref<Record<string, string>>({})
+
+function uniqueAssetSlugsFromEntities(rows: AggregatedEntityRow[]): string[] {
+  return [...new Set(rows.map((r) => String(r.assetSlug || '').trim()).filter(Boolean))]
+}
+
+function edgeForAssetSlug(assetSlug: string): string {
+  return edgeByAssetSlug.value[assetSlug] || EDGE_NODE_ID
+}
+
+async function resolveEdgesForEntities(rows: AggregatedEntityRow[]) {
+  const park = parkId.value.trim()
+  const slugs = uniqueAssetSlugsFromEntities(rows)
+  if (!park || !slugs.length) {
+    edgeByAssetSlug.value = {}
+    return
+  }
+
+  const next: Record<string, string> = {}
+  await Promise.all(
+    slugs.map(async (assetSlug) => {
+      try {
+        const preview = await getSparkplugTopicPreviewForAsset(park, { assetSlug, messageType: 'DDATA' })
+        const edge = String(preview.edgeNodeId || '').trim()
+        if (edge) next[assetSlug] = edge
+      } catch {
+        // Keep fallback (`park_gateway`) for entities that cannot be resolved.
+      }
+    })
+  )
+  edgeByAssetSlug.value = next
+}
 
 async function resolveParkId() {
   const settings = await getIntegrationSettings()
@@ -33,6 +65,7 @@ async function resolveParkId() {
 async function load() {
   if (!parkId.value) await resolveParkId()
   leaves.value = await getUnsTopics(parkId.value, { sparkplugMessageType: 'DDATA' })
+  await resolveEdgesForEntities(aggregateUnsLeavesToEntities(leaves.value))
 }
 
 const sparkplugGroupId = computed(() => slugifyName(parkId.value || 'europa_park'))
@@ -86,12 +119,13 @@ const stats = computed(() => {
 
 function deviceSparkplugRows(assetSlug: string, types: readonly string[]) {
   const g = sparkplugGroupId.value
+  const edgeNodeId = edgeForAssetSlug(assetSlug)
   return types.map((mt) => ({
     mt,
     topic: buildSparkplugTopic({
       groupId: g,
       messageType: mt,
-      edgeNodeId: EDGE_NODE_ID,
+      edgeNodeId,
       deviceId: assetSlug,
     }),
   }))
@@ -127,16 +161,17 @@ function downloadEntitiesCsv() {
   const lines = [headers.join(',')]
   const g = sparkplugGroupId.value
   for (const ent of list) {
+    const edgeNodeId = edgeForAssetSlug(ent.assetSlug)
     const ddata = buildSparkplugTopic({
       groupId: g,
       messageType: 'DDATA',
-      edgeNodeId: EDGE_NODE_ID,
+      edgeNodeId,
       deviceId: ent.assetSlug,
     })
     const dbirth = buildSparkplugTopic({
       groupId: g,
       messageType: 'DBIRTH',
-      edgeNodeId: EDGE_NODE_ID,
+      edgeNodeId,
       deviceId: ent.assetSlug,
     })
     lines.push(
@@ -159,11 +194,12 @@ function downloadEntitiesCsv() {
 /** NBIRTH/NDEATH/STATE/NCMD are node-level: omit deviceId in JSON export for those types. */
 function sparkplugUrlForExport(mt: string, assetSlug: string): string {
   const g = sparkplugGroupId.value
+  const edgeNodeId = edgeForAssetSlug(assetSlug)
   const nodeOnly = ['NBIRTH', 'NDEATH', 'STATE', 'NCMD'].includes(mt)
   return buildSparkplugTopic({
     groupId: g,
     messageType: mt,
-    edgeNodeId: EDGE_NODE_ID,
+    edgeNodeId,
     deviceId: nodeOnly ? undefined : assetSlug,
   })
 }
@@ -218,6 +254,14 @@ watch(
   () => {
     applyRouteSearchQuery()
   }
+)
+
+watch(
+  entitiesAll,
+  (rows) => {
+    void resolveEdgesForEntities(rows)
+  },
+  { deep: false }
 )
 
 function compactRows(ent: AggregatedEntityRow) {

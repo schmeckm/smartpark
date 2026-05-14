@@ -43,9 +43,11 @@ function pickSource(predictions, m) {
  */
 async function getRideBoardMlFields(parkId, rideId) {
   try {
-    const p = await predictRideWaitTimes({ parkId, rideId, horizons: [15, 30, 60] });
+    const p = await predictRideWaitTimes({ parkId, rideId, horizons: [5, 10, 15, 30, 60] });
     const src60 = pickSource(p.predictions, 60);
     return {
+      forecastWaitTime5: pickPredictionMinutes(p.predictions, 5),
+      forecastWaitTime10: pickPredictionMinutes(p.predictions, 10),
       forecastWaitTime15: pickPredictionMinutes(p.predictions, 15),
       forecastWaitTime30: pickPredictionMinutes(p.predictions, 30),
       forecastWaitTime60: pickPredictionMinutes(p.predictions, 60),
@@ -57,6 +59,8 @@ async function getRideBoardMlFields(parkId, rideId) {
     };
   } catch {
     return {
+      forecastWaitTime5: null,
+      forecastWaitTime10: null,
       forecastWaitTime15: null,
       forecastWaitTime30: null,
       forecastWaitTime60: null,

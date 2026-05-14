@@ -74,13 +74,14 @@ const sorted = computed(() =>
               </span>
             </td>
             <td class="px-4 py-3 text-right tabular-nums text-slate-300">
-              {{ r.capacityPerHour?.toLocaleString?.() ?? r.capacityPerHour }}
+              <template v-if="adapterLive && !(r.capacityPerHour > 0)">—</template>
+              <template v-else>{{ r.capacityPerHour?.toLocaleString?.() ?? r.capacityPerHour }}</template>
             </td>
             <td class="px-4 py-3 text-right">
               <span
                 class="inline-flex h-7 min-w-[1.75rem] items-center justify-center rounded-md bg-slate-800 px-2 text-xs font-semibold text-slate-200"
               >
-                {{ r.criticality }}
+                {{ adapterLive && r.criticality === 0 ? '—' : r.criticality }}
               </span>
             </td>
           </tr>

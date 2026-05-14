@@ -8,6 +8,7 @@ const DEFAULT_AI_FACTOR_CONFIGS = [
     lagMinutes: 45,
     value: 0,
     source: 'manual',
+    provider: null,
   },
   {
     code: 'weather_rain',
@@ -17,7 +18,8 @@ const DEFAULT_AI_FACTOR_CONFIGS = [
     weight: 0.15,
     lagMinutes: 10,
     value: 0,
-    source: 'manual',
+    source: 'adapter',
+    provider: 'weather_open_meteo',
   },
   {
     code: 'holiday_index',
@@ -27,7 +29,8 @@ const DEFAULT_AI_FACTOR_CONFIGS = [
     weight: 0.2,
     lagMinutes: 0,
     value: 0,
-    source: 'manual',
+    source: 'adapter',
+    provider: 'calendar_school_holidays',
   },
   {
     code: 'event_index',
@@ -38,6 +41,7 @@ const DEFAULT_AI_FACTOR_CONFIGS = [
     lagMinutes: 0,
     value: 0,
     source: 'manual',
+    provider: null,
   },
   {
     code: 'visitor_wave_phase',
@@ -48,6 +52,7 @@ const DEFAULT_AI_FACTOR_CONFIGS = [
     lagMinutes: 15,
     value: 0,
     source: 'derived',
+    provider: 'themeparks_wiki',
   },
 ];
 

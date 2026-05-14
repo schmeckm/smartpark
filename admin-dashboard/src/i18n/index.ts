@@ -13,9 +13,20 @@ export function isAppLocale(code: string | null | undefined): code is AppLocale 
   return Boolean(code && (SUPPORTED_LOCALES as readonly string[]).includes(code))
 }
 
+/** Map `de-DE`, `de_DE`, `DE` → `de` so vue-i18n resolves nested keys (avoids raw `sqdc.*` in UI). */
+export function normalizeToAppLocale(code: string | null | undefined): AppLocale | null {
+  if (code == null || !String(code).trim()) return null
+  const raw = String(code).trim()
+  const lower = raw.toLowerCase()
+  if (isAppLocale(lower)) return lower
+  const base = lower.split(/[-_]/)[0] ?? ''
+  if (isAppLocale(base)) return base
+  return null
+}
+
 export function readStoredLocale(): AppLocale {
   const s = localStorage.getItem(STORAGE_KEY)
-  return isAppLocale(s) ? s : 'en'
+  return normalizeToAppLocale(s) ?? 'en'
 }
 
 export const i18n = createI18n({
@@ -34,6 +45,5 @@ export function setI18nLocale(code: AppLocale) {
 
 /** Prefer server profile when valid; otherwise persisted UI choice. */
 export function resolveLocaleFromUser(languageCode: string | null | undefined): AppLocale {
-  if (isAppLocale(languageCode)) return languageCode
-  return readStoredLocale()
+  return normalizeToAppLocale(languageCode) ?? readStoredLocale()
 }

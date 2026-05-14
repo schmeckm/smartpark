@@ -4,6 +4,9 @@ tags:
   -
     name: Health
   -
+    name: Agent
+    description: 'Phase A agentic co-pilot runs (read-only tools; persisted trace).'
+  -
     name: Audit
   -
     name: Zones

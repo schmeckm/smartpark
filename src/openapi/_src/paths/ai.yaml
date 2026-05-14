@@ -1206,7 +1206,10 @@
     tags:
       - AI
     summary: 'Short textual explanation of park forecast delta'
-    description: 'Needs `ai.read`. Does not return `mlFactorCurrents`.'
+    description: |
+      Needs `ai.read`. Does not return `mlFactorCurrents`. Adds `data.explainability` (`AiExplainabilityMvp`, track `ADR_FORECAST`)
+      alongside legacy fields. Each `featureContributions[].source` is one of the canonical contribution-source enum values
+      (`baseline_integration`, `x_layer_heuristic`, `enterprise_ml`, `snapshot`, `ridge_model`, `baseline_rule`, `ai_studio`, `unknown`).
     parameters:
       -
         in: path
@@ -1231,13 +1234,51 @@
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                success:
-                  type: boolean
-                data:
-                  type: object
-                  additionalProperties: true
+              $ref: '#/components/schemas/EnvelopeForecastExplanation'
+'/ai/entities/{externalEntityId}/forecast/explanation':
+  get:
+    tags:
+      - AI
+    summary: 'Entity (ride) forecast explanation + normalized explainability'
+    description: |
+      Needs `ai.read`. Same query params as entity forecast summary. Returns legacy explanation fields plus `data.explainability`
+      (`AiExplainabilityMvp`). `featureContributions[].source` uses the canonical contribution-source enum (`AiExplainabilityContributionSource`).
+    parameters:
+      -
+        in: path
+        name: externalEntityId
+        required: true
+        schema:
+          type: string
+      -
+        in: query
+        name: externalParkId
+        required: true
+        schema:
+          type: string
+      -
+        in: query
+        name: provider
+        schema:
+          type: string
+      -
+        in: query
+        name: entityType
+        schema:
+          type: string
+      -
+        in: query
+        name: horizon
+        schema:
+          type: integer
+          default: 60
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeForecastExplanation'
 '/ai/entities/{externalEntityId}/forecast/summary':
   get:
     tags:
@@ -1483,6 +1524,9 @@
     description: |
       Canonical mount under `/ai/ml/*` (Phase B5). Needs `ai.read` and `X-Park-Id`. Falls back to
       baseline when no model is trained. Identical handler to the deprecated `/ml/predict/rides/{rideId}`.
+      By default, response `data` is the legacy prediction payload. Add `?explain=1` (or `?explain=true`)
+      to include optional `data.explanation` (`AiExplainabilityMvp`, track `RIDGE_RIDE_WAIT`). Each
+      `featureContributions[].source` is an `AiExplainabilityContributionSource` enum value.
     parameters:
       -
         in: path
@@ -1499,6 +1543,21 @@
           type: string
           example: 1530
         description: 'Comma-separated horizons in minutes'
+      -
+        in: query
+        name: explain
+        schema:
+          oneOf:
+            -
+              type: boolean
+            -
+              type: string
+              enum:
+                - '1'
+                - '0'
+                - 'true'
+                - 'false'
+        description: 'Optional explainability gate. `1`/`true` includes `data.explanation`; omitted or `0`/`false` returns legacy prediction payload only.'
     responses:
       '200':
         description: OK
@@ -1647,3 +1706,283 @@
           application/json:
             schema:
               $ref: '#/components/schemas/EnvelopeMlTrainRideResult'
+'/ai/ml/prediction-traces':
+  get:
+    tags:
+      - AI
+    summary: 'List ML prediction traces for the current park (Phase 1 observability)'
+    description: |
+      **Read-only.** Governed feature snapshots only; requires `ai.read` and `X-Park-Id`. Results are limited to the
+      authenticated park. Populated only when `ML_TRACE_ENABLED=true` on the API process; does not affect predictions.
+    parameters:
+      -
+        in: query
+        name: rideId
+        schema:
+          type: string
+          format: uuid
+        description: 'Filter by ride asset_id'
+      -
+        in: query
+        name: modelName
+        schema:
+          type: string
+      -
+        in: query
+        name: targetName
+        schema:
+          type: string
+      -
+        in: query
+        name: from
+        schema:
+          type: string
+          format: date-time
+      -
+        in: query
+        name: to
+        schema:
+          type: string
+          format: date-time
+      -
+        in: query
+        name: limit
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 500
+          default: 50
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeMlPredictionTraces'
+'/ai/ml/prediction-traces/filter-options':
+  get:
+    tags:
+      - AI
+    summary: 'Distinct model_name and target_name values for trace list filters (current park)'
+    description: |
+      **Read-only.** Alphabetically sorted distinct values from `ml_prediction_traces` for the authenticated park
+      (`X-Park-Id`). Omits null/empty names. Does not depend on `ML_TRACE_ENABLED` for reads (returns empty arrays when
+      no rows exist).
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeMlPredictionTraceFilterOptions'
+'/ai/ml/prediction-traces/{predictionId}':
+  get:
+    tags:
+      - AI
+    summary: 'Get one prediction trace and per-horizon results by prediction_id UUID'
+    description: |
+      **Read-only.** Includes `trace` and `results` (per horizon). Requires `ai.read` and `X-Park-Id`; 404 if missing or not in current park.
+    parameters:
+      -
+        in: path
+        name: predictionId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeMlPredictionTraceDetail'
+      '404':
+        description: Not found
+'/ai/ml/forecast-accuracy/kpis':
+  get:
+    tags:
+      - AI
+    summary: 'Forecast accuracy KPIs (observational)'
+    description: |
+      **Read-only.** Aggregates `ml_forecast_accuracy_logs` for the current park; compares past `ml_prediction_results`
+      to governed `ride_feature_snapshots_5m` at prediction time + horizon. Does not alter forecasts or training.
+    parameters:
+      -
+        in: query
+        name: rideId
+        schema:
+          type: string
+          format: uuid
+      -
+        in: query
+        name: modelName
+        schema:
+          type: string
+      -
+        in: query
+        name: targetName
+        schema:
+          type: string
+      -
+        in: query
+        name: horizonMinutes
+        schema:
+          type: integer
+          minimum: 0
+          maximum: 1440
+      -
+        in: query
+        name: from
+        schema:
+          type: string
+          format: date-time
+      -
+        in: query
+        name: to
+        schema:
+          type: string
+          format: date-time
+      -
+        in: query
+        name: comparableOnly
+        schema:
+          type: boolean
+        description: 'When true, restrict aggregates to rows with a usable actual (OK/WARNING/CRITICAL only).'
+    responses:
+      '200':
+        description: OK
+'/ai/ml/forecast-accuracy/{id}':
+  get:
+    tags:
+      - AI
+    summary: 'Get one forecast accuracy log row'
+    description: '**Read-only.** Scoped to current park (`X-Park-Id`).'
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: OK
+      '404':
+        description: Not found
+'/ai/ml/forecast-accuracy':
+  get:
+    tags:
+      - AI
+    summary: 'List forecast accuracy evaluation logs'
+    description: |
+      **Read-only.** Observational accuracy rows derived from prediction traces and governed snapshots only.
+    parameters:
+      -
+        in: query
+        name: rideId
+        schema:
+          type: string
+          format: uuid
+      -
+        in: query
+        name: modelName
+        schema:
+          type: string
+      -
+        in: query
+        name: targetName
+        schema:
+          type: string
+      -
+        in: query
+        name: horizonMinutes
+        schema:
+          type: integer
+          minimum: 0
+          maximum: 1440
+      -
+        in: query
+        name: from
+        schema:
+          type: string
+          format: date-time
+      -
+        in: query
+        name: to
+        schema:
+          type: string
+          format: date-time
+      -
+        in: query
+        name: comparableOnly
+        schema:
+          type: boolean
+        description: 'When true, only list rows that have comparable predicted vs actual (excludes UNKNOWN).'
+      -
+        in: query
+        name: limit
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 500
+    responses:
+      '200':
+        description: OK
+'/ai/ml/feature-store-readiness':
+  get:
+    tags:
+      - AI
+    summary: 'Feature store readiness (ride_feature_snapshots_5m)'
+    description: |
+      **Read-only.** Aggregates AI sampling / pipeline health and ride snapshot aggregates for `X-Park-Id`.
+      Optional `from` / `to` (ISO-8601) default to the trailing 7 days; optional `rideId` scopes to one ride.
+      Does **not** mutate forecasts or snapshots.
+    parameters:
+      - in: query
+        name: rideId
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: from
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: to
+        schema:
+          type: string
+          format: date-time
+    responses:
+      '200':
+        description: OK
+      '422':
+        description: Invalid date range
+'/ai/ml/feature-store-snapshot-debug':
+  get:
+    tags:
+      - AI
+    summary: 'Ride snapshot SQL-style debug (counts + latest rows)'
+    description: |
+      **Read-only.** For the active park and **required** `rideId`, returns rolling-window counts on `ride_feature_snapshots_5m`
+      and the latest snapshot rows (bounded). Does not change data.
+    parameters:
+      - in: query
+        name: rideId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: windowHours
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 72
+          default: 2
+    responses:
+      '200':
+        description: OK
+      '422':
+        description: Missing or invalid rideId / window

@@ -1,20 +1,29 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, shallowRef } from 'vue'
+import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { io, type Socket } from 'socket.io-client'
 import RecommendationAiSection from '@/components/RecommendationAiSection.vue'
+import RideAiExplainabilityCard from '@/components/RideAiExplainabilityCard.vue'
 import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/auth'
 import {
   getAiFactorConfigs,
   getCanonicalMessages,
+  getEntityForecastExplanation,
   getIntegrationSettings,
+  getMlGlobalFactors,
+  getMlParkFactors,
   getParkForecastSummary,
+  patchMlParkFactors,
   patchIntegrationSettings,
   type AiFactorConfig,
+  type MlGlobalFactorRow,
+  type MlParkFactorRow,
   type ParkForecastSummary,
+  type PredictionExplainability,
 } from '@/api/client'
+import { getApiParkContextId } from '@/utils/apiParkContext'
 
 const { t } = useI18n()
 const { push: toast } = useToast()
@@ -27,23 +36,124 @@ const apiOrigin = import.meta.env.VITE_API_URL || undefined
 const extraSocket = shallowRef<Socket | null>(null)
 const selectedExternalParkName = ref<string>('')
 const selectedExternalParkId = ref<string>('')
+const selectedProvider = ref<string>('themeparks_wiki')
 const parkForecast = ref<ParkForecastSummary | null>(null)
 const parkLoading = ref(false)
 const parkForecastSource = ref<'selected' | 'auto' | 'none'>('none')
 const externalLiveRows = ref<
   Array<{ id: string; name: string; waitTime: number | null; status: string | null; isOpen: boolean | null }>
 >([])
+const selectedExplainEntityId = ref<string>('')
+const selectedExplainability = ref<PredictionExplainability | null>(null)
+const explainabilityLoading = ref(false)
+const explainabilityError = ref<string | null>(null)
 
 const aiForecastFactors = ref<AiFactorConfig[]>([])
 const aiFactorsLoading = ref(false)
+const showHubNav = ref(false)
+const showAllFactors = ref(false)
+const showLiveAttractions = ref(false)
+const currentFlowStep = ref<'input' | 'forecast' | 'result'>('input')
+
+const primaryFactors = computed(() => (showAllFactors.value ? aiForecastFactors.value : aiForecastFactors.value.slice(0, 6)))
+const hiddenFactorCount = computed(() => Math.max(0, aiForecastFactors.value.length - primaryFactors.value.length))
+const parkContextId = computed(() => getApiParkContextId())
+const dynamicParkMode = computed(() => Boolean(parkContextId.value))
+type ProviderSettings = { provider?: string }
+type ParkSettings = { externalParkId?: string; parkName?: string }
+type LiveRow = { id: string; name: string; waitTime: number | null; status: string | null; isOpen: boolean | null }
+
+const FACTOR_SOURCE_OVERRIDES: Record<string, { source: 'adapter' | 'manual' | 'derived'; provider: string | null }> = {
+  weather_rain: { source: 'adapter', provider: 'weather_open_meteo' },
+  holiday_index: { source: 'adapter', provider: 'calendar_school_holidays' },
+}
+
+function asRec(row: Record<string, unknown> | null | undefined): Record<string, unknown> {
+  return row && typeof row === 'object' ? row : {}
+}
+
+function sourceFromType(v: unknown): 'manual' | 'adapter' | 'derived' {
+  const t = String(v || '').toUpperCase()
+  if (t.includes('DERIV')) return 'derived'
+  if (t.includes('ADAPTER') || t.includes('MQTT') || t.includes('CANON')) return 'adapter'
+  return 'manual'
+}
+
+function sourceTypeFromSource(v: string | null | undefined): string {
+  if (v === 'derived') return 'DERIVED'
+  if (v === 'adapter') return 'ADAPTER'
+  return 'MANUAL'
+}
+
+function normalizeFactorRow(f: AiFactorConfig): AiFactorConfig {
+  const override = FACTOR_SOURCE_OVERRIDES[f.code]
+  return override ? { ...f, source: override.source, provider: override.provider } : f
+}
+
+function mapDynamicRows(globalRows: MlGlobalFactorRow[], parkRows: MlParkFactorRow[]): AiFactorConfig[] {
+  const parkByCode = new Map<string, Record<string, unknown>>()
+  for (const p of parkRows) {
+    const pr = asRec(p as Record<string, unknown>)
+    const code = String(pr.factorCode ?? pr.factor_code ?? '').trim()
+    if (code) parkByCode.set(code, pr)
+  }
+  const out: AiFactorConfig[] = []
+  const seen = new Set<string>()
+  for (const g of globalRows) {
+    const gr = asRec(g as Record<string, unknown>)
+    const code = String(gr.factorCode ?? gr.factor_code ?? '').trim()
+    if (!code) continue
+    seen.add(code)
+    const pr = parkByCode.get(code) || {}
+    const sourceType = pr.sourceType ?? pr.source_type ?? gr.sourceType ?? gr.source_type
+    out.push(
+      normalizeFactorRow({
+        code,
+        label: String(gr.factorName ?? gr.factor_name ?? code),
+        enabled: (pr.activeFlag ?? pr.active_flag ?? gr.activeFlag ?? gr.active_flag) !== false,
+        scope: 'PARK',
+        weight: Number(pr.weightOverride ?? pr.weight_override ?? gr.weight ?? 1),
+        lagMinutes: Number(gr.lagMinutes ?? gr.lag_minutes ?? 0),
+        value: Number(pr.currentValue ?? pr.current_value ?? gr.currentValue ?? gr.current_value ?? gr.defaultValue ?? gr.default_value ?? 0),
+        source: sourceFromType(sourceType),
+        provider: String(pr.provider ?? gr.provider ?? '') || null,
+      })
+    )
+  }
+  for (const p of parkRows) {
+    const pr = asRec(p as Record<string, unknown>)
+    const code = String(pr.factorCode ?? pr.factor_code ?? '').trim()
+    if (!code || seen.has(code)) continue
+    out.push(
+      normalizeFactorRow({
+        code,
+        label: code,
+        enabled: (pr.activeFlag ?? pr.active_flag) !== false,
+        scope: 'PARK',
+        weight: Number(pr.weightOverride ?? pr.weight_override ?? 1),
+        lagMinutes: 0,
+        value: Number(pr.currentValue ?? pr.current_value ?? 0),
+        source: sourceFromType(pr.sourceType ?? pr.source_type),
+        provider: String(pr.provider ?? '') || null,
+      })
+    )
+  }
+  return out
+}
 
 async function loadAiFactors() {
   aiFactorsLoading.value = true
   try {
+    if (dynamicParkMode.value && parkContextId.value) {
+      const [globals, parkRows] = await Promise.all([getMlGlobalFactors(), getMlParkFactors(parkContextId.value)])
+      aiForecastFactors.value = mapDynamicRows(globals, parkRows)
+      return
+    }
     const s = await getIntegrationSettings()
-    aiForecastFactors.value = Array.isArray((s.aiForecastFactors as unknown[] | undefined))
+    const raw = Array.isArray((s.aiForecastFactors as unknown[] | undefined))
       ? ((s.aiForecastFactors as AiFactorConfig[]) || [])
       : await getAiFactorConfigs()
+    aiForecastFactors.value = raw.map((f) => normalizeFactorRow(f))
   } catch (e) {
     toast(e instanceof Error ? e.message : 'Failed to load forecast factors', 'error')
     aiForecastFactors.value = []
@@ -58,6 +168,21 @@ async function saveAiFactors() {
     return
   }
   try {
+    if (dynamicParkMode.value && parkContextId.value) {
+      await patchMlParkFactors(parkContextId.value, {
+        factors: aiForecastFactors.value.map((f) => ({
+          factorCode: f.code,
+          weightOverride: Number(f.weight),
+          currentValue: Number(f.value),
+          activeFlag: Boolean(f.enabled),
+          sourceType: sourceTypeFromSource(f.source),
+          provider: f.provider || null,
+        })),
+      })
+      toast('Park factors saved', 'success')
+      await loadAiFactors()
+      return
+    }
     await patchIntegrationSettings({
       aiForecastFactors: aiForecastFactors.value.map((f) => ({
         ...f,
@@ -71,6 +196,75 @@ async function saveAiFactors() {
   } catch (e) {
     toast(e instanceof Error ? e.message : 'Failed to save factors', 'error')
   }
+}
+
+function readParkContext(settings: Record<string, unknown>) {
+  const park = (settings.selectedPark as ParkSettings | undefined) || {}
+  const provider = ((settings.selectedProvider as ProviderSettings | undefined)?.provider || 'themeparks_wiki').trim()
+  return {
+    provider,
+    externalParkId: park.externalParkId || '',
+    parkName: park.parkName || park.externalParkId || '',
+  }
+}
+
+async function resolveFallbackParkId(provider: string) {
+  const latest = await getCanonicalMessages({
+    provider,
+    messageType: 'WAIT_TIME_UPDATED',
+    limit: 1,
+  })
+  const fallback = latest[0]
+  if (!fallback?.externalParkId) return null
+  return {
+    externalParkId: fallback.externalParkId,
+    parkName: `Auto (${fallback.externalParkId.slice(0, 8)}...)`,
+  }
+}
+
+async function loadLiveRows(externalParkId: string, provider: string): Promise<LiveRow[]> {
+  const messages = await getCanonicalMessages({
+    provider,
+    externalParkId,
+    messageType: 'WAIT_TIME_UPDATED',
+    limit: 500,
+  })
+  const byEntity = new Map<string, LiveRow>()
+  for (const msg of messages) {
+    if (!msg.externalEntityId) continue
+    const payload = (msg.payload || {}) as Record<string, unknown>
+    byEntity.set(msg.externalEntityId, {
+      id: msg.externalEntityId,
+      name: typeof payload.externalEntityName === 'string' ? payload.externalEntityName : msg.externalEntityId,
+      waitTime: typeof payload.waitTime === 'number' ? payload.waitTime : null,
+      status: typeof payload.status === 'string' ? payload.status : null,
+      isOpen: typeof payload.isOpen === 'boolean' ? payload.isOpen : null,
+    })
+  }
+  return [...byEntity.values()]
+}
+
+function clearForecastState() {
+  parkForecast.value = null
+  parkForecastSource.value = 'none'
+  externalLiveRows.value = []
+}
+
+function sourceLabel(source: string | null | undefined) {
+  if (source === 'derived') return 'Calculated'
+  if (source === 'adapter') return 'Adapter/MQTT'
+  return 'Manual'
+}
+
+function sourceProvider(provider: string | null | undefined, source: string | null | undefined) {
+  if (source !== 'adapter') return ''
+  return String(provider || 'adapter_provider')
+}
+
+function sourceClass(source: string | null | undefined) {
+  if (source === 'derived') return 'border-fuchsia-700/50 bg-fuchsia-950/20 text-fuchsia-200'
+  if (source === 'adapter') return 'border-emerald-700/50 bg-emerald-950/20 text-emerald-200'
+  return 'border-amber-700/50 bg-amber-950/20 text-amber-200'
 }
 
 function connectExtraAiSocket() {
@@ -110,55 +304,73 @@ const externalLiveSummary = {
 async function loadSelectedParkForecast() {
   parkLoading.value = true
   try {
-    const settings = await getIntegrationSettings()
-    const park = (settings.selectedPark as { externalParkId?: string; parkName?: string } | undefined) || {}
-    const provider = (settings.selectedProvider as { provider?: string } | undefined)?.provider || 'themeparks_wiki'
-    selectedExternalParkId.value = park.externalParkId || ''
-    selectedExternalParkName.value = park.parkName || park.externalParkId || ''
+    const settings = (await getIntegrationSettings()) as Record<string, unknown>
+    const context = readParkContext(settings)
+    const provider = context.provider
+    selectedProvider.value = provider
+    selectedExternalParkId.value = context.externalParkId
+    selectedExternalParkName.value = context.parkName
     parkForecastSource.value = selectedExternalParkId.value ? 'selected' : 'none'
+
     if (!selectedExternalParkId.value) {
-      const latest = await getCanonicalMessages({
-        provider,
-        messageType: 'WAIT_TIME_UPDATED',
-        limit: 1,
-      })
-      const fallback = latest[0]
-      if (fallback?.externalParkId) {
+      const fallback = await resolveFallbackParkId(provider)
+      if (fallback) {
         selectedExternalParkId.value = fallback.externalParkId
-        selectedExternalParkName.value = `Auto (${fallback.externalParkId.slice(0, 8)}...)`
+        selectedExternalParkName.value = fallback.parkName
         parkForecastSource.value = 'auto'
       }
     }
+
     if (!selectedExternalParkId.value) {
-      parkForecast.value = null
-      parkForecastSource.value = 'none'
-      externalLiveRows.value = []
+      clearForecastState()
       return
     }
+
     parkForecast.value = await getParkForecastSummary(selectedExternalParkId.value, provider)
-    const messages = await getCanonicalMessages({
-      provider,
-      externalParkId: selectedExternalParkId.value,
-      messageType: 'WAIT_TIME_UPDATED',
-      limit: 500,
-    })
-    const byEntity = new Map<string, { id: string; name: string; waitTime: number | null; status: string | null; isOpen: boolean | null }>()
-    for (const msg of messages) {
-      if (!msg.externalEntityId) continue
-      const payload = (msg.payload || {}) as Record<string, unknown>
-      byEntity.set(msg.externalEntityId, {
-        id: msg.externalEntityId,
-        name: typeof payload.externalEntityName === 'string' ? payload.externalEntityName : msg.externalEntityId,
-        waitTime: typeof payload.waitTime === 'number' ? payload.waitTime : null,
-        status: typeof payload.status === 'string' ? payload.status : null,
-        isOpen: typeof payload.isOpen === 'boolean' ? payload.isOpen : null,
-      })
+    externalLiveRows.value = await loadLiveRows(selectedExternalParkId.value, provider)
+    if (!externalLiveRows.value.length) {
+      selectedExplainEntityId.value = ''
+      selectedExplainability.value = null
+      explainabilityError.value = null
+      return
     }
-    externalLiveRows.value = [...byEntity.values()]
+    if (!selectedExplainEntityId.value || !externalLiveRows.value.some((x) => x.id === selectedExplainEntityId.value)) {
+      selectedExplainEntityId.value = externalLiveRows.value[0].id
+    }
+    await loadSelectedEntityExplainability()
   } catch (e) {
     toast(e instanceof Error ? e.message : 'Failed to load selected park forecast', 'error')
   } finally {
     parkLoading.value = false
+  }
+}
+
+const selectedExplainEntityName = computed(() => {
+  if (!selectedExplainEntityId.value) return ''
+  const row = externalLiveRows.value.find((x) => x.id === selectedExplainEntityId.value)
+  return row ? row.name : selectedExplainEntityId.value
+})
+
+async function loadSelectedEntityExplainability() {
+  if (!selectedExternalParkId.value || !selectedExplainEntityId.value) {
+    selectedExplainability.value = null
+    explainabilityError.value = null
+    return
+  }
+  explainabilityLoading.value = true
+  explainabilityError.value = null
+  try {
+    const data = await getEntityForecastExplanation(selectedExplainEntityId.value, {
+      externalParkId: selectedExternalParkId.value,
+      provider: selectedProvider.value,
+      horizon: 60,
+    })
+    selectedExplainability.value = data.explainability ?? null
+  } catch (e) {
+    selectedExplainability.value = null
+    explainabilityError.value = e instanceof Error ? e.message : 'Failed to load explainability'
+  } finally {
+    explainabilityLoading.value = false
   }
 }
 
@@ -173,6 +385,11 @@ onUnmounted(() => {
   extraSocket.value?.disconnect()
   extraSocket.value = null
 })
+
+watch(selectedExplainEntityId, () => {
+  if (!selectedExplainEntityId.value) return
+  void loadSelectedEntityExplainability()
+})
 </script>
 
 <template>
@@ -180,18 +397,79 @@ onUnmounted(() => {
     <header class="space-y-2">
       <h1 class="font-display text-xl font-semibold text-white">AI insights</h1>
       <p class="max-w-3xl text-sm text-slate-400">
-        Baseline crowd forecasts, scored recommendations, and tuning knobs on this page.
-        Subpages cover grids, timeseries, accuracy, ML profiles, and data quality.
+        Process flow: input parameters (X) are configured first, then transformed into forecast and scoring results (Y).
       </p>
     </header>
 
     <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-      <h2 class="text-base font-semibold text-white">{{ t('aiHub.title') }}</h2>
-      <p class="mt-1 text-xs text-slate-500">{{ t('aiHub.navIntro') }}</p>
-      <p class="mt-2 text-[11px] text-slate-600">{{ t('aiHub.adrHint') }}</p>
+      <h2 class="text-base font-semibold text-white">X to Y process</h2>
+      <p class="mt-1 text-xs text-slate-500">The page follows one direction: define X, compute, validate, produce Y.</p>
+      <div class="mt-3 rounded-lg border border-brand-700/40 bg-brand-950/20 p-3 text-xs text-brand-100">
+        <span class="font-semibold">Input X:</span> factor values, scope, lag, park context
+        <span class="mx-2 text-brand-300">→</span>
+        <span class="font-semibold">Model step:</span> forecast engine
+        <span class="mx-2 text-brand-300">→</span>
+        <span class="font-semibold">Output Y:</span> crowd/forecast/confidence + recommendation scores
+      </div>
+      <div class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+          <p class="text-[11px] uppercase tracking-wide text-slate-500">Step 1</p>
+          <p class="mt-1 text-sm font-medium text-slate-100">Input X: configure factors</p>
+        </div>
+        <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+          <p class="text-[11px] uppercase tracking-wide text-slate-500">Step 2</p>
+          <p class="mt-1 text-sm font-medium text-slate-100">Commit X to model config</p>
+        </div>
+        <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+          <p class="text-[11px] uppercase tracking-wide text-slate-500">Step 3</p>
+          <p class="mt-1 text-sm font-medium text-slate-100">Preview output Y (forecast)</p>
+        </div>
+        <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+          <p class="text-[11px] uppercase tracking-wide text-slate-500">Step 4</p>
+          <p class="mt-1 text-sm font-medium text-slate-100">Finalize output Y (scoring)</p>
+        </div>
+      </div>
+      <div class="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-800 pt-4">
+        <button
+          type="button"
+          class="rounded-md px-3 py-1.5 text-xs"
+          :class="currentFlowStep === 'input' ? 'bg-brand-600 text-white' : 'border border-slate-700 text-slate-200'"
+          @click="currentFlowStep = 'input'"
+        >
+          1) Input X
+        </button>
+        <span class="text-slate-500">→</span>
+        <button
+          type="button"
+          class="rounded-md px-3 py-1.5 text-xs"
+          :class="currentFlowStep === 'forecast' ? 'bg-brand-600 text-white' : 'border border-slate-700 text-slate-200'"
+          @click="currentFlowStep = 'forecast'"
+        >
+          2) Forecast Y
+        </button>
+        <span class="text-slate-500">→</span>
+        <button
+          type="button"
+          class="rounded-md px-3 py-1.5 text-xs"
+          :class="currentFlowStep === 'result' ? 'bg-brand-600 text-white' : 'border border-slate-700 text-slate-200'"
+          @click="currentFlowStep = 'result'"
+        >
+          3) Ergebnis Y
+        </button>
+      </div>
+      <button
+        type="button"
+        class="mt-4 text-xs text-brand-400 hover:text-brand-300"
+        @click="showHubNav = !showHubNav"
+      >
+        {{ showHubNav ? 'Hide tools & subpages' : 'Show tools & subpages' }}
+      </button>
 
-      <div class="mt-4 grid gap-3 sm:grid-cols-3">
-        <div class="rounded-lg border border-slate-800 bg-slate-950/50 p-3">
+      <div v-if="showHubNav" class="mt-4 grid gap-3 sm:grid-cols-3">
+        <div
+          v-if="currentFlowStep === 'forecast'"
+          class="rounded-lg border border-slate-800 bg-slate-950/50 p-3"
+        >
           <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{{ t('aiHub.groupForecasts') }}</p>
           <ul class="mt-2 space-y-2 text-sm">
             <li>
@@ -205,46 +483,64 @@ onUnmounted(() => {
             </li>
           </ul>
         </div>
-        <div class="rounded-lg border border-slate-800 bg-slate-950/50 p-3">
+        <div
+          v-if="currentFlowStep === 'input'"
+          class="rounded-lg border border-brand-700/50 bg-brand-950/20 p-3"
+        >
           <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{{ t('aiHub.groupMl') }}</p>
           <ul class="mt-2 space-y-2 text-sm">
             <li>
-              <RouterLink class="text-brand-400 hover:text-brand-300" to="/ai-insights/ml-global-factors">{{ t('aiMl.navGlobal') }}</RouterLink>
+              <RouterLink class="text-brand-400 hover:text-brand-300" to="/ai-insights/ml-global-factors">
+                {{ t('aiHub.navMlGlobalCatalog') }}
+              </RouterLink>
             </li>
             <li>
-              <RouterLink class="text-brand-400 hover:text-brand-300" to="/ai-insights/ml-park-factors">{{ t('aiMl.navPark') }}</RouterLink>
+              <RouterLink class="text-brand-400 hover:text-brand-300" to="/ai-insights/ml-park-factors">
+                {{ t('aiHub.navMlParkWeights') }}
+              </RouterLink>
             </li>
             <li>
-              <RouterLink class="text-brand-400 hover:text-brand-300" to="/ai-insights/ml-profiles">{{ t('aiMl.navProfiles') }}</RouterLink>
+              <RouterLink class="text-brand-400 hover:text-brand-300" to="/ai-insights/ml-profiles">
+                {{ t('aiHub.navMlProfiles') }}
+              </RouterLink>
             </li>
           </ul>
         </div>
-        <div class="rounded-lg border border-slate-800 bg-slate-950/50 p-3">
+        <div
+          v-if="currentFlowStep === 'result'"
+          class="rounded-lg border border-slate-800 bg-slate-950/50 p-3"
+        >
           <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{{ t('aiHub.groupData') }}</p>
+          <p class="mt-1 text-[11px] text-slate-500">{{ t('aiHub.resultFeatureStoreBlurb') }}</p>
           <ul class="mt-2 space-y-2 text-sm">
             <li>
-              <RouterLink class="text-brand-400 hover:text-brand-300" to="/ai-insights/feature-store-monitor">{{ t('aiMl.navMonitor') }}</RouterLink>
+              <RouterLink class="text-brand-400 hover:text-brand-300" to="/ai-insights/feature-store-monitor">
+                {{ t('aiHub.resultFeatureStoreLink') }}
+              </RouterLink>
             </li>
             <li>
               <RouterLink class="text-brand-400 hover:text-brand-300" to="/ai-insights/data-quality">{{ t('aiDq.title') }}</RouterLink>
             </li>
             <li>
-              <RouterLink class="font-medium text-brand-300 hover:text-white" to="/ai-insights/studio">{{ t('menu.aiStudio') }}</RouterLink>
+              <RouterLink class="font-medium text-brand-300 hover:text-white" to="/ai-insights/studio">{{ t('menu.aiModelsTraining') }}</RouterLink>
             </li>
           </ul>
         </div>
       </div>
 
-      <div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-4 text-sm">
+      <div v-if="showHubNav" class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-4 text-sm">
         <a href="#recommendations-engine" class="text-brand-400 hover:text-brand-300">{{ t('aiHub.recLink') }}</a>
-        <RouterLink to="/" class="text-xs text-slate-500 hover:text-slate-300">{{ t('aiHub.opsDash') }}</RouterLink>
+        <div class="max-w-xl text-right text-[11px] leading-snug text-slate-500">
+          <RouterLink to="/" class="text-slate-400 hover:text-slate-300">{{ t('aiHub.opsDash') }}</RouterLink>
+          <p class="mt-1">{{ t('aiHub.zoneHotspotSummaryHint') }}</p>
+        </div>
       </div>
     </section>
 
-    <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+    <section v-if="currentFlowStep === 'input'" class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
       <div class="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 class="text-base font-semibold text-white">{{ t('aiHub.factorSectionTitle') }}</h2>
+          <h2 class="text-base font-semibold text-white">Step 1–2: Input parameters (X)</h2>
           <p class="mt-1 text-xs text-slate-500">
             Stored in integration settings; they tune how external signals (weather, crowds, etc.) feed the forecast model. Park
             context comes from
@@ -264,6 +560,63 @@ onUnmounted(() => {
       <p v-if="!canManageIntegrations()" class="mt-2 text-xs text-amber-200/90">
         View only: saving requires the <span class="font-mono">integrations</span> · <span class="font-mono">manage</span> permission.
       </p>
+      <p class="mt-2 text-xs text-slate-500">
+        Default view shows the most relevant factors first. Expand only when you need detailed tuning.
+      </p>
+      <p class="mt-1 text-xs text-slate-500">
+        After saving, the system applies X to forecasting and generates output Y in the next section.
+      </p>
+      <p class="mt-1 text-xs text-slate-500">
+        Enduser-Logik: Step A = X anlegen + Datenquelle, Step B = X fuer den aktuellen Prozess gewichten.
+      </p>
+      <div class="mt-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+        <p class="text-xs font-semibold text-slate-200">Step A — X-Faktor anlegen & Datenquelle zuweisen</p>
+        <p class="mt-1 text-xs text-slate-500">
+          Neue X-Faktoren zuerst im Katalog anlegen (global oder entity-spezifisch). Dort wird auch die Datenquelle definiert.
+        </p>
+        <div class="mt-2 flex flex-wrap gap-2">
+          <RouterLink
+            to="/ai-insights/ml-global-factors"
+            class="inline-block rounded border border-brand-600/60 px-2 py-1 text-xs text-brand-300 hover:border-brand-400 hover:text-brand-200"
+          >
+            {{ t('aiHub.stepAaddGlobalFactor') }}
+          </RouterLink>
+          <RouterLink
+            to="/ai-insights/ml-profiles"
+            class="inline-block rounded border border-slate-600 px-2 py-1 text-xs text-slate-200 hover:border-slate-400 hover:text-white"
+          >
+            {{ t('aiHub.stepAprofiles') }}
+          </RouterLink>
+          <RouterLink
+            to="/ai-insights/ml-park-factors"
+            class="inline-block rounded border border-slate-600 px-2 py-1 text-xs text-slate-200 hover:border-slate-400 hover:text-white"
+          >
+            {{ t('aiHub.stepAparOverrides') }}
+          </RouterLink>
+        </div>
+        <div class="mt-3 flex flex-wrap gap-2 text-[11px]">
+          <span class="rounded border border-emerald-700/50 bg-emerald-950/20 px-2 py-0.5 text-emerald-200">
+            Adapter/MQTT: adapter emits to MQTT topics, then Canonical Message Model
+          </span>
+          <span class="rounded border border-amber-700/50 bg-amber-950/20 px-2 py-0.5 text-amber-200">
+            Manual: set by user/config
+          </span>
+          <span class="rounded border border-fuchsia-700/50 bg-fuchsia-950/20 px-2 py-0.5 text-fuchsia-200">
+            Calculated: derived by system logic
+          </span>
+        </div>
+      </div>
+      <div class="mt-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+        <p class="text-xs font-semibold text-slate-200">Step B — Input X gewichten (für den aktuellen Prozess)</p>
+        <p class="mt-1 text-xs text-slate-500">
+          Hier aktivierst du vorhandene Faktoren und definierst Gewichtung, Scope, Lag und Wert für die Berechnung.
+        </p>
+        <div class="mt-2 flex flex-wrap gap-2 text-[11px]">
+          <span class="rounded border border-slate-700 px-2 py-0.5 text-slate-300">PARK = parkweit</span>
+          <span class="rounded border border-slate-700 px-2 py-0.5 text-slate-300">ENTITY_TYPE = z. B. alle Rides</span>
+          <span class="rounded border border-slate-700 px-2 py-0.5 text-slate-300">ENTITY = einzelnes Fahrgeschäft</span>
+        </div>
+      </div>
       <div v-if="aiFactorsLoading" class="mt-3 text-xs text-slate-400">Loading factors…</div>
       <div v-else class="mt-3 overflow-auto">
         <table class="min-w-full text-xs">
@@ -279,7 +632,7 @@ onUnmounted(() => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="f in aiForecastFactors" :key="f.code" class="border-t border-slate-800">
+            <tr v-for="f in primaryFactors" :key="f.code" class="border-t border-slate-800">
               <td class="px-2 py-1">
                 <input v-model="f.enabled" type="checkbox" :disabled="!canManageIntegrations()" />
               </td>
@@ -322,11 +675,32 @@ onUnmounted(() => {
                   step="0.05"
                   min="-1"
                   max="1"
-                  :disabled="f.source === 'derived' || !canManageIntegrations()"
+                  :disabled="f.source === 'derived' || f.source === 'adapter' || !canManageIntegrations()"
                   class="w-20 rounded border border-slate-700 bg-slate-950 px-2 py-1 disabled:opacity-50"
                 />
               </td>
-              <td class="px-2 py-1 text-slate-400">{{ f.source }}</td>
+              <td class="px-2 py-1">
+                <span class="rounded border px-2 py-0.5 text-[11px]" :class="sourceClass(f.source)">
+                  {{ sourceLabel(f.source) }}<template v-if="f.source === 'adapter'"> ({{ sourceProvider(f.provider, f.source) }})</template>
+                </span>
+                <RouterLink
+                  v-if="f.source === 'adapter'"
+                  :to="{
+                    name: 'adapter-pipeline-log',
+                    query: sourceProvider(f.provider, f.source) ? { adapterKey: sourceProvider(f.provider, f.source) } : {},
+                  }"
+                  class="mt-1 block text-[11px] text-brand-400 hover:text-brand-300"
+                >
+                  Letzte Werte / Laufstatus ansehen
+                </RouterLink>
+                <RouterLink
+                  v-if="f.source === 'adapter' && sourceProvider(f.provider, f.source)"
+                  :to="{ name: 'integration-detail', params: { id: sourceProvider(f.provider, f.source) } }"
+                  class="mt-0.5 block text-[11px] text-slate-300 hover:text-white"
+                >
+                  Adapter konfigurieren (Polling/Config)
+                </RouterLink>
+              </td>
             </tr>
             <tr v-if="!aiForecastFactors.length">
               <td colspan="7" class="px-2 py-3 text-center text-slate-500">No factors configured</td>
@@ -334,12 +708,30 @@ onUnmounted(() => {
           </tbody>
         </table>
       </div>
+      <div v-if="hiddenFactorCount > 0" class="mt-3">
+        <button
+          type="button"
+          class="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-200 hover:border-slate-500"
+          @click="showAllFactors = !showAllFactors"
+        >
+          {{ showAllFactors ? 'Show fewer factors' : `Show all factors (${hiddenFactorCount} more)` }}
+        </button>
+      </div>
+      <div class="mt-4 flex justify-end border-t border-slate-800 pt-3">
+        <button
+          type="button"
+          class="rounded-md bg-brand-600 px-3 py-1.5 text-sm text-white"
+          @click="currentFlowStep = 'forecast'"
+        >
+          Weiter zu Forecast Y →
+        </button>
+      </div>
     </section>
 
-    <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+    <section v-if="currentFlowStep === 'forecast'" class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
       <div class="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 class="text-base font-semibold text-white">{{ t('aiHub.parkSnapshotTitle') }}</h2>
+          <h2 class="text-base font-semibold text-white">Step 3: Forecast output (Y preview)</h2>
           <p class="mt-1 text-xs text-slate-400">
             {{ selectedExternalParkName || 'No park selected in Integrations' }}
           </p>
@@ -416,11 +808,50 @@ onUnmounted(() => {
           </div>
         </div>
 
+        <section v-if="externalLiveRows.length" class="mt-4 rounded-lg border border-slate-800 bg-slate-950/35 p-3">
+          <div class="mb-2 flex flex-wrap items-end gap-2">
+            <h3 class="text-sm font-semibold text-slate-100">Entity explainability</h3>
+            <span class="text-[11px] text-slate-500">Compact ADR explanation for selected external entity.</span>
+          </div>
+          <div class="mb-3 flex flex-wrap items-end gap-2">
+            <label class="text-xs text-slate-400" for="ai-insights-entity-select">Entity</label>
+            <select
+              id="ai-insights-entity-select"
+              v-model="selectedExplainEntityId"
+              class="min-w-[18rem] rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100"
+            >
+              <option v-for="r in externalLiveRows" :key="r.id" :value="r.id">
+                {{ r.name }} ({{ r.id }})
+              </option>
+            </select>
+            <button
+              type="button"
+              class="rounded border border-slate-700 px-2 py-1 text-xs text-slate-200 hover:border-slate-500"
+              @click="loadSelectedEntityExplainability"
+            >
+              Refresh explanation
+            </button>
+          </div>
+          <p v-if="explainabilityError" class="mb-2 text-xs text-rose-300">{{ explainabilityError }}</p>
+          <RideAiExplainabilityCard
+            :title="selectedExplainEntityName ? `ADR forecast — ${selectedExplainEntityName}` : 'ADR forecast'"
+            :payload="selectedExplainability"
+            :loading="explainabilityLoading"
+          />
+        </section>
+
         <div class="mt-8 border-t border-slate-800 pt-6">
           <h3 class="text-sm font-semibold text-white">{{ t('aiHub.parkLiveHeading') }}</h3>
           <p class="mt-1 text-xs text-slate-500">Canonical <span class="font-mono">WAIT_TIME_UPDATED</span> for this external park.</p>
+          <button
+            type="button"
+            class="mt-3 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-200 hover:border-slate-500"
+            @click="showLiveAttractions = !showLiveAttractions"
+          >
+            {{ showLiveAttractions ? 'Hide live attractions' : 'Show live attractions' }}
+          </button>
         </div>
-        <div class="mt-4 space-y-3">
+        <div v-if="showLiveAttractions" class="mt-4 space-y-3">
         <div class="grid gap-3 sm:grid-cols-3">
           <div class="rounded border border-slate-800 bg-slate-950/40 p-3 text-xs text-slate-400">
             Entities <span class="ml-2 text-white">{{ externalLiveSummary.total() }}</span>
@@ -455,11 +886,41 @@ onUnmounted(() => {
         </div>
         </div>
       </template>
+      <div class="mt-4 flex justify-between border-t border-slate-800 pt-3">
+        <button
+          type="button"
+          class="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-200"
+          @click="currentFlowStep = 'input'"
+        >
+          ← Zurück zu Input X
+        </button>
+        <button
+          type="button"
+          class="rounded-md bg-brand-600 px-3 py-1.5 text-sm text-white"
+          @click="currentFlowStep = 'result'"
+        >
+          Weiter zu Ergebnis Y →
+        </button>
+      </div>
     </section>
 
-    <section id="recommendations-engine" class="scroll-mt-6 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-      <h3 class="mb-3 text-base font-semibold text-white">{{ t('aiHub.recSectionTitle') }}</h3>
+    <section
+      v-if="currentFlowStep === 'result'"
+      id="recommendations-engine"
+      class="scroll-mt-6 rounded-xl border border-slate-800 bg-slate-900/60 p-4"
+    >
+      <h3 class="mb-1 text-base font-semibold text-white">Step 4: Final result (Y) — {{ t('aiHub.recSectionTitle') }}</h3>
+      <p class="mb-3 text-xs text-slate-500">Recommendation scores are the final operational output from the X→Y process.</p>
       <RecommendationAiSection ref="scoringSectionRef" />
+      <div class="mt-4 flex justify-start border-t border-slate-800 pt-3">
+        <button
+          type="button"
+          class="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-200"
+          @click="currentFlowStep = 'forecast'"
+        >
+          ← Zurück zu Forecast Y
+        </button>
+      </div>
     </section>
   </div>
 </template>

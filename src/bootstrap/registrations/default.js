@@ -3,7 +3,7 @@
 /**
  * Smart Park OS — default boot registrations (Phase A3).
  *
- * Registers the 12 lifecycle steps that compose the production boot
+ * Registers the default lifecycle steps that compose the production boot
  * sequence. The set is identical to the pre-A3 inline wiring in
  * `server.js`; A3 only relocates the wiring to a dedicated module so
  * `server.js` shrinks to a thin entry point.
@@ -46,7 +46,7 @@ const { getFlags } = require('../feature-flags');
  */
 
 /**
- * Register the 12 default boot steps on `lifecycle`. Returns a tiny
+ * Register the default boot steps on `lifecycle`. Returns a tiny
  * controls object so the caller can introspect the http server (e.g. for
  * tests or a future health endpoint).
  *
@@ -179,6 +179,20 @@ function registerDefaultBoot(lifecycle, ctx) {
   });
 
   lifecycle.register({
+    name: 'influx:ot-metrics-flush',
+    run: () => {
+      return async () => {
+        const { flushInfluxOtWrites } = require('../../services/influx-ot-metrics.service');
+        try {
+          await flushInfluxOtWrites();
+        } catch (e) {
+          logger.warn?.({ err: e?.message }, 'influx ot metrics flush failed');
+        }
+      };
+    },
+  });
+
+  lifecycle.register({
     name: 'mqtt:connector',
     run: () => {
       startMqtt();
@@ -228,6 +242,7 @@ const DEFAULT_BOOT_STEP_ORDER = Object.freeze([
   'scheduler:weather-open-meteo',
   'scheduler:ml-training',
   'http:listen',
+  'influx:ot-metrics-flush',
   'mqtt:connector',
   'sim:oee-auto-start',
 ]);

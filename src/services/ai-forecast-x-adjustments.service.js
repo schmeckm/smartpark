@@ -116,6 +116,7 @@ function applyXLayerToForecast(summary, ctx) {
       forecastDataQualityStatus,
       snapshotCompletenessScore: parkSnap?.completenessScore ?? parkSnap?.completeness_score ?? null,
       snapshotContext,
+      _decomp: { ...(summary._decomp || {}), xLayerDelta15: 0, xLayerDelta60: 0, xLayerFactors: [] },
     };
   }
 
@@ -178,6 +179,10 @@ function applyXLayerToForecast(summary, ctx) {
 
   const forecastDataQualityStatus = dqWarnings.length ? 'WARNING' : 'OK';
 
+  const prevDecomp = summary._decomp || {};
+  const xLayerDelta15 = f15 != null && base15 != null ? f15 - base15 : 0;
+  const xLayerDelta60 = f60 != null && base60 != null ? f60 - base60 : 0;
+
   return {
     ...summary,
     forecast15Minutes: f15,
@@ -191,6 +196,14 @@ function applyXLayerToForecast(summary, ctx) {
     forecastDataQualityStatus,
     snapshotCompletenessScore: parkSnap?.completenessScore ?? parkSnap?.completeness_score ?? null,
     snapshotContext,
+    _decomp: {
+      ...prevDecomp,
+      xLayer15: f15,
+      xLayer60: f60,
+      xLayerDelta15,
+      xLayerDelta60,
+      xLayerFactors: factors.slice(0, 8),
+    },
   };
 }
 

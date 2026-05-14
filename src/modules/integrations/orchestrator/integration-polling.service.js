@@ -1,5 +1,9 @@
 'use strict';
 
+const { msUntilNextUtcWallMultipleMinutes } = require('../../../utils/utc-schedule-align.util');
+
+const EXTERNAL_POLL_BOUNDARY_PADDING_MS = 1500;
+
 /**
  * IntegrationPollingService
  *
@@ -8,10 +12,8 @@
  *   - app-level setting (`integration.pollingEnabled`) is on, AND
  *   - platform-level setting (`EXTERNAL_PARK_DATA_ENABLED`) is true.
  *
- * Interval is read on every tick from app_settings
- * (`integration.pollingIntervalSeconds`); the platform setting
- * `EXTERNAL_PARK_DATA_POLL_INTERVAL_SECONDS` seeds the default. The
- * loop survives provider failures (logs and continues).
+ * (`EXTERNAL_PARK_DATA_POLL_NEAR_5M_UTC`): sleeps
+ *   max(intervalMin, min(configured interval, ms until next 5m UTC + padding)).
  *
  * Phase C3.8 — extracted from IntegrationOrchestratorService.
  *
@@ -28,8 +30,9 @@ class IntegrationPollingService {
    * @param {Function} [deps.sleepFn] - test seam; defaults to setTimeout-based sleep
    * @param {number} [deps.intervalMinSeconds=30]
    * @param {number} [deps.intervalMaxSeconds=86400]
-   * @param {number} [deps.intervalDefaultSeconds=300]
+   * @param {number} [deps.intervalDefaultSeconds=120]
    * @param {number} [deps.failureBackoffMs=60000] - wait used when settings read throws
+   * @param {Function} [deps.nowFn] - test seam; () => Date
    */
   constructor({
     settingRepository,
@@ -38,9 +41,10 @@ class IntegrationPollingService {
     settingKeys,
     logger,
     sleepFn,
+    nowFn,
     intervalMinSeconds = 30,
     intervalMaxSeconds = 86400,
-    intervalDefaultSeconds = 300,
+    intervalDefaultSeconds = 120,
     failureBackoffMs = 60_000,
   } = {}) {
     if (!settingRepository || typeof settingRepository.getValue !== 'function') {
@@ -73,6 +77,7 @@ class IntegrationPollingService {
     this._intervalMax = intervalMaxSeconds;
     this._intervalDefault = intervalDefaultSeconds;
     this._failureBackoffMs = failureBackoffMs;
+    this._now = typeof nowFn === 'function' ? nowFn : () => new Date();
   }
 
   /**
@@ -118,7 +123,16 @@ class IntegrationPollingService {
           this._intervalMin,
           Math.min(this._intervalMax, Number(intervalSetting?.seconds) || this._intervalDefault)
         );
-        waitMs = seconds * 1000;
+        const baseMs = seconds * 1000;
+        const near5m = await ps.getBoolean('EXTERNAL_PARK_DATA_POLL_NEAR_5M_UTC', true);
+        const boundaryMs = msUntilNextUtcWallMultipleMinutes(
+          5,
+          this._now(),
+          EXTERNAL_POLL_BOUNDARY_PADDING_MS
+        );
+        waitMs = near5m
+          ? Math.max(this._intervalMin * 1000, Math.min(baseMs, boundaryMs))
+          : baseMs;
 
         const masterEnabled = await ps.getBoolean('EXTERNAL_PARK_DATA_ENABLED', true);
         if (pollingEnabled?.enabled && masterEnabled) {

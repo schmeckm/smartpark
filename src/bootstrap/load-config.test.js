@@ -25,9 +25,9 @@ test('loadConfig: returns a Lifecycle whose steps match DEFAULT_BOOT_STEP_ORDER 
   assert.deepEqual([...stepOrder], [...DEFAULT_BOOT_STEP_ORDER]);
 });
 
-test('loadConfig: registers exactly 12 steps (matches pre-A3 inline boot)', () => {
+test('loadConfig: registers expected boot step count', () => {
   const { lifecycle } = loadConfig({ app: fakeApp(), logger: silentLogger() });
-  assert.equal(lifecycle.steps().length, 12);
+  assert.equal(lifecycle.steps().length, 13);
 });
 
 test('DEFAULT_BOOT_STEP_ORDER: is frozen so reorderings need an explicit code change', () => {
@@ -59,7 +59,8 @@ test('DEFAULT_BOOT_STEP_ORDER: critical pre/post-listen ordering invariants hold
   ]) {
     assert.ok(idx(s) < idx('http:listen'), `${s} must run before http:listen`);
   }
-  assert.ok(idx('http:listen') < idx('mqtt:connector'));
+  assert.ok(idx('http:listen') < idx('influx:ot-metrics-flush'));
+  assert.ok(idx('influx:ot-metrics-flush') < idx('mqtt:connector'));
   assert.ok(idx('mqtt:connector') < idx('sim:oee-auto-start'));
 });
 

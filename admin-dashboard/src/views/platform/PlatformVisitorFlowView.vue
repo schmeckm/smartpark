@@ -90,6 +90,35 @@ const slugToCoord = computed(() => {
   return m
 })
 
+/**
+ * Ingest health badge for `mode=from_log`. Tone derives from event volume in
+ * the selected window — gives operators an at-a-glance signal that the
+ * pipeline is actually receiving data, before any Phase 4+ camera worker
+ * exists.
+ */
+const ingestPulse = computed(() => {
+  const events = Number(payload.value?.meta?.eventsInWindow ?? 0)
+  if (!events) {
+    return {
+      tone: 'cold' as const,
+      dot: 'bg-amber-400',
+      title: 'Kein Event im Fenster — Pipeline kalt oder Zeitraum leer.',
+    }
+  }
+  if (events < 50) {
+    return {
+      tone: 'low' as const,
+      dot: 'bg-sky-400',
+      title: 'Wenige Events — Seed-Daten oder geringer Live-Verkehr.',
+    }
+  }
+  return {
+    tone: 'live' as const,
+    dot: 'bg-emerald-400',
+    title: 'Pipeline aktiv — Events fließen in visitor_journey_events.',
+  }
+})
+
 /** Park centroid for map fallback (API `park` or Rust / EP area). */
 const parkMapFocus = computed(() => {
   const p = payload.value?.park
@@ -449,11 +478,38 @@ onUnmounted(() => {
       </template>
     </div>
 
+    <div
+      v-if="flowMode === 'from_log' && payload?.parameters?.mode === 'from_log'"
+      class="flex flex-wrap items-center gap-3 rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-[11px]"
+      :title="ingestPulse.title"
+    >
+      <span class="inline-flex items-center gap-1.5 font-semibold uppercase tracking-wide text-slate-400">
+        <span class="relative flex h-2 w-2 shrink-0">
+          <span
+            v-if="ingestPulse.tone === 'live'"
+            class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60"
+          />
+          <span class="relative inline-flex h-2 w-2 rounded-full" :class="ingestPulse.dot" />
+        </span>
+        Ingest
+      </span>
+      <span class="text-slate-300">
+        {{ payload.meta.eventsInWindow ?? 0 }} Events · {{ payload.meta.casesInWindow ?? 0 }} Fälle ·
+        {{ payload.meta.casesWithPath ?? 0 }} mit Pfad
+      </span>
+      <span class="text-slate-500">
+        {{ payload.parameters.from?.slice(0, 16) }}… → {{ payload.parameters.to?.slice(0, 16) }}…
+      </span>
+      <span v-if="!payload.meta.eventsInWindow" class="ml-auto text-amber-300/90">
+        Keine Daten — Seeder:
+        <span class="font-mono text-amber-200/90">npm run seed:journey-events -- --park {{ parkKeyForGeoApi || '<id>' }}</span>
+      </span>
+    </div>
+
     <div v-if="payload && hasFlowReplay" class="space-y-3">
       <div class="flex flex-wrap items-center gap-4 text-xs text-slate-500">
         <span v-if="payload.parameters.mode === 'from_log'">
-          Modus Log · {{ payload.meta.eventsInWindow ?? 0 }} Events · {{ payload.meta.casesWithPath ?? 0 }} Fälle mit
-          Pfad · {{ payload.parameters.from?.slice(0, 16) }}… → {{ payload.parameters.to?.slice(0, 16) }}…
+          Modus Log · {{ payload.meta.eventsInWindow ?? 0 }} Events · {{ payload.meta.casesWithPath ?? 0 }} Fälle mit Pfad
         </span>
         <span v-else>
           Modus simuliert · {{ payload.meta.guestsSimulated }} Gäste · {{ payload.meta.transitionsSimulated }} Übergänge

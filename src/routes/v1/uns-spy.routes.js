@@ -60,13 +60,13 @@ const eventIdParams = Joi.object({
 
 router.get(
   '/events',
-  requireAnyPermission(['integrations', 'read'], ['rides', 'read']),
+  requirePermission('iotOt', 'settings.read'),
   validate(eventsQuery, 'query'),
   unsSpyController.listEvents
 );
 router.get(
   '/proposals',
-  requireAnyPermission(['integrations', 'read'], ['rides', 'read']),
+  requirePermission('iotOt', 'settings.read'),
   validate(proposalsQuery, 'query'),
   unsSpyController.listProposals
 );

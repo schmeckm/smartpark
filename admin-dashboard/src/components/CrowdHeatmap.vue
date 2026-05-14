@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { Zone } from '../types/api'
+
+const { t } = useI18n()
 
 const props = withDefaults(
   defineProps<{
@@ -8,8 +11,13 @@ const props = withDefaults(
     /** 0–100 from park wait-time snapshot series (see AI park forecast); not zone MQTT occupancy. */
     parkWideLoadPercent?: number | null
     externalParkLabel?: string
+    /**
+     * When an external integration park is in focus, internal tenant zone tiles are misleading
+     * (often demo/seed occupancy). Hide them and show only park-wide demand from the integration feed.
+     */
+    hideInternalZoneTiles?: boolean
   }>(),
-  { parkWideLoadPercent: null, externalParkLabel: '' },
+  { parkWideLoadPercent: null, externalParkLabel: '', hideInternalZoneTiles: false },
 )
 
 function utilization(z: Zone): number {
@@ -20,25 +28,25 @@ function utilization(z: Zone): number {
 function heatStyle(pct: number): { background: string; borderColor: string } {
   if (pct < 45) {
     return {
-      background: `linear-gradient(135deg, rgba(16,185,129,0.35) 0%, rgba(5,150,105,0.15) 100%)`,
-      borderColor: 'rgba(52,211,153,0.35)',
+      background: `linear-gradient(135deg, rgba(50,145,255,0.22) 0%, rgba(23,64,143,0.16) 100%)`,
+      borderColor: 'rgba(96,165,250,0.42)',
     }
   }
   if (pct < 75) {
     return {
-      background: `linear-gradient(135deg, rgba(250,204,21,0.28) 0%, rgba(217,119,6,0.12) 100%)`,
-      borderColor: 'rgba(250,204,21,0.35)',
+      background: `linear-gradient(135deg, rgba(250,204,21,0.26) 0%, rgba(217,119,6,0.12) 100%)`,
+      borderColor: 'rgba(250,204,21,0.38)',
     }
   }
   if (pct < 90) {
     return {
-      background: `linear-gradient(135deg, rgba(249,115,22,0.35) 0%, rgba(234,88,12,0.15) 100%)`,
-      borderColor: 'rgba(251,146,60,0.45)',
+      background: `linear-gradient(135deg, rgba(249,115,22,0.32) 0%, rgba(234,88,12,0.14) 100%)`,
+      borderColor: 'rgba(251,146,60,0.42)',
     }
   }
   return {
-    background: `linear-gradient(135deg, rgba(239,68,68,0.4) 0%, rgba(185,28,28,0.2) 100%)`,
-    borderColor: 'rgba(248,113,113,0.5)',
+    background: `linear-gradient(135deg, rgba(239,68,68,0.38) 0%, rgba(185,28,28,0.18) 100%)`,
+    borderColor: 'rgba(248,113,113,0.48)',
   }
 }
 
@@ -68,10 +76,18 @@ const allInternalZonesIdle = computed(
         </p>
       </div>
       <div class="hidden shrink-0 gap-2 text-[10px] font-medium uppercase tracking-wide text-slate-500 sm:flex">
-        <span class="flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-emerald-400/80" /> Calm</span>
-        <span class="flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-amber-400/80" /> Busy</span>
-        <span class="flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-orange-500/90" /> Hot</span>
-        <span class="flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-red-500/90" /> Critical</span>
+        <span class="flex items-center gap-1"
+          ><span class="h-2 w-2 rounded-full bg-brand-400/90" /> {{ t('crowdHeatmap.legendCalm') }}</span
+        >
+        <span class="flex items-center gap-1"
+          ><span class="h-2 w-2 rounded-full bg-amber-400/85" /> {{ t('crowdHeatmap.legendBusy') }}</span
+        >
+        <span class="flex items-center gap-1"
+          ><span class="h-2 w-2 rounded-full bg-orange-500/90" /> {{ t('crowdHeatmap.legendHot') }}</span
+        >
+        <span class="flex items-center gap-1"
+          ><span class="h-2 w-2 rounded-full bg-rose-500/90" /> {{ t('crowdHeatmap.legendCritical') }}</span
+        >
       </div>
     </div>
 
@@ -100,16 +116,24 @@ const allInternalZonesIdle = computed(
     </div>
 
     <p
-      v-if="allInternalZonesIdle && zones.length"
+      v-if="hideInternalZoneTiles && zones.length"
+      class="mb-3 rounded-lg border border-brand-500/25 bg-brand-950/30 px-3 py-2 text-xs text-slate-300"
+    >
+      {{ t('crowdHeatmap.zonesHiddenWhileExternal') }}
+    </p>
+
+    <p
+      v-else-if="allInternalZonesIdle && zones.length"
       class="mb-3 rounded-lg border border-slate-700/80 bg-slate-950/40 px-3 py-2 text-xs text-slate-400"
     >
-      Internal zones are at 0% occupancy until crowd ingestion (MQTT Sparkplug / REST) or imports update each zone’s
-      <code class="text-[11px] text-slate-300">currentCrowdLevel</code>.
+      {{ t('crowdHeatmap.internalZonesIdleHint') }}
     </p>
 
     <div v-if="!zones.length" class="rounded-xl border border-dashed border-slate-700 py-16 text-center text-slate-500">
-      No zones configured yet.
+      {{ t('crowdHeatmap.noZones') }}
     </div>
+
+    <div v-else-if="hideInternalZoneTiles" />
 
     <div v-else>
       <p class="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">Per-zone occupancy</p>
@@ -152,7 +176,7 @@ const allInternalZonesIdle = computed(
             </div>
             <div class="mt-2 h-2 overflow-hidden rounded-full bg-black/25">
               <div
-                class="h-full rounded-full bg-gradient-to-r from-emerald-400 via-amber-400 to-red-500 transition-[width] duration-500"
+                class="h-full rounded-full bg-gradient-to-r from-brand-400 via-amber-400 to-rose-500 transition-[width] duration-500"
                 :style="{ width: `${utilization(z)}%` }"
               />
             </div>

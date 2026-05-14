@@ -3,7 +3,9 @@
  */
 const { Op } = require('sequelize');
 const { Park, RideFeatureSnapshot } = require('../../models');
-const { snapshotToFeatureMap, TRAINING_FEATURE_NAMES } = require('./ride-feature-vector.util');
+const { snapshotToFeatureMap, TRAINING_FEATURE_NAMES, applyMlFeatureMask } = require('./ride-feature-vector.util');
+const { loadExplicitlyDisabledMlFeatureKeysBatch } = require('./ride-ml-feature-mask.service');
+const { isTrainingEligiblePlain } = require('../../utils/ride-snapshot-eligibility.util');
 
 const DEFAULT_HORIZONS = [15, 30, 60];
 const HALF_WINDOW_MS = 7.5 * 60 * 1000;
@@ -23,11 +25,13 @@ function rideGroupKey(p) {
  * @returns {number|null}
  */
 function findWaitAtHorizon(sortedAsc, startIdx, horizonMin) {
+  if (!isTrainingEligiblePlain(sortedAsc[startIdx])) return null;
   const t0 = new Date(sortedAsc[startIdx].snapshotAt).getTime();
   const mid = t0 + horizonMin * 60 * 1000;
   const lo = mid - HALF_WINDOW_MS;
   const hi = mid + HALF_WINDOW_MS;
   for (let j = startIdx + 1; j < sortedAsc.length; j++) {
+    if (!isTrainingEligiblePlain(sortedAsc[j])) continue;
     const ts = new Date(sortedAsc[j].snapshotAt).getTime();
     if (ts > hi) return null;
     if (ts >= lo && ts <= hi) {
@@ -82,6 +86,19 @@ async function buildRideDataset(opts = {}) {
   });
   const plains = snaps.map(plain);
 
+  const maskPairList = [];
+  const seenMaskPair = new Set();
+  for (const p of plains) {
+    if (p.internalParkId && p.internalAssetId) {
+      const k = `${p.internalParkId}|${p.internalAssetId}`;
+      if (!seenMaskPair.has(k)) {
+        seenMaskPair.add(k);
+        maskPairList.push({ parkId: String(p.internalParkId), rideId: String(p.internalAssetId) });
+      }
+    }
+  }
+  const mlFeatureMaskByRide = await loadExplicitlyDisabledMlFeatureKeysBatch(maskPairList);
+
   const groups = new Map();
   for (const p of plains) {
     const k = rideGroupKey(p);
@@ -96,6 +113,7 @@ async function buildRideDataset(opts = {}) {
   for (const [, arr] of groups) {
     arr.sort((a, b) => new Date(a.snapshotAt) - new Date(b.snapshotAt));
     for (let i = 0; i < arr.length; i++) {
+      if (!isTrainingEligiblePlain(arr[i])) continue;
       const t = new Date(arr[i].snapshotAt).getTime();
       if (t < fromMs || t > toMs) continue;
       const targets = {};
@@ -106,7 +124,12 @@ async function buildRideDataset(opts = {}) {
         if (y != null) any = true;
       }
       if (!any) continue;
-      const features = snapshotToFeatureMap(arr[i]);
+      const rawFeatures = snapshotToFeatureMap(arr[i]);
+      const ip = arr[i].internalParkId;
+      const ia = arr[i].internalAssetId;
+      const maskKey = ip && ia ? `${String(ip)}|${String(ia)}` : null;
+      const disabled = maskKey ? mlFeatureMaskByRide.get(maskKey) : null;
+      const features = applyMlFeatureMask(rawFeatures, disabled);
       const parkId = arr[i].internalParkId || arr[i].externalParkId;
       const rideId = arr[i].internalAssetId || arr[i].externalEntityId;
       rows.push({

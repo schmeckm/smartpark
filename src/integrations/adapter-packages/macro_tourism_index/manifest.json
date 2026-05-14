@@ -1,0 +1,72 @@
+{
+  "adapterKey": "macro_tourism_index",
+  "name": "Macro Tourism Index",
+  "description": "Publishes park-level macro tourism demand index from configurable API or static fallback. Preferred outputProfiles: [\"SPARKPLUG_JSON\", \"CANONICAL_HISTORIAN\"].",
+  "version": "1.0.0",
+  "category": "Demand & forecasting",
+  "qualityTier": "COMMUNITY",
+  "tags": ["tourism", "demand", "macro", "index"],
+  "runtime": "NODE",
+  "entrypoint": "index.js",
+  "adapterType": "DEMAND",
+  "iotClass": "cloud_polling",
+  "capabilities": ["DISCOVERY", "POLLING", "UNS_OUTPUT", "FEATURE_OUTPUT"],
+  "providedDomains": ["demand"],
+  "providedMetrics": ["macro_tourism_index"],
+  "defaultContextJson": {
+    "parkSlug": "europapark",
+    "sparkplugGroupId": "europa_park",
+    "sparkplugEdgeNode": "macro_tourism_gateway"
+  },
+  "defaultScheduleCron": "0 * * * *",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "parkSlug": {
+        "type": "string",
+        "default": "europapark"
+      },
+      "timezone": {
+        "type": "string",
+        "default": "Europe/Berlin"
+      },
+      "apiUrl": {
+        "type": "string",
+        "description": "Optional URL returning macro tourism index payload."
+      },
+      "apiMethod": {
+        "type": "string",
+        "default": "GET",
+        "enum": ["GET", "POST"]
+      },
+      "apiToken": {
+        "type": "string",
+        "description": "Optional bearer token for upstream API."
+      },
+      "jsonPath": {
+        "type": "string",
+        "default": "data.index",
+        "description": "Dot path to numeric index inside response JSON."
+      },
+      "defaultIndex": {
+        "type": "number",
+        "default": 0.5,
+        "description": "Fallback value if API is unavailable."
+      },
+      "minIndex": {
+        "type": "number",
+        "default": 0
+      },
+      "maxIndex": {
+        "type": "number",
+        "default": 1
+      }
+    },
+    "required": ["parkSlug"]
+  },
+  "permissions": {
+    "network": true,
+    "mqttPublish": false,
+    "databaseWrite": false
+  }
+}

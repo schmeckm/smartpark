@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import {
   getAdapterOpsDashboard,
@@ -20,6 +21,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useRegionalDateTime } from '@/composables/useRegionalDateTime'
 
 const { formatDateTime } = useRegionalDateTime()
+const { t } = useI18n()
 
 const route = useRoute()
 const router = useRouter()
@@ -47,6 +49,26 @@ const drawerKey = ref<string | null>(null)
 const detail = ref<AdapterOpsStatusDetail | null>(null)
 const detailLoading = ref(false)
 const actionBusyKey = ref<string | null>(null)
+const tableSearch = ref('')
+const tableStatusFilter = ref<'ALL' | string>('ALL')
+const tableProviderFilter = ref<'ALL' | string>('ALL')
+const tableSortBy = ref<'name' | 'status' | 'provider' | 'errors' | 'success' | 'runtime'>('status')
+const tableSortDir = ref<'asc' | 'desc'>('desc')
+const eventLevelFilter = ref<'ALL' | 'ERROR' | 'WARN' | 'SUCCESS' | 'INFO'>('ALL')
+const eventWindowMin = ref<5 | 15 | 60>(15)
+const eventDedupe = ref(true)
+const eventAdapterFilter = ref('')
+const troubleshootingOpen = ref(false)
+const actionConfirmOpen = ref(false)
+type ActionKind = 'run' | 'pause' | 'activate' | 'disable'
+const confirmActionKind = ref<ActionKind | null>(null)
+const confirmRow = ref<AdapterOpsGridRow | null>(null)
+const undoAction = ref<{
+  adapterKey: string
+  label: string
+  inverseKind: 'pause' | 'activate' | 'disable'
+} | null>(null)
+let undoTimer: ReturnType<typeof setTimeout> | null = null
 
 const expanded = ref<Record<string, boolean>>({})
 
@@ -58,6 +80,71 @@ const rows = computed(() => data.value?.entries ?? [])
 const events = computed(() => dash.value?.events ?? [])
 const adapters = computed(() => dash.value?.adapters ?? [])
 const kpis = computed(() => dash.value?.kpis ?? null)
+const providerOptions = computed(() => {
+  const set = new Set<string>()
+  for (const row of adapters.value) {
+    const p = (row.provider || '').trim()
+    if (p) set.add(p)
+  }
+  return Array.from(set).sort((a, b) => a.localeCompare(b))
+})
+
+function adapterOpsGridStatusLabel(status: string) {
+  const s = (status || '').toUpperCase()
+  if (s === 'HEALTHY') return t('adapterOpsDashboard.statusHealthy')
+  if (s === 'PAUSED') return t('adapterOpsDashboard.statusPaused')
+  if (s === 'FAILED') return t('adapterOpsDashboard.statusFailed')
+  if (s === 'WARNING') return t('adapterOpsDashboard.statusWarning')
+  if (s === 'MANUAL_OK') return t('adapterOpsDashboard.statusManualOk')
+  return status
+}
+
+function adapterOpsStatusMatchesFilter(rowStatus: string, filter: string) {
+  const want = filter.toUpperCase()
+  const rs = rowStatus.toUpperCase()
+  if (want === 'HEALTHY' && (rs === 'HEALTHY' || rs === 'MANUAL_OK')) return true
+  return rs === want
+}
+
+const filteredAdapters = computed(() => {
+  const query = tableSearch.value.trim().toLowerCase()
+  const sorted = adapters.value
+    .filter((row) => {
+      if (tableStatusFilter.value !== 'ALL' && !adapterOpsStatusMatchesFilter(row.status, tableStatusFilter.value))
+        return false
+      if (tableProviderFilter.value !== 'ALL' && (row.provider || '') !== tableProviderFilter.value) return false
+      if (!query) return true
+      const haystack = `${row.name} ${row.adapterKey} ${row.provider || ''}`.toLowerCase()
+      return haystack.includes(query)
+    })
+    .slice()
+  const dir = tableSortDir.value === 'asc' ? 1 : -1
+  sorted.sort((a, b) => {
+    if (tableSortBy.value === 'name') return a.name.localeCompare(b.name) * dir
+    if (tableSortBy.value === 'provider') return (a.provider || '').localeCompare(b.provider || '') * dir
+    if (tableSortBy.value === 'status') return a.status.localeCompare(b.status) * dir
+    if (tableSortBy.value === 'errors') return ((a.errorsCount ?? 0) - (b.errorsCount ?? 0)) * dir
+    if (tableSortBy.value === 'success') return ((a.successRate ?? -1) - (b.successRate ?? -1)) * dir
+    return ((a.runtimeMs ?? Number.MAX_SAFE_INTEGER) - (b.runtimeMs ?? Number.MAX_SAFE_INTEGER)) * dir
+  })
+  return sorted
+})
+
+const missedSchedules = computed(() => {
+  const now = Date.now()
+  let count = 0
+  for (const row of adapters.value) {
+    if (!row.active || !row.nextRun) continue
+    const ts = Date.parse(row.nextRun)
+    if (Number.isFinite(ts) && ts < now) count += 1
+  }
+  return count
+})
+const errors24hTotal = computed(() => adapters.value.reduce((sum, row) => sum + (row.errorsCount || 0), 0))
+const failedCount = computed(() => adapters.value.filter((row) => row.status.toUpperCase() === 'FAILED').length)
+const eventDuplicatesCollapsed = computed(
+  () => filteredEvents.value.length - visibleEvents.value.length
+)
 
 async function loadPipeline() {
   loading.value = true
@@ -91,6 +178,11 @@ async function refreshAll() {
   await Promise.all([loadDashboard(), loadPipeline()])
 }
 
+function chartLatest(values: number[]) {
+  if (!values.length) return null
+  return values[values.length - 1] ?? null
+}
+
 function tailLevelClass(row: AdapterPipelineLogEntry) {
   const l = (row.level || '').toLowerCase()
   const ev = row.event || ''
@@ -116,8 +208,67 @@ function gridStatusClass(status: string) {
   if (s === 'FAILED') return 'text-rose-300'
   if (s === 'WARNING') return 'text-amber-300'
   if (s === 'PAUSED') return 'text-slate-400'
+  if (s === 'MANUAL_OK') return 'text-teal-300'
   return 'text-emerald-300'
 }
+
+type KpiTone = 'neutral' | 'success' | 'warning' | 'danger' | 'muted' | 'info'
+
+function kpiCardClass(tone: KpiTone) {
+  if (tone === 'success') return 'border-emerald-800/60 bg-emerald-950/25'
+  if (tone === 'warning') return 'border-amber-800/60 bg-amber-950/25'
+  if (tone === 'danger') return 'border-rose-800/60 bg-rose-950/25'
+  if (tone === 'muted') return 'border-slate-700/80 bg-slate-900/70'
+  if (tone === 'info') return 'border-sky-800/60 bg-sky-950/25'
+  return 'border-slate-800 bg-slate-900/60'
+}
+
+function kpiValueClass(tone: KpiTone) {
+  if (tone === 'success') return 'text-emerald-200'
+  if (tone === 'warning') return 'text-amber-300'
+  if (tone === 'danger') return 'text-rose-300'
+  if (tone === 'muted') return 'text-slate-400'
+  if (tone === 'info') return 'text-sky-300'
+  return 'text-white'
+}
+
+function actionBusyLabel(kind: ActionKind) {
+  if (kind === 'run') return 'Running…'
+  if (kind === 'pause') return 'Pausing…'
+  if (kind === 'activate') return 'Activating…'
+  return 'Disabling…'
+}
+
+function normalizeEventLevel(level: string) {
+  const l = String(level || '').toUpperCase()
+  if (l === 'ERROR' || l === 'WARN' || l === 'SUCCESS') return l
+  return 'INFO'
+}
+
+const filteredEvents = computed(() => {
+  const now = Date.now()
+  const windowMs = eventWindowMin.value * 60 * 1000
+  return events.value.filter((ev) => {
+    const level = normalizeEventLevel(ev.level)
+    if (eventLevelFilter.value !== 'ALL' && level !== eventLevelFilter.value) return false
+    if (eventAdapterFilter.value && (ev.adapterKey || '') !== eventAdapterFilter.value) return false
+    const ts = Date.parse(ev.ts)
+    if (!Number.isFinite(ts)) return true
+    return now - ts <= windowMs
+  })
+})
+
+const visibleEvents = computed(() => {
+  if (!eventDedupe.value) return filteredEvents.value.map((ev) => ({ ...ev, count: 1 }))
+  const map = new Map<string, { ts: string; adapterKey: string | null; level: string; message: string; count: number }>()
+  for (const ev of filteredEvents.value) {
+    const key = `${ev.adapterKey || '—'}|${normalizeEventLevel(ev.level)}|${ev.message}`
+    const prev = map.get(key)
+    if (prev) prev.count += 1
+    else map.set(key, { ...ev, level: normalizeEventLevel(ev.level), count: 1 })
+  }
+  return Array.from(map.values()).sort((a, b) => Date.parse(b.ts) - Date.parse(a.ts))
+})
 
 function sparkPts(values: number[], cw = 140, ch = 44): string {
   if (!values.length) return ''
@@ -175,7 +326,7 @@ async function runAction(
   fn: (key: string) => Promise<unknown>,
   row: AdapterOpsGridRow
 ) {
-  if (!canManageIntegrations.value) return
+  if (!canManageIntegrations.value) return false
   actionBusyKey.value = row.adapterKey
   try {
     await fn(row.adapterKey)
@@ -189,11 +340,79 @@ async function runAction(
         detailLoading.value = false
       }
     }
+    return true
   } catch (e) {
     push(e instanceof Error ? e.message : `${label} failed`, 'error')
+    return false
   } finally {
     actionBusyKey.value = null
   }
+}
+
+function openActionConfirm(kind: ActionKind, row: AdapterOpsGridRow) {
+  confirmActionKind.value = kind
+  confirmRow.value = row
+  actionConfirmOpen.value = true
+}
+
+function closeActionConfirm() {
+  actionConfirmOpen.value = false
+  confirmActionKind.value = null
+  confirmRow.value = null
+}
+
+function setUndoAction(
+  row: AdapterOpsGridRow,
+  label: string,
+  inverseKind: 'pause' | 'activate' | 'disable'
+) {
+  if (undoTimer) globalThis.clearTimeout(undoTimer)
+  undoAction.value = {
+    adapterKey: row.adapterKey,
+    label,
+    inverseKind,
+  }
+  undoTimer = globalThis.setTimeout(() => {
+    undoAction.value = null
+  }, 8000)
+}
+
+async function performAction(
+  kind: ActionKind,
+  row: AdapterOpsGridRow,
+  fromUndo = false
+) {
+  let ok = false
+  if (kind === 'run') ok = await runAction('Run now', postAdapterOpsRunNow, row)
+  else if (kind === 'pause') ok = await runAction('Paused', postAdapterOpsPause, row)
+  else if (kind === 'activate') ok = await runAction('Activated', postAdapterOpsActivate, row)
+  else ok = await runAction('Disabled', postAdapterOpsDisable, row)
+  if (!ok || fromUndo) return
+  if (kind === 'pause') setUndoAction(row, 'Adapter paused', 'activate')
+  if (kind === 'activate') setUndoAction(row, 'Adapter activated', 'pause')
+  if (kind === 'disable') setUndoAction(row, 'Adapter disabled', 'activate')
+  if (kind !== 'run') push('Action executed. Undo is available for 8 seconds.', 'info')
+}
+
+async function confirmAndRun() {
+  if (!confirmActionKind.value || !confirmRow.value) return
+  const kind = confirmActionKind.value
+  const row = confirmRow.value
+  closeActionConfirm()
+  await performAction(kind, row)
+}
+
+async function undoLastAction() {
+  if (!undoAction.value) return
+  const target = adapters.value.find((row) => row.adapterKey === undoAction.value?.adapterKey)
+  const inverse = undoAction.value.inverseKind
+  undoAction.value = null
+  if (!target) {
+    push('Undo target not available anymore.', 'warning')
+    return
+  }
+  await performAction(inverse, target, true)
+  push('Last action was reverted.', 'success')
 }
 
 async function runDrawerNow() {
@@ -220,6 +439,31 @@ function scrollToRawTail() {
   document.getElementById('adapter-raw-log-tail')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
+function scrollToAdapterTable() {
+  document.getElementById('adapter-status-grid')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+function focusFailedAdapters() {
+  tableStatusFilter.value = 'FAILED'
+  tableSortBy.value = 'errors'
+  tableSortDir.value = 'desc'
+  eventLevelFilter.value = 'ERROR'
+  scrollToAdapterTable()
+}
+
+function focusErrorLoad() {
+  tableSortBy.value = 'errors'
+  tableSortDir.value = 'desc'
+  eventLevelFilter.value = 'ERROR'
+  scrollToAdapterTable()
+}
+
+function focusMissedSchedules() {
+  tableSortBy.value = 'runtime'
+  tableSortDir.value = 'desc'
+  scrollToAdapterTable()
+}
+
 function applyFilterToUrl() {
   const ak = adapterKeyFilter.value.trim()
   router.replace({ name: 'adapter-pipeline-log', query: ak ? { adapterKey: ak } : {} })
@@ -232,6 +476,10 @@ onMounted(() => {
   else if (Array.isArray(q) && q[0]) adapterKeyFilter.value = String(q[0])
   else adapterKeyFilter.value = ''
   void refreshAll()
+})
+
+onBeforeUnmount(() => {
+  if (undoTimer) globalThis.clearTimeout(undoTimer)
 })
 </script>
 
@@ -252,12 +500,46 @@ onMounted(() => {
       </div>
       <button
         type="button"
-        class="rounded-lg border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-medium text-slate-100 hover:bg-slate-800 disabled:opacity-50"
+        class="rounded-lg border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-medium text-slate-100 hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:opacity-50"
         :disabled="dashboardLoading || loading"
         @click="refreshAll()"
       >
         Refresh all
       </button>
+    </div>
+
+    <div class="rounded-lg border border-slate-800 bg-slate-900/40">
+      <button
+        type="button"
+        class="flex w-full items-center justify-between px-3 py-2 text-left text-sm text-slate-200 hover:bg-slate-900/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+        :aria-expanded="troubleshootingOpen ? 'true' : 'false'"
+        @click="troubleshootingOpen = !troubleshootingOpen"
+      >
+        <span class="font-medium">Troubleshooting quick help</span>
+        <span class="text-xs text-slate-400">
+          {{ troubleshootingOpen ? 'Hide' : 'Show' }}
+        </span>
+      </button>
+      <div v-if="troubleshootingOpen" class="border-t border-slate-800 px-3 py-3 text-xs text-slate-300">
+        <p class="font-semibold text-slate-200">No data in dashboard or event stream</p>
+        <ul class="mt-1 list-disc space-y-1 pl-4 text-slate-400">
+          <li>Check adapter is active and run preview/run now returns success.</li>
+          <li>Check filter windows (event time window, table search/filter) are not too narrow.</li>
+          <li>Open pipeline tail to confirm raw events exist.</li>
+        </ul>
+        <p class="mt-3 font-semibold text-slate-200">Wrong park context or topic namespace</p>
+        <ul class="mt-1 list-disc space-y-1 pl-4 text-slate-400">
+          <li>Align adapter <span class="font-mono">parkSlug</span> with integration <span class="font-mono">unsParkKey</span>.</li>
+          <li>Align <span class="font-mono">sparkplugGroupId</span> / <span class="font-mono">sparkplugEdgeNode</span> in context.</li>
+          <li>Use adapter row "Config" action to validate current install values.</li>
+        </ul>
+        <p class="mt-3 font-semibold text-slate-200">MQTT subscriber sees no messages</p>
+        <ul class="mt-1 list-disc space-y-1 pl-4 text-slate-400">
+          <li>Enable <span class="font-mono">MQTT_ENABLED=true</span> and verify broker URL.</li>
+          <li>In Docker use service name host (for example <span class="font-mono">mqtt://mqtt:1883</span>).</li>
+          <li>From host tools subscribe to mapped host port (often <span class="font-mono">localhost:1883</span>).</li>
+        </ul>
+      </div>
     </div>
 
     <div
@@ -273,50 +555,94 @@ onMounted(() => {
       </p>
     </div>
 
+    <div class="grid gap-2 sm:grid-cols-3">
+      <button
+        type="button"
+        class="rounded-lg border border-rose-800/60 bg-rose-950/30 px-3 py-2 text-left hover:bg-rose-900/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
+        @click="focusFailedAdapters"
+      >
+        <div class="text-[10px] uppercase tracking-wide text-rose-300/80">[!] Failed adapters</div>
+        <div class="font-mono text-lg font-semibold text-rose-200">{{ failedCount }}</div>
+      </button>
+      <button
+        type="button"
+        class="rounded-lg border border-amber-800/60 bg-amber-950/30 px-3 py-2 text-left hover:bg-amber-900/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+        @click="focusErrorLoad"
+      >
+        <div class="text-[10px] uppercase tracking-wide text-amber-300/80">[~] Errors 24h (total)</div>
+        <div class="font-mono text-lg font-semibold text-amber-200">{{ errors24hTotal }}</div>
+      </button>
+      <button
+        type="button"
+        class="rounded-lg border border-sky-800/60 bg-sky-950/30 px-3 py-2 text-left hover:bg-sky-900/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+        @click="focusMissedSchedules"
+      >
+        <div class="text-[10px] uppercase tracking-wide text-sky-300/80">[i] Missed schedules</div>
+        <div class="font-mono text-lg font-semibold text-sky-200">{{ missedSchedules }}</div>
+      </button>
+    </div>
+
+    <div
+      v-if="undoAction"
+      class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-brand-700/60 bg-brand-950/25 px-3 py-2 text-sm text-brand-100"
+    >
+      <span>
+        {{ undoAction.label }} (<span class="font-mono">{{ undoAction.adapterKey }}</span
+        >).
+      </span>
+      <button
+        type="button"
+        class="rounded border border-brand-600 px-2 py-1 text-xs text-brand-200 hover:bg-brand-900/40"
+        @click="undoLastAction"
+      >
+        Undo
+      </button>
+    </div>
+
     <!-- KPI cards -->
     <div
       v-if="kpis"
       class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
     >
-      <div class="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2">
+      <div class="rounded-lg border px-3 py-2" :class="kpiCardClass('neutral')">
         <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Total adapters</div>
-        <div class="font-mono text-lg text-white">{{ kpis.totalAdapters }}</div>
+        <div class="font-mono text-lg" :class="kpiValueClass('neutral')">{{ kpis.totalAdapters }}</div>
       </div>
-      <div class="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2">
+      <div class="rounded-lg border px-3 py-2" :class="kpiCardClass('success')">
         <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Active</div>
-        <div class="font-mono text-lg text-emerald-300">{{ kpis.activeAdapters }}</div>
+        <div class="font-mono text-lg" :class="kpiValueClass('success')">{{ kpis.activeAdapters }}</div>
       </div>
-      <div class="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2">
+      <div class="rounded-lg border px-3 py-2" :class="kpiCardClass('success')">
         <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Healthy</div>
-        <div class="font-mono text-lg text-emerald-200">{{ kpis.healthyAdapters }}</div>
+        <div class="font-mono text-lg" :class="kpiValueClass('success')">{{ kpis.healthyAdapters }}</div>
       </div>
-      <div class="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2">
+      <div class="rounded-lg border px-3 py-2" :class="kpiCardClass('warning')">
         <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Warning</div>
-        <div class="font-mono text-lg text-amber-300">{{ kpis.warningAdapters }}</div>
+        <div class="font-mono text-lg" :class="kpiValueClass('warning')">{{ kpis.warningAdapters }}</div>
       </div>
-      <div class="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2">
+      <div class="rounded-lg border px-3 py-2" :class="kpiCardClass('danger')">
         <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Failed</div>
-        <div class="font-mono text-lg text-rose-300">{{ kpis.failedAdapters }}</div>
+        <div class="font-mono text-lg" :class="kpiValueClass('danger')">{{ kpis.failedAdapters }}</div>
       </div>
-      <div class="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2">
+      <div class="rounded-lg border px-3 py-2" :class="kpiCardClass('muted')">
         <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Paused</div>
-        <div class="font-mono text-lg text-slate-400">{{ kpis.pausedAdapters }}</div>
+        <div class="font-mono text-lg" :class="kpiValueClass('muted')">{{ kpis.pausedAdapters }}</div>
       </div>
-      <div class="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2">
+      <div class="rounded-lg border px-3 py-2" :class="kpiCardClass('neutral')">
         <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Runs today</div>
-        <div class="font-mono text-lg text-white">{{ kpis.runsToday }}</div>
+        <div class="font-mono text-lg" :class="kpiValueClass('neutral')">{{ kpis.runsToday }}</div>
       </div>
-      <div class="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2">
+      <div class="rounded-lg border px-3 py-2" :class="kpiCardClass('danger')">
         <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-500">MQTT publish errors today</div>
-        <div class="font-mono text-lg text-rose-300">{{ kpis.mqttPublishErrorsToday }}</div>
+        <div class="font-mono text-lg" :class="kpiValueClass('danger')">{{ kpis.mqttPublishErrorsToday }}</div>
       </div>
-      <div class="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2">
+      <div class="rounded-lg border px-3 py-2" :class="kpiCardClass('info')">
         <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Avg runtime (today)</div>
-        <div class="font-mono text-lg text-brand-300">
+        <div class="font-mono text-lg" :class="kpiValueClass('info')">
           {{ kpis.avgRuntimeSecToday != null ? `${kpis.avgRuntimeSecToday}s` : '—' }}
         </div>
       </div>
-      <div class="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2">
+      <div class="rounded-lg border px-3 py-2" :class="kpiCardClass('neutral')">
         <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Last scheduler row</div>
         <div
           class="truncate font-mono text-[11px] text-slate-300"
@@ -325,7 +651,7 @@ onMounted(() => {
           {{ kpis.lastSchedulerRun ? formatDateTime(kpis.lastSchedulerRun) : '—' }}
         </div>
       </div>
-      <div class="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2">
+      <div class="rounded-lg border px-3 py-2" :class="kpiCardClass('neutral')">
         <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Next scheduled run</div>
         <div
           class="truncate font-mono text-[11px] text-slate-300"
@@ -349,6 +675,9 @@ onMounted(() => {
             :points="sparkPts(chartRuns)"
           />
         </svg>
+        <p class="text-[10px] text-slate-400">
+          {{ chartRuns.length ? `Latest: ${chartLatest(chartRuns)}` : 'No data in selected window' }}
+        </p>
       </div>
       <div class="rounded-xl border border-slate-800 bg-slate-900/40 p-3">
         <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Errors / hour (24h)</div>
@@ -361,6 +690,9 @@ onMounted(() => {
             :points="sparkPts(chartErrors)"
           />
         </svg>
+        <p class="text-[10px] text-slate-400">
+          {{ chartErrors.length ? `Latest: ${chartLatest(chartErrors)}` : 'No data in selected window' }}
+        </p>
       </div>
       <div class="rounded-xl border border-slate-800 bg-slate-900/40 p-3">
         <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Runtime trend (avg ms)</div>
@@ -373,6 +705,9 @@ onMounted(() => {
             :points="sparkPts(chartRuntime)"
           />
         </svg>
+        <p class="text-[10px] text-slate-400">
+          {{ chartRuntime.length ? `Latest: ${chartLatest(chartRuntime)} ms` : 'No data in selected window' }}
+        </p>
       </div>
       <div class="rounded-xl border border-slate-800 bg-slate-900/40 p-3">
         <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Messages processed / hour</div>
@@ -385,16 +720,65 @@ onMounted(() => {
             :points="sparkPts(chartMessages)"
           />
         </svg>
+        <p class="text-[10px] text-slate-400">
+          {{ chartMessages.length ? `Latest: ${chartLatest(chartMessages)}` : 'No data in selected window' }}
+        </p>
       </div>
     </div>
 
     <!-- Adapter grid -->
-    <div class="rounded-xl border border-slate-800 bg-slate-900/30">
+    <div id="adapter-status-grid" class="rounded-xl border border-slate-800 bg-slate-900/30">
       <div class="border-b border-slate-800 px-3 py-2 text-sm font-semibold text-slate-200">Adapter status</div>
+      <div class="grid gap-2 border-b border-slate-800 px-3 py-2 md:grid-cols-6">
+        <input
+          v-model="tableSearch"
+          type="text"
+          placeholder="Search name/key/provider"
+          class="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 md:col-span-2"
+        />
+        <select
+          v-model="tableStatusFilter"
+          class="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+        >
+          <option value="ALL">{{ t('adapterOpsDashboard.filterAll') }}</option>
+          <option value="FAILED">{{ t('adapterOpsDashboard.statusFailed') }}</option>
+          <option value="WARNING">{{ t('adapterOpsDashboard.statusWarning') }}</option>
+          <option value="HEALTHY">{{ t('adapterOpsDashboard.statusHealthy') }}</option>
+          <option value="MANUAL_OK">{{ t('adapterOpsDashboard.statusManualOk') }}</option>
+          <option value="PAUSED">{{ t('adapterOpsDashboard.statusPaused') }}</option>
+        </select>
+        <select
+          v-model="tableProviderFilter"
+          class="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+        >
+          <option value="ALL">All providers</option>
+          <option v-for="provider in providerOptions" :key="provider" :value="provider">
+            {{ provider }}
+          </option>
+        </select>
+        <select
+          v-model="tableSortBy"
+          class="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+        >
+          <option value="status">Sort: Status</option>
+          <option value="errors">Sort: Errors 24h</option>
+          <option value="success">Sort: Success %</option>
+          <option value="runtime">Sort: Runtime</option>
+          <option value="name">Sort: Name</option>
+          <option value="provider">Sort: Provider</option>
+        </select>
+        <select
+          v-model="tableSortDir"
+          class="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+        >
+          <option value="desc">Desc</option>
+          <option value="asc">Asc</option>
+        </select>
+      </div>
       <div class="overflow-x-auto">
         <table class="w-full min-w-[1100px] border-collapse text-left text-xs">
           <thead>
-            <tr class="border-b border-slate-800 bg-slate-950/80 text-[10px] uppercase tracking-wide text-slate-500">
+            <tr class="sticky top-0 z-10 border-b border-slate-800 bg-slate-950/95 text-[10px] uppercase tracking-wide text-slate-500">
               <th class="px-2 py-2">Name</th>
               <th class="px-2 py-2">Key</th>
               <th class="px-2 py-2">Type</th>
@@ -414,11 +798,11 @@ onMounted(() => {
             <tr v-if="dashboardLoading && !adapters.length">
               <td colspan="13" class="px-3 py-6 text-center text-slate-500">Loading adapters…</td>
             </tr>
-            <tr v-else-if="!adapters.length">
+            <tr v-else-if="!filteredAdapters.length">
               <td colspan="13" class="px-3 py-6 text-center text-slate-500">No installed adapters.</td>
             </tr>
             <tr
-              v-for="row in adapters"
+              v-for="row in filteredAdapters"
               :key="row.adapterKey"
               class="cursor-pointer border-b border-slate-800/80 hover:bg-slate-900/50"
               @click="openDrawer(row.adapterKey)"
@@ -428,7 +812,7 @@ onMounted(() => {
               <td class="px-2 py-1.5 text-slate-400">{{ row.adapterType || '—' }}</td>
               <td class="px-2 py-1.5 text-slate-400">{{ row.provider || '—' }}</td>
               <td class="whitespace-nowrap px-2 py-1.5 font-semibold" :class="gridStatusClass(row.status)">
-                {{ row.status }}
+                {{ adapterOpsGridStatusLabel(row.status) }}
               </td>
               <td class="px-2 py-1.5 text-slate-300">{{ row.active ? 'true' : 'false' }}</td>
               <td
@@ -458,9 +842,9 @@ onMounted(() => {
                         ? 'Benötigt Berechtigung integrations.manage (z. B. Admin, Operator, Operations Manager)'
                         : ''
                     "
-                    @click="runAction('Run now', postAdapterOpsRunNow, row)"
+                    @click="openActionConfirm('run', row)"
                   >
-                    Run
+                    {{ actionBusyKey === row.adapterKey ? actionBusyLabel('run') : 'Run' }}
                   </button>
                   <button
                     type="button"
@@ -471,9 +855,9 @@ onMounted(() => {
                         ? 'Benötigt Berechtigung integrations.manage (z. B. Admin, Operator, Operations Manager)'
                         : ''
                     "
-                    @click="runAction('Paused', postAdapterOpsPause, row)"
+                    @click="openActionConfirm('pause', row)"
                   >
-                    Pause
+                    {{ actionBusyKey === row.adapterKey ? actionBusyLabel('pause') : 'Pause' }}
                   </button>
                   <button
                     type="button"
@@ -484,9 +868,9 @@ onMounted(() => {
                         ? 'Benötigt Berechtigung integrations.manage (z. B. Admin, Operator, Operations Manager)'
                         : ''
                     "
-                    @click="runAction('Activated', postAdapterOpsActivate, row)"
+                    @click="openActionConfirm('activate', row)"
                   >
-                    Activate
+                    {{ actionBusyKey === row.adapterKey ? actionBusyLabel('activate') : 'Activate' }}
                   </button>
                   <button
                     type="button"
@@ -497,15 +881,25 @@ onMounted(() => {
                         ? 'Benötigt Berechtigung integrations.manage (z. B. Admin, Operator, Operations Manager)'
                         : ''
                     "
-                    @click="runAction('Disabled', postAdapterOpsDisable, row)"
+                    @click="openActionConfirm('disable', row)"
                   >
-                    Disable
+                    {{ actionBusyKey === row.adapterKey ? actionBusyLabel('disable') : 'Disable' }}
                   </button>
                   <RouterLink
                     class="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
                     :to="{ name: 'integration-detail', params: { id: encodeURIComponent(row.adapterKey) } }"
                   >
                     Config
+                  </RouterLink>
+                  <RouterLink
+                    class="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-sky-300 hover:bg-slate-800"
+                    :to="{
+                      name: 'integration-detail',
+                      params: { id: encodeURIComponent(row.adapterKey) },
+                      hash: '#package-readme',
+                    }"
+                  >
+                    Docs
                   </RouterLink>
                 </div>
               </td>
@@ -521,31 +915,117 @@ onMounted(() => {
     <!-- Live events -->
     <div class="rounded-xl border border-slate-800 bg-slate-900/30">
       <div class="border-b border-slate-800 px-3 py-2 text-sm font-semibold text-slate-200">Live event stream</div>
+      <div class="grid gap-2 border-b border-slate-800 px-3 py-2 md:grid-cols-4">
+        <select
+          v-model="eventLevelFilter"
+          class="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-200"
+        >
+          <option value="ALL">All levels</option>
+          <option value="ERROR">Error</option>
+          <option value="WARN">Warn</option>
+          <option value="SUCCESS">Success</option>
+          <option value="INFO">Info</option>
+        </select>
+        <select
+          v-model.number="eventWindowMin"
+          class="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-200"
+        >
+          <option :value="5">Window: 5 min</option>
+          <option :value="15">Window: 15 min</option>
+          <option :value="60">Window: 1 hour</option>
+        </select>
+        <label class="inline-flex items-center gap-2 text-xs text-slate-300">
+          <input v-model="eventDedupe" type="checkbox" class="rounded border-slate-700 bg-slate-950" />
+          Group duplicate messages
+        </label>
+        <button
+          v-if="eventAdapterFilter"
+          type="button"
+          class="rounded border border-slate-700 px-2 py-1 text-xs text-slate-200 hover:bg-slate-900"
+          @click="eventAdapterFilter = ''"
+        >
+          Clear adapter filter ({{ eventAdapterFilter }})
+        </button>
+      </div>
       <div class="max-h-52 overflow-y-auto divide-y divide-slate-800/80">
-        <div v-if="!events.length" class="px-3 py-6 text-center text-xs text-slate-500">No recent merged events.</div>
-        <div v-for="(ev, i) in events" :key="i + ev.ts + (ev.adapterKey || '')" class="flex flex-wrap gap-2 px-3 py-1.5 text-[11px]">
+        <p
+          v-if="eventDedupe && eventDuplicatesCollapsed > 0"
+          class="border-b border-slate-800 px-3 py-1 text-[10px] text-slate-400"
+        >
+          Grouped duplicate events: {{ eventDuplicatesCollapsed }}
+        </p>
+        <div v-if="!visibleEvents.length" class="px-3 py-6 text-center text-xs text-slate-500">No recent merged events.</div>
+        <div
+          v-for="(ev, i) in visibleEvents"
+          :key="i + ev.ts + (ev.adapterKey || '')"
+          class="flex flex-wrap gap-2 px-3 py-1.5 text-[11px]"
+        >
           <span class="font-mono text-slate-500" :title="ev.ts">{{ formatDateTime(ev.ts) }}</span>
-          <span class="font-mono text-brand-400">{{ ev.adapterKey || '—' }}</span>
+          <button
+            type="button"
+            class="font-mono text-brand-400 hover:text-brand-300"
+            @click="tableSearch = ev.adapterKey || ''; eventAdapterFilter = ev.adapterKey || ''"
+          >
+            {{ ev.adapterKey || '—' }}
+          </button>
           <span class="rounded border px-1 py-0.5 text-[10px] font-semibold" :class="eventLevelClass(ev.level)">{{
             ev.level
           }}</span>
+          <span
+            v-if="ev.count > 1"
+            class="rounded border border-slate-700 bg-slate-900 px-1 py-0.5 font-mono text-[10px] text-slate-300"
+            :title="`${ev.count} duplicate events merged`"
+            >x{{ ev.count }}</span
+          >
           <span class="min-w-0 flex-1 text-slate-300">{{ ev.message }}</span>
         </div>
       </div>
     </div>
+
+    <Teleport to="body">
+      <div
+        v-if="actionConfirmOpen && confirmRow"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+        @click.self="closeActionConfirm"
+      >
+        <div class="w-full max-w-md rounded-xl border border-slate-700 bg-slate-950 p-4 shadow-2xl">
+          <h3 class="text-sm font-semibold text-slate-100">Confirm adapter action</h3>
+          <p class="mt-2 text-sm text-slate-300">
+            Continue with
+            <span class="font-semibold text-slate-100">{{ confirmActionKind }}</span>
+            for <span class="font-mono text-brand-300">{{ confirmRow.adapterKey }}</span
+            >?
+          </p>
+          <p class="mt-2 text-xs text-slate-400">This action updates adapter state immediately.</p>
+          <div class="mt-4 flex justify-end gap-2">
+            <button
+              type="button"
+              class="rounded border border-slate-700 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-900"
+              @click="closeActionConfirm"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              class="rounded bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-500"
+              @click="confirmAndRun"
+            >
+              Confirm
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
 
     <!-- Detail drawer -->
     <Teleport to="body">
       <div
         v-if="drawerOpen"
         class="fixed inset-0 z-40 flex justify-end bg-black/60 backdrop-blur-[1px]"
-        role="presentation"
         @click.self="closeDrawer"
       >
         <div
           class="flex h-full w-full max-w-lg flex-col border-l border-slate-800 bg-slate-950 shadow-2xl"
-          role="dialog"
-          aria-modal="true"
         >
           <div class="flex items-center justify-between border-b border-slate-800 px-4 py-3">
             <div class="min-w-0">

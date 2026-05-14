@@ -1,24 +1,41 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import * as echarts from 'echarts'
 import type { EChartsOption } from 'echarts'
 import {
   getAiFactorConfigs,
   getCanonicalMessages,
+  getEntityForecastExplanation,
   getEntityForecastSummary,
   getIntegrationSettings,
   getParkRideForecastSummaries,
   getPlatformAssets,
   getRideCurrentWaits,
+  getMlModelWinRateStats,
+  getMlRetroLookback,
+  getRideMlRideWaitPredict,
   getRideWaitTimeseries,
+  getPlatformParkOperationalContext,
+  listMlForecastAccuracyLogs,
   type AiFactorConfig,
+  type ModelWinRateStat,
+  type RetroLookbackRow,
   type ForecastInfluencingFactor,
+  type MlForecastAccuracyLogRow,
   type ParkForecastSummary,
+  type PredictionExplainability,
+  type RideMlPredictResponse,
 } from '@/api/client'
-import type { PlatformAsset } from '@/types/api'
+import RideAiExplainabilityCard from '@/components/RideAiExplainabilityCard.vue'
+import type { PlatformAsset, PlatformOperationalContext } from '@/types/api'
 import { waitMinutesFromAssetSnapshot } from '@/utils/assetWaitSnapshot'
+import {
+  collectParkLocalDateKeys,
+  closedRangesFromOperationalDays,
+  markAreaPairsFromClosedRanges,
+  noonIsoForParkLocalYmd,
+} from '@/utils/rideWaitDetailOperatingBands'
 import { useToast } from '@/composables/useToast'
 import { usePageSurfaces } from '@/composables/usePageSurfaces'
 import { useParkContextStore } from '@/stores/parkContext'
@@ -51,6 +68,7 @@ const currentByAssetId = ref<Map<string, { waitTime: number | null; sampledAt: s
 /** Same source as Live Ops: latest WAIT_TIME_UPDATED canonical payload per external entity. */
 const canonicalWaitByExtId = ref<Map<string, number>>(new Map())
 const factorLabels = ref<Map<string, string>>(new Map())
+const modelWinRates = ref<ModelWinRateStat[]>([])
 
 /** Bulk list only includes entities with feature snapshots; we hydrate the rest per entity (park/type fallback). */
 const MAX_ENTITY_FORECAST_FETCH = 200
@@ -76,6 +94,24 @@ const detailContext = ref<Awaited<ReturnType<typeof getRideWaitTimeseries>> | nu
 const detailChartRef = ref<HTMLDivElement | null>(null)
 let detailChartInstance: ReturnType<typeof echarts.init> | null = null
 let detailChartResizeObs: ResizeObserver | null = null
+
+const forecastProvider = ref('themeparks_wiki')
+const detailExplainLoading = ref(false)
+const detailExplainAdr = ref<PredictionExplainability | null>(null)
+const detailExplainRidge = ref<PredictionExplainability | null>(null)
+const detailRidgePredictions = ref<RideMlPredictResponse['predictions']>([])
+const detailAccuracyLogs = ref<MlForecastAccuracyLogRow[]>([])
+const detailAccuracyLoading = ref(false)
+const detailRetroLookback = ref<RetroLookbackRow[]>([])
+const detailRetroLookbackLoading = ref(false)
+
+/** ECharts markArea pairs: scheduled park closure (outside opening hours) on the wait chart. */
+const detailOperatingMarkAreaData = ref<Array<[Record<string, unknown>, Record<string, unknown>]>>([])
+let operatingBandsFetchId = 0
+
+const showAdrExplainCard = computed(
+  () => !!(parkCtx.activePark?.externalEntityId && detailRow.value?.externalEntityId)
+)
 
 function disposeDetailChart() {
   detailChartResizeObs?.disconnect()
@@ -234,6 +270,63 @@ const detailBaselineMismatchHint = computed(() =>
   detailRow.value ? modelBaselineSnapshotMismatchHint(detailRow.value) : null
 )
 
+type DecompRow = { label: string; delta15: string; delta60: string; isFinal?: boolean; factors?: { feature: string; impact: string }[] }
+const detailDecomp = computed<DecompRow[]>(() => {
+  const d = detailRow.value?.summary?.forecastDecomposition
+  if (!d || d.trendBase15 == null) return []
+  const m = t('aiRideGrid.decompMin')
+  const fmt = (v: number | null) => (v != null ? `${v} ${m}` : '—')
+  const fmtDelta = (v: number) => (v === 0 ? '—' : `${v >= 0 ? '+' : ''}${v} ${m}`)
+  const rows: DecompRow[] = [
+    { label: t('aiRideGrid.decompCurrent'), delta15: fmt(d.currentWait), delta60: fmt(d.currentWait) },
+    { label: t('aiRideGrid.decompTrend'), delta15: fmt(d.trendBase15), delta60: fmt(d.trendBase60) },
+    { label: t('aiRideGrid.decompFactorAdj'), delta15: fmtDelta(d.factorAdjDelta15), delta60: fmtDelta(d.factorAdjDelta60) },
+    { label: t('aiRideGrid.decompXLayer'), delta15: fmtDelta(d.xLayerDelta15), delta60: fmtDelta(d.xLayerDelta60), factors: d.xLayerFactors },
+    { label: t('aiRideGrid.decompMl'), delta15: fmtDelta(d.mlDelta15), delta60: fmtDelta(d.mlDelta60), factors: d.mlFactors },
+    { label: t('aiRideGrid.decompFinal'), delta15: fmt(d.final15), delta60: fmt(d.final60), isFinal: true },
+  ]
+  return rows
+})
+
+type RetroRow = {
+  horizon: number
+  predicted: number
+  actual: number
+  diff: number
+  status: string
+  when: string
+}
+const detailRetroRows = computed<RetroRow[]>(() => {
+  if (!detailAccuracyLogs.value.length) return []
+  return detailAccuracyLogs.value
+    .filter((l) => l.predictedValue != null && l.actualValue != null)
+    .map((l) => {
+      const predicted = Math.round(Number(l.predictedValue))
+      const actual = Math.round(Number(l.actualValue))
+      return {
+        horizon: l.horizonMinutes,
+        predicted,
+        actual,
+        diff: actual - predicted,
+        status: l.accuracyStatus ?? 'UNKNOWN',
+        when: dt.formatDateTime(l.evaluatedAt),
+      }
+    })
+    .slice(0, 6)
+})
+
+type ChallengerRow = { horizon: number; champion: number; challenger: number; challengerModel: string }
+const detailChallengerRows = computed<ChallengerRow[]>(() => {
+  return detailRidgePredictions.value
+    .filter((p) => p.challengerValue != null && p.challengerModel)
+    .map((p) => ({
+      horizon: p.horizonMinutes,
+      champion: Math.round(p.value),
+      challenger: Math.round(p.challengerValue!),
+      challengerModel: p.challengerModel === 'GLOBAL_RIDE_MODEL' ? 'Global' : 'Ride-spezifisch',
+    }))
+})
+
 /** Scope of the numeric forecast + configured baseline model (integration feature pipeline, not an arbitrary per-ride NN name). */
 function formatModelBasis(r: GridRow): string {
   const s = r.summary
@@ -341,14 +434,106 @@ function openDetail(r: GridRow) {
   detailQualityExpanded.value = r.summary?.forecastDataQualityStatus === 'WARNING'
   detailFactorsExpanded.value = false
   void loadDetailSeries()
+  void loadDetailExplainability()
+  void loadDetailAccuracy()
+  void loadDetailRetroLookback()
+}
+
+async function loadDetailAccuracy() {
+  detailAccuracyLogs.value = []
+  const r = detailRow.value
+  if (!r?.assetId) return
+  detailAccuracyLoading.value = true
+  try {
+    const logs = await listMlForecastAccuracyLogs({
+      rideId: r.assetId,
+      comparableOnly: true,
+      limit: 6,
+    })
+    detailAccuracyLogs.value = logs
+  } catch {
+    detailAccuracyLogs.value = []
+  } finally {
+    detailAccuracyLoading.value = false
+  }
+}
+
+async function loadDetailRetroLookback() {
+  detailRetroLookback.value = []
+  const r = detailRow.value
+  if (!r?.assetId) return
+  detailRetroLookbackLoading.value = true
+  try {
+    detailRetroLookback.value = await getMlRetroLookback(r.assetId)
+  } catch {
+    detailRetroLookback.value = []
+  } finally {
+    detailRetroLookbackLoading.value = false
+  }
 }
 
 function closeDetail() {
+  operatingBandsFetchId += 1
+  detailOperatingMarkAreaData.value = []
   disposeDetailChart()
   detailOpen.value = false
   detailRow.value = null
   detailSeries.value = []
   detailContext.value = null
+  detailExplainAdr.value = null
+  detailExplainRidge.value = null
+  detailRidgePredictions.value = []
+  detailExplainLoading.value = false
+  detailAccuracyLogs.value = []
+  detailAccuracyLoading.value = false
+  detailRetroLookback.value = []
+  detailRetroLookbackLoading.value = false
+}
+
+async function loadDetailExplainability() {
+  detailExplainAdr.value = null
+  detailExplainRidge.value = null
+  const r = detailRow.value
+  if (!r?.assetId || !parkCtx.activeParkId) return
+  const extPark = parkCtx.activePark?.externalEntityId
+  detailExplainLoading.value = true
+  try {
+    const prov = forecastProvider.value
+    const tasks: Promise<void>[] = []
+    if (r.externalEntityId && extPark) {
+      const asset = assets.value.find((a) => String(a.assetId) === String(r.assetId))
+      const entityTypeRaw = asset?.entityType ?? asset?.assetTypeCode
+      const entityType = typeof entityTypeRaw === 'string' && entityTypeRaw.trim() ? entityTypeRaw.trim() : undefined
+      tasks.push(
+        getEntityForecastExplanation(r.externalEntityId, {
+          externalParkId: String(extPark),
+          provider: prov,
+          entityType,
+          horizon: 60,
+        })
+          .then((d) => {
+            detailExplainAdr.value = d.explainability ?? null
+          })
+          .catch(() => {
+            detailExplainAdr.value = null
+          })
+      )
+    }
+    tasks.push(
+      getRideMlRideWaitPredict(r.assetId, { horizon: '15,30,60', explain: true })
+        .then((d) => {
+          detailExplainRidge.value = d.explanation ?? null
+          detailRidgePredictions.value = d.predictions ?? []
+        })
+        .catch(() => {
+          detailExplainRidge.value = null
+          detailRidgePredictions.value = []
+        })
+    )
+    await Promise.all(tasks)
+  } finally {
+    detailExplainLoading.value = false
+  }
 }
 
 function bucketMs(m: number) {
@@ -379,6 +564,22 @@ function aggregateWaits(
 
 function formatDetailChartTime(ts: number): string {
   return dt.formatDateTime(new Date(ts))
+}
+
+/** ECharts time-axis ticks may be number | Date | string depending on version / zoom state. */
+function coerceChartAxisTickToMs(v: unknown): number | null {
+  if (typeof v === 'number' && Number.isFinite(v)) return v
+  if (v instanceof Date) {
+    const t = v.getTime()
+    return Number.isFinite(t) ? t : null
+  }
+  if (typeof v === 'string') {
+    const n = Number(v)
+    if (Number.isFinite(n)) return n
+    const parsed = Date.parse(v)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
 }
 
 /** Cap coarsest major ticks on ECharts time axis so labels are not only local midnights (day-only look). */
@@ -513,8 +714,10 @@ const detailChartPayload = computed(() => {
 
 const detailEChartsOption = computed((): EChartsOption | null => {
   void locale.value
+  void dt.prefs.value
   void detailShowPointLabels.value
   void detailShowTrendLine.value
+  void detailOperatingMarkAreaData.value
   const p = detailChartPayload.value
   if (!p) return null
 
@@ -528,6 +731,10 @@ const detailEChartsOption = computed((): EChartsOption | null => {
   const bucketWeatherLbl = t('aiRideGrid.chartBucketWeather')
 
   const axisTime = (ms: number) => formatDetailChartTime(ms)
+  const axisTickLabel = (v: unknown) => {
+    const ms = coerceChartAxisTickToMs(v)
+    return ms != null ? axisTime(ms) : ''
+  }
   const tFirst = Number(p.histData[0]?.[0])
   const spanMs = Math.max(0, Number(p.domainEnd) - tFirst)
   const xAxisMaxInterval = timeAxisMaxIntervalMs(spanMs)
@@ -618,6 +825,16 @@ const detailEChartsOption = computed((): EChartsOption | null => {
     label: { ...pointLabelCfg },
     labelLayout: { hideOverlap: true },
     z: 4,
+    markArea:
+      detailOperatingMarkAreaData.value.length > 0
+        ? {
+            silent: true,
+            z: 0.5,
+            itemStyle: { color: 'rgba(30, 41, 59, 0.48)' },
+            label: { show: false },
+            data: detailOperatingMarkAreaData.value,
+          }
+        : undefined,
     markLine: p.showProjection
       ? {
           symbol: 'none',
@@ -668,8 +885,7 @@ const detailEChartsOption = computed((): EChartsOption | null => {
       formatter(params: unknown) {
         if (!Array.isArray(params) || !params.length) return ''
         const ax = params[0]?.axisValue
-        const ts = typeof ax === 'number' ? ax : Number(ax)
-        const head = Number.isFinite(ts) ? axisTime(ts) : ''
+        const head = axisTickLabel(ax as unknown)
         const hasTempSeries = params.some((x) => x && x.seriesName === labelTemp)
         const lines = params
           .filter(
@@ -695,8 +911,8 @@ const detailEChartsOption = computed((): EChartsOption | null => {
           })
 
         const hp = params.find((x) => x && x.seriesName === labelActual)
-        let bucketTs = ts
-        if (hp && Array.isArray(hp.value)) bucketTs = Number(hp.value[0])
+        let bucketTs = coerceChartAxisTickToMs(ax as unknown) ?? NaN
+        if (hp && Array.isArray(hp.value)) bucketTs = Number((hp.value as [number, number])[0])
         const cx =
           Number.isFinite(bucketTs) && p.bucketContext.size
             ? p.bucketContext.get(bucketTs)
@@ -720,7 +936,7 @@ const detailEChartsOption = computed((): EChartsOption | null => {
         color: '#94a3b8',
         fontSize: 10,
         hideOverlap: true,
-        formatter: (v: number | string) => axisTime(typeof v === 'number' ? v : Number(v)),
+        formatter: (v: unknown) => axisTickLabel(v),
       },
       splitLine: { show: true, lineStyle: { color: '#1e293b', type: 'dashed' } },
     },
@@ -801,6 +1017,8 @@ const detailChartTimeBounds = computed(() => {
   return { start: formatDetailChartTime(start), end: formatDetailChartTime(end) }
 })
 
+const detailHasOperatingBandsOverlay = computed(() => detailOperatingMarkAreaData.value.length > 0)
+
 watch(
   () =>
     [
@@ -811,6 +1029,7 @@ watch(
       locale.value,
       detailShowPointLabels.value,
       detailShowTrendLine.value,
+      detailOperatingMarkAreaData.value,
     ] as const,
   async () => {
     await nextTick()
@@ -834,18 +1053,89 @@ watch(
 
 onBeforeUnmount(() => disposeDetailChart())
 
-const factorBars = computed(() => {
+function coerceForecastStringArray(v: unknown): string[] {
+  if (!Array.isArray(v)) return []
+  return v.map((x) => String(x).trim()).filter(Boolean)
+}
+
+/** API may omit camelCase; some proxies send snake_case. */
+function normalizeParkForecastSummary(s: ParkForecastSummary): ParkForecastSummary {
+  const raw = s as Record<string, unknown>
+  return {
+    ...s,
+    featureDataQuality: coerceForecastStringArray(s.featureDataQuality ?? raw.feature_data_quality),
+    featureDataQualityNotes: coerceForecastStringArray(s.featureDataQualityNotes ?? raw.feature_data_quality_notes),
+  }
+}
+
+type FactorBarRow = { code: string; label: string; contribution: number; pct: number; sign: 1 | -1 }
+
+const factorBars = computed((): FactorBarRow[] => {
   const s = detailRow.value?.summary
-  if (!s?.factors?.length) return []
-  const facs = s.factors
-  const max = Math.max(0.01, ...facs.map((f: { contribution: number }) => Math.abs(f.contribution)))
-  return facs.map((f: { code: string; contribution: number }) => ({
-    code: f.code,
-    label: factorLabels.value.get(f.code) ?? f.code,
-    contribution: f.contribution,
-    pct: Math.min(100, (Math.abs(f.contribution) / max) * 100),
-    sign: f.contribution >= 0 ? 1 : -1,
-  }))
+  if (!s) return []
+  const labels = factorLabels.value
+
+  const facs = Array.isArray(s.factors) ? s.factors : []
+  const nonTrivialBaseline = facs.filter((f) => Math.abs(Number(f.contribution) || 0) > 1e-6)
+  if (nonTrivialBaseline.length) {
+    const max = Math.max(0.01, ...nonTrivialBaseline.map((f) => Math.abs(Number(f.contribution) || 0)))
+    return nonTrivialBaseline.map((f) => {
+      const c = Number(f.contribution) || 0
+      return {
+        code: String(f.code ?? ''),
+        label: labels.get(String(f.code)) ?? String(f.code ?? ''),
+        contribution: c,
+        pct: Math.min(100, (Math.abs(c) / max) * 100),
+        sign: c >= 0 ? 1 : -1,
+      }
+    })
+  }
+
+  const top = s.topInfluencingFactors
+  if (Array.isArray(top) && top.length) {
+    const rows = top.map((inf: ForecastInfluencingFactor) => {
+      const impactStr = String(inf.impact ?? '')
+      const m = impactStr.match(/([+-]?\d+(?:\.\d+)?)/)
+      const contribution = m ? Number(m[1]) : 0
+      const feat = String(inf.feature ?? '')
+      const pretty = feat.includes('_') ? feat.replace(/_/g, ' ') : feat
+      return {
+        code: feat,
+        label: labels.get(feat) || pretty,
+        contribution,
+        pct: 0,
+        sign: (contribution >= 0 ? 1 : -1) as 1 | -1,
+      }
+    })
+    const max = Math.max(0.01, ...rows.map((r) => Math.abs(r.contribution)))
+    return rows.map((r) => ({
+      ...r,
+      pct: Math.min(100, (Math.abs(r.contribution) / max) * 100),
+    }))
+  }
+
+  const ml = s.mlFactorCurrents
+  if (ml && typeof ml === 'object' && Object.keys(ml).length) {
+    const rows = Object.entries(ml).map(([code, v]) => {
+      const curRaw = v && typeof v === 'object' && 'current' in v ? (v as { current: unknown }).current : null
+      const cur = typeof curRaw === 'number' ? curRaw : Number(curRaw)
+      const contribution = Number.isFinite(cur) ? cur - 1 : 0
+      return {
+        code,
+        label: labels.get(code) ?? code,
+        contribution,
+        pct: 0,
+        sign: (contribution >= 0 ? 1 : -1) as 1 | -1,
+      }
+    })
+    const max = Math.max(0.01, ...rows.map((r) => Math.abs(r.contribution)))
+    return rows.map((r) => ({
+      ...r,
+      pct: Math.min(100, (Math.abs(r.contribution) / max) * 100),
+    }))
+  }
+
+  return []
 })
 
 async function loadFactorLabels() {
@@ -872,20 +1162,23 @@ async function loadGrid() {
   }
   loading.value = true
   try {
-    const [rideAssets, sum, currentRows, settings] = await Promise.all([
+    const [rideAssets, sum, currentRows, settings, winRates] = await Promise.all([
       getPlatformAssets({ parkId: parkCtx.activeParkId, assetTypeCode: 'RIDE', limit: 500 }),
       getParkRideForecastSummaries(String(extPark), { limit: 200 }),
       getRideCurrentWaits({ hours: 24 }),
       getIntegrationSettings().catch(() => ({} as Record<string, unknown>)),
+      getMlModelWinRateStats().catch(() => [] as ModelWinRateStat[]),
     ])
+    modelWinRates.value = winRates
     assets.value = rideAssets
     const sel = settings?.selectedProvider as { provider?: string } | undefined
     const provider = sel?.provider || 'themeparks_wiki'
+    forecastProvider.value = provider
     const extParkStr = String(extPark)
     const byEntity = new Map<string, ParkForecastSummary>()
     for (const s of sum) {
       const id = s.externalEntityId != null ? String(s.externalEntityId) : ''
-      if (id) byEntity.set(id, s)
+      if (id) byEntity.set(id, normalizeParkForecastSummary(s))
     }
     const missingIds = [
       ...new Set(
@@ -907,7 +1200,7 @@ async function loadGrid() {
               provider,
               entityType,
             })
-            if (s?.externalEntityId) byEntity.set(String(s.externalEntityId), s)
+            if (s?.externalEntityId) byEntity.set(String(s.externalEntityId), normalizeParkForecastSummary(s))
           } catch {
             /* missing snapshots / permissions */
           }
@@ -957,6 +1250,55 @@ async function loadGrid() {
   }
 }
 
+function computeDetailChartTimeRangeMs(): { tStart: number; tEnd: number } | null {
+  const pts = detailSeries.value
+  const row = detailRow.value
+  if (pts.length < 2 || !row) return null
+  const stepMs = bucketMs(detailBucketMin.value)
+  const lastBucketStart = pts[pts.length - 1]!.t
+  const lastHistEnd = lastBucketStart + stepMs
+  const now = Date.now()
+  const cur = currentWaitForRow(row)
+  const n15 =
+    row.summary?.forecast15Minutes != null && Number.isFinite(Number(row.summary.forecast15Minutes))
+      ? Number(row.summary.forecast15Minutes)
+      : null
+  const n60 =
+    row.summary?.forecast60Minutes != null && Number.isFinite(Number(row.summary.forecast60Minutes))
+      ? Number(row.summary.forecast60Minutes)
+      : null
+  const showProjection =
+    cur != null && Number.isFinite(Number(cur)) && (n15 != null || n60 != null)
+  const tForecastEnd = now + bucketMs(60)
+  const domainEnd = Math.max(lastHistEnd, showProjection ? tForecastEnd : lastHistEnd)
+  return { tStart: pts[0]!.t, tEnd: domainEnd }
+}
+
+async function loadDetailOperatingBands() {
+  detailOperatingMarkAreaData.value = []
+  const range = computeDetailChartTimeRangeMs()
+  const parkId = parkCtx.activeParkId
+  const tzRaw = parkCtx.activePark?.timezone
+  const tz = (typeof tzRaw === 'string' && tzRaw.trim() ? tzRaw.trim() : null) || 'UTC'
+  if (!range || !parkId) return
+  const myId = ++operatingBandsFetchId
+  const keys = collectParkLocalDateKeys(tz, range.tStart, range.tEnd)
+  const map = new Map<string, PlatformOperationalContext>()
+  for (const ymd of keys) {
+    if (myId !== operatingBandsFetchId) return
+    try {
+      const at = noonIsoForParkLocalYmd(tz, ymd)
+      const ctx = await getPlatformParkOperationalContext(parkId, { at })
+      map.set(ymd, ctx)
+    } catch {
+      /* parks.read / network — skip day */
+    }
+  }
+  if (myId !== operatingBandsFetchId) return
+  const merged = closedRangesFromOperationalDays(tz, range.tStart, range.tEnd, map)
+  detailOperatingMarkAreaData.value = markAreaPairsFromClosedRanges(merged)
+}
+
 async function loadDetailSeries() {
   const r = detailRow.value
   if (!r?.assetId || !parkCtx.activeParkId) return
@@ -978,6 +1320,7 @@ async function loadDetailSeries() {
   } finally {
     detailLoading.value = false
   }
+  void loadDetailOperatingBands()
 }
 
 watch(
@@ -997,14 +1340,16 @@ void loadFactorLabels()
 
 <template>
   <div class="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6">
-    <RouterLink to="/ai-insights" class="text-sm text-brand-400 hover:text-brand-300">← {{ t('aiRideGrid.back') }}</RouterLink>
-
     <div>
       <h1 :class="ui.title">{{ t('aiRideGrid.title') }}</h1>
-      <p :class="ui.subtitle">{{ t('aiRideGrid.subtitle') }}</p>
     </div>
 
-    <div v-if="!parkCtx.activePark?.externalEntityId" :class="ui.card" class="text-amber-600 dark:text-amber-400">
+    <div
+      v-if="!parkCtx.activePark?.externalEntityId"
+      data-testid="ai-wait-need-park-external"
+      :class="ui.card"
+      class="text-amber-600 dark:text-amber-400"
+    >
       {{ t('aiRideGrid.needExternalPark') }}
     </div>
 
@@ -1021,7 +1366,24 @@ void loadFactorLabels()
         <span v-if="loading" :class="ui.muted">{{ t('aiRideGrid.loading') }}</span>
       </div>
 
-      <div :class="ui.card" class="overflow-x-auto">
+      <!-- Model Win-Rate Strip -->
+      <div v-if="modelWinRates.length > 1" class="flex flex-wrap gap-2 px-1">
+        <div
+          v-for="(mw, mi) in modelWinRates"
+          :key="mi"
+          class="flex items-center gap-1.5 rounded-md border border-indigo-800/40 bg-indigo-950/30 px-2.5 py-1"
+        >
+          <span class="text-[11px] font-medium text-indigo-300">{{ mw.modelName }}</span>
+          <span class="rounded bg-indigo-800/50 px-1.5 py-0.5 text-[10px] font-mono text-indigo-200"
+            >{{ mw.winRate }}%</span
+          >
+          <span v-if="mw.avgAbsoluteError != null" class="text-[9px] text-indigo-400/60"
+            >MAE {{ mw.avgAbsoluteError }}</span
+          >
+        </div>
+      </div>
+
+      <div :class="ui.card" class="overflow-x-auto" data-testid="ai-wait-forecast-root">
         <div class="flex flex-wrap items-end gap-3 border-b border-slate-700/50 px-1 pb-3 pt-1">
           <div class="min-w-[12rem] flex-1">
             <label class="mb-1 block text-xs font-medium text-slate-400" for="ride-wait-search">{{
@@ -1044,82 +1406,80 @@ void loadFactorLabels()
             {{ t('aiRideGrid.resetFilters') }}
           </button>
         </div>
-        <table class="w-full min-w-[720px] text-left text-sm">
+        <table class="w-full min-w-[720px] text-left text-sm" data-testid="ai-wait-forecast-table">
           <thead>
             <tr :class="ui.muted">
               <th class="cursor-pointer py-2 pr-3 select-none hover:text-slate-200" @click="setSort('name')">
                 {{ t('aiRideGrid.colRide') }}
                 <span v-if="sortBy === 'name'" class="ml-0.5 text-xs opacity-70">{{ sortDir === 'asc' ? '↑' : '↓' }}</span>
               </th>
-              <th class="cursor-pointer py-2 pr-3 select-none hover:text-slate-200" @click="setSort('current')">
+              <th
+                class="cursor-pointer py-2 pr-3 select-none hover:text-slate-200"
+                data-testid="ai-wait-col-current"
+                @click="setSort('current')"
+              >
                 {{ t('aiRideGrid.colCurrent') }}
                 <span v-if="sortBy === 'current'" class="ml-0.5 text-xs opacity-70">{{ sortDir === 'asc' ? '↑' : '↓' }}</span>
               </th>
-              <th class="cursor-pointer py-2 pr-3 select-none hover:text-slate-200" @click="setSort('f15')">
+              <th
+                class="cursor-pointer py-2 pr-3 select-none hover:text-slate-200"
+                data-testid="ai-wait-col-f15"
+                @click="setSort('f15')"
+              >
                 {{ t('aiRideGrid.colF15') }}
                 <span v-if="sortBy === 'f15'" class="ml-0.5 text-xs opacity-70">{{ sortDir === 'asc' ? '↑' : '↓' }}</span>
               </th>
-              <th class="cursor-pointer py-2 pr-3 select-none hover:text-slate-200" @click="setSort('f60')">
+              <th
+                class="cursor-pointer py-2 pr-3 select-none hover:text-slate-200"
+                data-testid="ai-wait-col-f60"
+                @click="setSort('f60')"
+              >
                 {{ t('aiRideGrid.colF60') }}
                 <span v-if="sortBy === 'f60'" class="ml-0.5 text-xs opacity-70">{{ sortDir === 'asc' ? '↑' : '↓' }}</span>
               </th>
-              <th class="cursor-pointer py-2 pr-3 select-none hover:text-slate-200" @click="setSort('trend')">
+              <th
+                class="cursor-pointer py-2 pr-3 select-none hover:text-slate-200"
+                data-testid="ai-wait-col-trend"
+                @click="setSort('trend')"
+              >
                 {{ t('aiRideGrid.colTrend') }}
                 <span v-if="sortBy === 'trend'" class="ml-0.5 text-xs opacity-70">{{ sortDir === 'asc' ? '↑' : '↓' }}</span>
               </th>
-              <th class="cursor-pointer py-2 pr-3 select-none hover:text-slate-200" @click="setSort('confidence')">
-                {{ t('aiRideGrid.colConfidence') }}
-                <span v-if="sortBy === 'confidence'" class="ml-0.5 text-xs opacity-70">{{ sortDir === 'asc' ? '↑' : '↓' }}</span>
-              </th>
-              <th class="cursor-pointer py-2 pr-3 select-none hover:text-slate-200" @click="setSort('source')">
-                {{ t('aiRideGrid.colSource') }}
-                <span v-if="sortBy === 'source'" class="ml-0.5 text-xs opacity-70">{{ sortDir === 'asc' ? '↑' : '↓' }}</span>
-              </th>
-              <th class="max-w-[12rem] cursor-pointer py-2 pr-3 select-none hover:text-slate-200" @click="setSort('factors')">
-                {{ t('aiRideGrid.colFactors') }}
-                <span v-if="sortBy === 'factors'" class="ml-0.5 text-xs opacity-70">{{ sortDir === 'asc' ? '↑' : '↓' }}</span>
-              </th>
               <th
-                class="max-w-[14rem] cursor-pointer py-2 pr-3 select-none hover:text-slate-200"
-                :title="t('aiRideGrid.colBasisHint')"
+                class="cursor-pointer py-2 pr-3 select-none hover:text-slate-200"
+                data-testid="ai-wait-col-basis"
                 @click="setSort('basis')"
               >
                 {{ t('aiRideGrid.colBasis') }}
                 <span v-if="sortBy === 'basis'" class="ml-0.5 text-xs opacity-70">{{ sortDir === 'asc' ? '↑' : '↓' }}</span>
               </th>
-              <th class="py-2 pr-2 text-right">{{ t('aiRideGrid.colAction') }}</th>
+              <th class="py-2 pr-2 text-right"></th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="r in displayRows" :key="r.assetId" class="border-t border-slate-700/50">
+            <tr
+              v-for="r in displayRows"
+              :key="r.assetId"
+              class="cursor-pointer border-t border-slate-700/50 transition-colors hover:bg-slate-800/40"
+              :data-testid="'ai-wait-row-' + r.assetId"
+              @click="openDetail(r)"
+            >
               <td class="py-2 pr-3 font-medium">{{ r.name }}</td>
-              <td class="py-2 pr-3">
+              <td class="py-2 pr-3 tabular-nums">
                 {{ formatForecastOutputMinutes(currentWaitForRow(r)) }}
-                <span v-if="currentIsFromAdapter(r)" class="text-xs opacity-70"> {{ t('aiRideGrid.tagAdapter') }}</span>
-                <span
-                  v-else-if="r.summary == null && r.snapshotWait != null"
-                  class="text-xs opacity-70"
-                >
-                  {{ t('aiRideGrid.tagSync') }}</span>
               </td>
-              <td class="py-2 pr-3">{{ r.summary?.forecast15Minutes ?? '—' }}</td>
-              <td class="py-2 pr-3">{{ r.summary?.forecast60Minutes ?? '—' }}</td>
+              <td class="py-2 pr-3 tabular-nums">{{ r.summary?.forecast15Minutes ?? '—' }}</td>
+              <td class="py-2 pr-3 tabular-nums">{{ r.summary?.forecast60Minutes ?? '—' }}</td>
               <td class="py-2 pr-3">{{ trendDisplay(r) }}</td>
-              <td class="py-2 pr-3 text-xs">{{ formatConfidence(r.summary) }}</td>
-              <td class="max-w-[8rem] truncate py-2 pr-3 font-mono text-xs" :title="r.summary?.forecastSource ?? ''">
-                {{ r.summary?.forecastSource ?? '—' }}
-              </td>
-              <td class="max-w-[12rem] truncate py-2 pr-3 text-xs" :title="formatFactorsShort(r.summary)">
-                {{ formatFactorsShort(r.summary) }}
-              </td>
-              <td class="max-w-[14rem] truncate py-2 pr-3 text-xs" :title="formatModelBasis(r)">
+              <td class="max-w-[14rem] truncate py-2 pr-3 text-[11px] text-slate-300" :title="formatModelBasis(r)">
                 {{ formatModelBasis(r) || '—' }}
               </td>
               <td class="py-2 pr-2 text-right">
                 <button
                   type="button"
-                  class="rounded border border-slate-500 px-2 py-1 text-xs hover:bg-slate-800/80"
-                  @click="openDetail(r)"
+                  class="rounded border border-slate-600 px-2 py-1 text-xs text-slate-400 hover:bg-slate-800/80 hover:text-slate-200"
+                  data-testid="ai-wait-open-detail"
+                  @click.stop="openDetail(r)"
                 >
                   {{ t('aiRideGrid.details') }}
                 </button>
@@ -1144,14 +1504,12 @@ void loadFactorLabels()
     >
       <div
         class="flex max-h-[90vh] w-full max-w-[1180px] flex-col overflow-hidden rounded-lg border border-slate-600 bg-slate-950 shadow-2xl"
+        data-testid="ai-wait-ride-detail"
         @click.stop
       >
         <header class="flex shrink-0 items-start justify-between gap-2 border-b border-slate-700 bg-slate-950 px-3 py-2 sm:px-4">
           <div class="min-w-0">
             <h2 class="truncate text-lg font-semibold text-slate-50">{{ detailRow.name }}</h2>
-            <p class="mt-0.5 line-clamp-2 text-[11px] leading-snug text-slate-400">
-              {{ t('aiRideGrid.detailHint') }}
-            </p>
           </div>
           <button
             type="button"
@@ -1291,6 +1649,182 @@ void loadFactorLabels()
             </p>
           </section>
 
+          <section class="mt-3 space-y-3 border-b border-slate-700/70 pb-3" data-testid="ai-wait-detail-explainability">
+            <h3 class="text-xs font-semibold text-slate-400">{{ t('aiRideGrid.explainSectionTitle') }}</h3>
+            <template v-if="detailExplainLoading || detailExplainAdr || detailExplainRidge">
+              <RideAiExplainabilityCard
+                v-if="showAdrExplainCard && (detailExplainLoading || detailExplainAdr)"
+                :title="t('aiRideGrid.explainAdrTitle')"
+                :payload="detailExplainAdr"
+                :loading="detailExplainLoading && !detailExplainAdr"
+              />
+              <RideAiExplainabilityCard
+                :title="t('aiRideGrid.explainRidgeTitle')"
+                :payload="detailExplainRidge"
+                :loading="detailExplainLoading && !detailExplainRidge"
+              />
+            </template>
+            <p v-else class="text-[11px] text-slate-500">—</p>
+          </section>
+
+          <!-- A2) Forecast Decomposition Waterfall -->
+          <section
+            v-if="detailDecomp.length"
+            class="mt-3 space-y-1.5 rounded-md border border-slate-700 bg-slate-900 p-2.5"
+          >
+            <h3 class="text-xs font-semibold text-slate-300">{{ t('aiRideGrid.decompTitle') }}</h3>
+            <table class="w-full text-[11px]">
+              <thead>
+                <tr class="border-b border-slate-700 text-slate-500">
+                  <th class="pb-1 text-left font-medium"></th>
+                  <th class="pb-1 text-right font-medium">15 {{ t('aiRideGrid.decompMin') }}</th>
+                  <th class="pb-1 text-right font-medium">60 {{ t('aiRideGrid.decompMin') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="(row, ri) in detailDecomp"
+                  :key="ri"
+                  :class="[
+                    row.isFinal
+                      ? 'border-t border-slate-600 font-semibold text-brand-200'
+                      : ri === 0
+                        ? 'text-slate-300'
+                        : 'text-slate-400',
+                  ]"
+                >
+                  <td class="py-0.5 pr-2">
+                    {{ row.label }}
+                    <template v-if="row.factors?.length">
+                      <span
+                        v-for="(f, fi) in row.factors"
+                        :key="fi"
+                        class="ml-1 inline-block rounded-full border border-slate-600/60 bg-slate-800/60 px-1.5 text-[9px] text-slate-400"
+                      >{{ f.feature }} <span class="text-amber-300/80 font-mono">{{ f.impact }}</span></span>
+                    </template>
+                  </td>
+                  <td class="py-0.5 text-right font-mono">{{ row.delta15 }}</td>
+                  <td class="py-0.5 text-right font-mono">{{ row.delta60 }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
+
+          <!-- A2b) Retro Lookback: Was wurde vor X min für JETZT prognostiziert? -->
+          <section class="mt-3 space-y-1.5 rounded-md border border-emerald-800/40 bg-emerald-950/20 p-2.5">
+            <h3 class="text-xs font-semibold text-emerald-300">{{ t('aiRideGrid.lookbackTitle') }}</h3>
+            <p v-if="detailRetroLookbackLoading" class="text-[11px] text-slate-500">{{ t('common.loading') }}…</p>
+            <p v-else-if="!detailRetroLookback.length" class="text-[11px] text-slate-500">{{ t('aiRideGrid.lookbackEmpty') }}</p>
+            <template v-else>
+              <div class="flex flex-wrap gap-2">
+                <div
+                  v-for="(lb, li) in detailRetroLookback"
+                  :key="li"
+                  class="flex flex-col items-center rounded border border-emerald-800/40 bg-emerald-950/30 px-3 py-1.5"
+                >
+                  <span class="text-[9px] uppercase text-emerald-400/60">{{ t('aiRideGrid.lookbackAgo', { min: lb.horizon }) }}</span>
+                  <span class="text-lg font-mono font-semibold text-emerald-200">{{ lb.predictedValue }} min</span>
+                  <span class="text-[9px] text-slate-500">{{ lb.modelName }}</span>
+                  <template v-if="currentWaitForRow(detailRow!) != null">
+                    <span
+                      class="mt-0.5 text-[10px] font-mono"
+                      :class="{
+                        'text-emerald-400': Math.abs(lb.predictedValue - currentWaitForRow(detailRow!)!) <= 3,
+                        'text-amber-400': Math.abs(lb.predictedValue - currentWaitForRow(detailRow!)!) > 3 && Math.abs(lb.predictedValue - currentWaitForRow(detailRow!)!) <= 8,
+                        'text-red-400': Math.abs(lb.predictedValue - currentWaitForRow(detailRow!)!) > 8,
+                      }"
+                    >
+                      {{ t('aiRideGrid.lookbackDiff') }}:
+                      {{ (currentWaitForRow(detailRow!)! - lb.predictedValue) >= 0 ? '+' : '' }}{{ currentWaitForRow(detailRow!)! - lb.predictedValue }} min
+                    </span>
+                  </template>
+                </div>
+              </div>
+              <p class="text-[9px] text-emerald-400/50">
+                {{ t('aiRideGrid.lookbackHint', { now: currentWaitForRow(detailRow!) ?? '—' }) }}
+              </p>
+            </template>
+          </section>
+
+          <!-- A3) Retro: Prognose vs. Realität -->
+          <section
+            class="mt-3 space-y-1.5 rounded-md border border-slate-700 bg-slate-900 p-2.5"
+            data-testid="ai-wait-detail-accuracy"
+          >
+            <h3 class="text-xs font-semibold text-slate-300">{{ t('aiRideGrid.retroTitle') }}</h3>
+            <p v-if="detailAccuracyLoading" class="text-[11px] text-slate-500">{{ t('common.loading') }}…</p>
+            <table v-else-if="detailRetroRows.length" class="w-full text-[11px]">
+              <thead>
+                <tr class="border-b border-slate-700 text-slate-500">
+                  <th class="pb-1 text-left font-medium">{{ t('aiRideGrid.retroWhen') }}</th>
+                  <th class="pb-1 text-right font-medium">{{ t('aiRideGrid.retroHorizon') }}</th>
+                  <th class="pb-1 text-right font-medium">{{ t('aiRideGrid.retroPredicted') }}</th>
+                  <th class="pb-1 text-right font-medium">{{ t('aiRideGrid.retroActual') }}</th>
+                  <th class="pb-1 text-right font-medium">{{ t('aiRideGrid.retroDiff') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="(row, ri) in detailRetroRows"
+                  :key="ri"
+                  class="text-slate-400"
+                >
+                  <td class="py-0.5 pr-2 text-slate-500">{{ row.when }}</td>
+                  <td class="py-0.5 text-right font-mono">{{ row.horizon }} min</td>
+                  <td class="py-0.5 text-right font-mono">{{ row.predicted }}</td>
+                  <td class="py-0.5 text-right font-mono">{{ row.actual }}</td>
+                  <td
+                    class="py-0.5 text-right font-mono"
+                    :class="{
+                      'text-emerald-400': Math.abs(row.diff) <= 3,
+                      'text-amber-400': Math.abs(row.diff) > 3 && Math.abs(row.diff) <= 8,
+                      'text-red-400': Math.abs(row.diff) > 8,
+                    }"
+                  >
+                    {{ row.diff >= 0 ? '+' : '' }}{{ row.diff }} min
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <p v-else class="text-[11px] text-slate-500">—</p>
+          </section>
+
+          <!-- A4) Champion vs. Challenger -->
+          <section
+            v-if="detailChallengerRows.length"
+            class="mt-3 space-y-1.5 rounded-md border border-indigo-800/40 bg-indigo-950/30 p-2.5"
+          >
+            <h3 class="text-xs font-semibold text-indigo-300">{{ t('aiRideGrid.challengerTitle') }}</h3>
+            <table class="w-full text-[11px]">
+              <thead>
+                <tr class="border-b border-indigo-800/50 text-indigo-400/80">
+                  <th class="pb-1 text-left font-medium">{{ t('aiRideGrid.retroHorizon') }}</th>
+                  <th class="pb-1 text-right font-medium">{{ t('aiRideGrid.championLabel') }}</th>
+                  <th class="pb-1 text-right font-medium">{{ t('aiRideGrid.challengerLabel') }}</th>
+                  <th class="pb-1 text-right font-medium">{{ t('aiRideGrid.retroDiff') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="(row, ri) in detailChallengerRows"
+                  :key="ri"
+                  class="text-indigo-200/80"
+                >
+                  <td class="py-0.5 pr-2">{{ row.horizon }} min</td>
+                  <td class="py-0.5 text-right font-mono font-semibold text-emerald-300">{{ row.champion }} min</td>
+                  <td class="py-0.5 text-right font-mono text-slate-400">
+                    {{ row.challenger }} min
+                    <span class="ml-1 text-[9px] text-indigo-400/60">({{ row.challengerModel }})</span>
+                  </td>
+                  <td class="py-0.5 text-right font-mono text-slate-500">
+                    {{ row.champion - row.challenger >= 0 ? '+' : '' }}{{ row.champion - row.challenger }} min
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <p class="text-[9px] text-indigo-400/60">{{ t('aiRideGrid.challengerHint') }}</p>
+          </section>
+
           <!-- B) Chart controls -->
           <div class="mt-3 flex flex-wrap items-end gap-2">
             <div>
@@ -1332,25 +1866,18 @@ void loadFactorLabels()
           </div>
 
           <!-- C) Wait time chart -->
-          <section class="mt-2 space-y-1">
+          <section class="mt-2 space-y-1" data-testid="ai-wait-detail-history">
             <h3 class="text-xs font-semibold text-slate-400">{{ t('aiRideGrid.chartWait') }}</h3>
-            <p class="text-[10px] leading-snug text-slate-500">{{ t('aiRideGrid.chartWaitHint') }}</p>
-            <p class="text-[10px] leading-snug text-slate-500">{{ t('aiRideGrid.chartZoomHint') }}</p>
-            <p class="text-[10px] leading-snug text-slate-500">{{ t('aiRideGrid.chartFactorTimeHint') }}</p>
-            <p v-if="detailChartPayload?.trendLineData" class="text-[10px] leading-snug text-slate-500">
-              {{ t('aiRideGrid.chartTrendHint') }}
-            </p>
-            <p v-if="detailChartPayload?.hasWeatherOverlay" class="text-[10px] leading-snug text-slate-500">
-              {{ t('aiRideGrid.chartContextOverlayHint') }}
-            </p>
             <div v-if="detailLoading" class="text-xs text-slate-500">{{ t('aiRideGrid.loading') }}</div>
             <div
               v-else-if="detailChartPayload"
-              class="overflow-hidden rounded border border-slate-700 bg-slate-900"
+              class="relative z-0 overflow-hidden rounded border border-slate-700 bg-slate-900"
             >
+              <!-- ECharts can paint slightly outside its nominal grid; clip at init root so canvas
+                   does not steal pointer events from sections below (Datenqualität / Modellfaktoren). -->
               <div
                 ref="detailChartRef"
-                class="h-[min(22rem,48vh)] w-full min-h-[240px]"
+                class="relative h-[min(22rem,48vh)] w-full min-h-[240px] overflow-hidden"
                 role="img"
                 :aria-label="t('aiRideGrid.chartAria')"
               />
@@ -1369,25 +1896,23 @@ void loadFactorLabels()
                   {{ t('aiRideGrid.buckets', { n: detailSeries.length, step: bucketStepLabel }) }}
                 </template>
               </p>
-              <p v-if="detailChartPayload.showProjection" class="px-2 pb-0.5 text-[10px] text-slate-500">
-                {{ t('aiRideGrid.chartForecastLegend') }}
+              <p class="px-2 pb-2 text-[10px] text-slate-600">
+                {{ chartZoneNote
+                }}<template v-if="detailHasOperatingBandsOverlay"
+                  ><br />{{ t('aiRideGrid.chartClosedScheduleFootnote') }}</template
+                >
               </p>
-              <p v-if="detailChartPayload.showProjection" class="px-2 pb-0.5 text-[10px] text-slate-500">
-                {{ t('aiRideGrid.chartUncertaintyHint') }}
-              </p>
-              <p class="px-2 pb-2 text-[10px] text-slate-600">{{ chartZoneNote }}</p>
             </div>
             <p v-else class="text-xs text-slate-500">{{ t('aiRideGrid.chartEmpty') }}</p>
           </section>
 
           <!-- D) Influencing factors -->
           <section
-            v-if="detailRow.summary?.topInfluencingFactors?.length"
-            class="mt-4 space-y-1.5 rounded-md border border-slate-700 bg-slate-900 p-2.5"
+            class="relative z-10 mt-4 space-y-1.5 rounded-md border border-slate-700 bg-slate-900 p-2.5"
+            data-testid="ai-wait-detail-influencing"
           >
             <h3 class="text-xs font-semibold text-slate-300">{{ t('aiRideGrid.influencingTitle') }}</h3>
-            <p class="text-[11px] leading-snug text-slate-500">{{ t('aiRideGrid.influencingHint') }}</p>
-            <ul class="flex flex-wrap gap-1.5">
+            <ul v-if="detailRow.summary?.topInfluencingFactors?.length" class="flex flex-wrap gap-1.5">
               <li
                 v-for="(inf, i) in detailRow.summary.topInfluencingFactors"
                 :key="i"
@@ -1396,8 +1921,9 @@ void loadFactorLabels()
                 {{ inf.feature }} <span class="font-mono text-amber-300/90">{{ inf.impact }}</span>
               </li>
             </ul>
+            <p v-else class="text-[11px] text-slate-500">—</p>
             <p
-              v-if="detailRow.summary.snapshotContext"
+              v-if="detailRow.summary?.snapshotContext"
               class="mt-2 grid gap-1 text-[11px] text-slate-400 sm:grid-cols-2"
             >
               <span
@@ -1452,9 +1978,10 @@ void loadFactorLabels()
           <section
             v-if="
               (detailRow.summary?.featureDataQuality?.length ?? 0) > 0 ||
-              (detailRow.summary?.featureDataQualityNotes?.length ?? 0) > 0
+              (detailRow.summary?.featureDataQualityNotes?.length ?? 0) > 0 ||
+              detailRow.summary?.snapshotCompletenessScore != null
             "
-            class="mt-3 overflow-hidden rounded-md border"
+            class="relative z-10 mt-3 overflow-hidden rounded-md border"
             :class="
               (detailRow.summary?.featureDataQuality?.length ?? 0) > 0
                 ? 'border-amber-800/50 bg-amber-950/25'
@@ -1463,30 +1990,20 @@ void loadFactorLabels()
           >
             <button
               type="button"
-              class="flex w-full items-center justify-between gap-2 px-2.5 py-2 text-left text-xs font-medium hover:bg-black/10"
+              class="flex w-full cursor-pointer items-center justify-between gap-2 px-2.5 py-2 text-left text-xs font-medium hover:bg-black/10"
               :class="
                 (detailRow.summary?.featureDataQuality?.length ?? 0) > 0
                   ? 'text-amber-100'
                   : 'text-slate-300'
               "
               :aria-expanded="detailQualityExpanded"
-              @click="detailQualityExpanded = !detailQualityExpanded"
+              @click.stop="detailQualityExpanded = !detailQualityExpanded"
             >
               <span>{{ t('aiRideGrid.qualityTitle') }}</span>
               <span class="shrink-0 text-slate-400" aria-hidden="true">{{
                 detailQualityExpanded ? '▾' : '▸'
               }}</span>
             </button>
-            <p
-              class="px-2.5 pb-2 text-[10px] leading-snug"
-              :class="
-                (detailRow.summary?.featureDataQuality?.length ?? 0) > 0
-                  ? 'text-amber-100/75'
-                  : 'text-slate-400'
-              "
-            >
-              {{ t('aiRideGrid.qualityFootnote') }}
-            </p>
             <div
               v-show="detailQualityExpanded"
               class="border-t px-2.5 pb-2 pt-1 text-[11px]"
@@ -1522,12 +2039,12 @@ void loadFactorLabels()
           </section>
 
           <!-- F) Model factors (accordion) -->
-          <section class="mt-3 overflow-hidden rounded-md border border-slate-700 bg-slate-900">
+          <section class="relative z-10 mt-3 overflow-hidden rounded-md border border-slate-700 bg-slate-900">
             <button
               type="button"
-              class="flex w-full items-center justify-between gap-2 px-2.5 py-2 text-left text-xs font-medium text-slate-300 hover:bg-slate-800/80"
+              class="flex w-full cursor-pointer items-center justify-between gap-2 px-2.5 py-2 text-left text-xs font-medium text-slate-300 hover:bg-slate-800/80"
               :aria-expanded="detailFactorsExpanded"
-              @click="detailFactorsExpanded = !detailFactorsExpanded"
+              @click.stop="detailFactorsExpanded = !detailFactorsExpanded"
             >
               <span>{{ t('aiRideGrid.factorsTitle') }}</span>
               <span class="shrink-0 text-slate-500" aria-hidden="true">{{
@@ -1538,12 +2055,11 @@ void loadFactorLabels()
               v-show="detailFactorsExpanded"
               class="border-t border-slate-700 px-2.5 pb-2.5 pt-2"
             >
-              <p class="text-[11px] leading-snug text-slate-500">{{ t('aiRideGrid.factorsHint') }}</p>
               <div v-if="!factorBars.length" class="mt-2 text-xs text-slate-500">
                 {{ t('aiRideGrid.noFactors') }}
               </div>
               <ul v-else class="mt-2 space-y-1.5">
-                <li v-for="f in factorBars" :key="f.code" class="text-sm">
+                <li v-for="(f, fi) in factorBars" :key="fi + '-' + f.code" class="text-sm">
                   <div class="flex justify-between gap-2">
                     <span class="text-slate-200">{{ f.label }}</span>
                     <span class="font-mono text-xs" :class="f.sign >= 0 ? 'text-amber-400' : 'text-emerald-400'">

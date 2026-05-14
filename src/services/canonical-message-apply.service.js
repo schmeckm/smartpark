@@ -7,6 +7,8 @@ const { TimeseriesService } = require('./timeseries.service');
 const { ExternalEntityMappingService } = require('./external-entity-mapping.service');
 const { DataQualityIssueRepository } = require('../repositories/data-quality-issue.repository');
 const { normalizeScheduleDateString } = require('../utils/schedule-date.util');
+const { coerceNumericWaitMinutes } = require('../utils/canonical-wait-payload.util');
+const { syncAdapterRideAvailabilityDowntime } = require('./adapter-ride-status-downtime-mirror.service');
 
 class CanonicalMessageApplyService {
   constructor() {
@@ -117,6 +119,7 @@ class CanonicalMessageApplyService {
     const mapping = await this.mappingService.resolveMapping(message);
     const payload = message.payload;
     const parkAssetId = await this.resolveParkAssetIdForExternal(message);
+    const waitMinutes = coerceNumericWaitMinutes(payload.waitTime);
     await this.waitRepository.create({
       provider: message.provider,
       externalParkId: message.externalParkId,
@@ -124,7 +127,7 @@ class CanonicalMessageApplyService {
       externalEntityName: payload.externalEntityName || null,
       internalRideId: mapping.internalEntityType === 'RIDE' ? mapping.internalEntityId : null,
       parkAssetId,
-      waitTime: payload.waitTime == null ? null : Number(payload.waitTime),
+      waitTime: waitMinutes,
       status: payload.status || null,
       isOpen: payload.isOpen == null ? null : Boolean(payload.isOpen),
       rawPayload: message.rawPayload || {},
@@ -132,9 +135,27 @@ class CanonicalMessageApplyService {
     });
 
     if (mapping.mappingStatus === 'MAPPED' && mapping.internalEntityType === 'RIDE' && mapping.internalEntityId) {
+      const nextStatus = payload.isOpen === false ? 'CLOSED' : 'OPEN';
+      const rideRow = await this.rideRepository.findById(mapping.internalEntityId);
+      const previousStatus = rideRow ? rideRow.status : null;
       await this.rideRepository.updateById(mapping.internalEntityId, {
-        waitTime: payload.waitTime == null ? 0 : Number(payload.waitTime),
-        status: payload.isOpen === false ? 'CLOSED' : 'OPEN',
+        waitTime: waitMinutes == null ? 0 : waitMinutes,
+        status: nextStatus,
+      });
+      const internalParkId = await this.resolvePlatformParkForCanonical(message, payload);
+      let at = new Date();
+      if (payload.sampledAt != null && String(payload.sampledAt).trim() !== '') {
+        at = new Date(payload.sampledAt);
+      } else if (message.occurredAt) {
+        at = new Date(message.occurredAt);
+      }
+      await syncAdapterRideAvailabilityDowntime({
+        parkAssetId,
+        internalParkId,
+        previousStatus,
+        nextStatus,
+        at,
+        messageType: message.messageType,
       });
       return { applied: true };
     }
@@ -149,8 +170,24 @@ class CanonicalMessageApplyService {
   async applyEntityStatus(message) {
     const mapping = await this.mappingService.resolveMapping(message);
     if (mapping.mappingStatus === 'MAPPED' && mapping.internalEntityType === 'RIDE' && mapping.internalEntityId) {
-      const status = message.payload.isOpen === false ? 'CLOSED' : 'OPEN';
-      await this.rideRepository.updateById(mapping.internalEntityId, { status });
+      const nextStatus = message.payload.isOpen === false ? 'CLOSED' : 'OPEN';
+      const rideRow = await this.rideRepository.findById(mapping.internalEntityId);
+      const previousStatus = rideRow ? rideRow.status : null;
+      await this.rideRepository.updateById(mapping.internalEntityId, { status: nextStatus });
+      const parkAssetId = await this.resolveParkAssetIdForExternal(message);
+      const internalParkId = await this.resolvePlatformParkForCanonical(
+        message,
+        message.payload && typeof message.payload === 'object' ? message.payload : {}
+      );
+      const at = message.occurredAt ? new Date(message.occurredAt) : new Date();
+      await syncAdapterRideAvailabilityDowntime({
+        parkAssetId,
+        internalParkId,
+        previousStatus,
+        nextStatus,
+        at,
+        messageType: message.messageType,
+      });
       return { applied: true };
     }
     await mapping.update({ mappingStatus: 'NEEDS_REVIEW' });

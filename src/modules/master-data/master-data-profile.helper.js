@@ -53,6 +53,19 @@ function profileCompleteness(requiredKeys, flat, parkRow) {
   return 'COMPLETE';
 }
 
+/** @param {string[]} requiredKeys @param {Record<string, unknown>} flat */
+function missingRequiredFieldKeys(requiredKeys, flat, parkRow) {
+  if (!Array.isArray(requiredKeys) || requiredKeys.length === 0) return [];
+  const missing = [];
+  for (const key of requiredKeys) {
+    let v = flat[key];
+    if (key === 'park_name' && parkRow && !isPresent(v)) v = parkRow.name;
+    if (key === 'timezone' && parkRow && !isPresent(v)) v = parkRow.timezone;
+    if (!isPresent(v)) missing.push(key);
+  }
+  return missing;
+}
+
 function computeRideDerived(flat) {
   const dispatch = Number(flat.dispatch_interval_sec);
   const seats = Number(flat.seats_per_vehicle ?? flat.seatsPerCycle);
@@ -162,6 +175,7 @@ module.exports = {
   isPresent,
   flattenTypedValues,
   profileCompleteness,
+  missingRequiredFieldKeys,
   computeRideDerived,
   computeShowDerived,
   computeRestaurantDerived,

@@ -38,6 +38,27 @@ const date = ref(todayIsoDate())
 const board = ref<SqdcParkBoardResponse | null>(null)
 const loading = ref(false)
 
+/** EUR/day for C-ring: API total or sum of positive electricity + maintenance. */
+const parkCostEurForRing = computed(() => {
+  const b = board.value
+  if (!b) return null
+  const t = b.totalCostEurPerDay
+  if (t != null && Number.isFinite(Number(t))) return Number(t)
+  const elec = b.electricityCostEurPerDay
+  const maint = b.maintenanceCostEurPerDay
+  let sum = 0
+  let any = false
+  if (elec != null && Number(elec) > 0) {
+    sum += Number(elec)
+    any = true
+  }
+  if (maint != null && Number(maint) > 0) {
+    sum += Number(maint)
+    any = true
+  }
+  return any ? Math.round(sum * 100) / 100 : null
+})
+
 const parkScoreTraffic = computed(() => board.value?.uiThresholds?.scoreRingPark ?? { greenMin: 80, amberMin: 55 })
 
 function trafficLight(score: number | undefined | null): 'green' | 'amber' | 'red' {
@@ -190,7 +211,7 @@ const monthRingDays = computed(() => {
     scores: b.scores,
     costEurGreenMax: th?.ringCostEur.greenAtMost ?? 200,
     costEurAmberMax: th?.ringCostEur.amberAtMost ?? 500,
-    electricityCostEurPerDay: b.electricityCostEurPerDay,
+    costEurPerDayForRing: parkCostEurForRing.value,
     peopleMoodGreenMin: th?.ringPeopleMood.greenAtLeast ?? 4,
     peopleMoodAmberMin: th?.ringPeopleMood.amberAtLeast ?? 3,
     moodAvgSelectedDay: todayMoodAvgPark.value,
@@ -275,11 +296,10 @@ const parkRingHeroD = computed(() => {
 })
 
 const parkRingHeroC = computed(() => {
-  const b = board.value
   const days = monthRingDays.value
   const tr = ringToneTrendLabel(days, date.value, 'cost', ringTrendBundle())
   const tone = selectedDayRingRow.value?.cost
-  const eur = b?.electricityCostEurPerDay
+  const eur = parkCostEurForRing.value
   const has = eur != null && Number.isFinite(Number(eur))
   return {
     centerValue: has ? String(Math.round(Number(eur))) : null,
@@ -321,7 +341,7 @@ function todayPillarSub(key: 'safety' | 'quality' | 'delivery' | 'customer'): st
 }
 
 const todayCostSub = computed(() => {
-  const e = board.value?.electricityCostEurPerDay
+  const e = parkCostEurForRing.value
   if (e == null || !Number.isFinite(Number(e))) return ''
   return `${t('sqdc.todayShort')}: ${e} €`
 })
@@ -511,6 +531,22 @@ watch([parkIdParam, date], load)
                     ? `${board.electricityCostEurPerDay} €`
                     : '—'
                 }}
+              </dd>
+            </div>
+            <div class="flex justify-between gap-2">
+              <dt class="text-slate-500">{{ t('sqdc.maintenanceCostEurDay') }}</dt>
+              <dd class="font-mono text-white">
+                {{
+                  board.maintenanceCostEurPerDay != null && Number.isFinite(board.maintenanceCostEurPerDay)
+                    ? `${board.maintenanceCostEurPerDay} €`
+                    : '—'
+                }}
+              </dd>
+            </div>
+            <div class="flex justify-between gap-2 border-t border-slate-800/80 pt-2">
+              <dt class="text-slate-500">{{ t('sqdc.operatingCostTotalCringEurDay') }}</dt>
+              <dd class="font-mono text-white">
+                {{ parkCostEurForRing != null ? `${parkCostEurForRing} €` : '—' }}
               </dd>
             </div>
           </dl>

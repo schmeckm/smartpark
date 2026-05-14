@@ -5,6 +5,7 @@ const { AssetsRepository } = require('../assets/assets.repository');
 const {
   flattenTypedValues,
   profileCompleteness,
+  missingRequiredFieldKeys,
   computeRideDerived,
   computeShowDerived,
   computeRestaurantDerived,
@@ -73,6 +74,8 @@ function gridRowFromPark(p) {
     p.templateId && req.length
       ? p.enrichment?.profileCompleteness || profileCompleteness(req, flat, p)
       : null;
+  const missingKeys =
+    p.templateId && req.length ? missingRequiredFieldKeys(req, flat, p) : [];
   return {
     id: p.id,
     entityKind: 'park',
@@ -88,6 +91,8 @@ function gridRowFromPark(p) {
     active: inactive ? false : true,
     templateId: p.templateId || null,
     templateCode: tpl?.templateCode || null,
+    templateRequiredFields: req.length ? [...req] : [],
+    missingProfileFieldKeys: missingKeys,
     enrichmentStatus: completeness || enrichmentStatusOf(p),
     lastSyncedAt: p.lastSyncedAt || null,
     updatedAt: p.updatedAt || null,
@@ -130,6 +135,8 @@ function gridRowFromAsset(a, waitTimeMin = null) {
   const flat = flattenTypedValues(a.masterProfile, rm, sm, rtm);
   const completeness =
     a.templateId && req.length ? a.enrichment?.profileCompleteness || profileCompleteness(req, flat, null) : null;
+  const missingKeys =
+    a.templateId && req.length ? missingRequiredFieldKeys(req, flat, null) : [];
   return {
     id: a.assetId,
     entityKind: 'asset',
@@ -146,6 +153,8 @@ function gridRowFromAsset(a, waitTimeMin = null) {
     active: a.activeFlag !== false,
     templateId: a.templateId || null,
     templateCode: tpl?.templateCode || null,
+    templateRequiredFields: req.length ? [...req] : [],
+    missingProfileFieldKeys: missingKeys,
     enrichmentStatus: completeness || enrichmentStatusOf(a),
     lastSyncedAt: a.lastSyncedAt || null,
     updatedAt: a.updatedAt || null,
@@ -624,6 +633,8 @@ class MasterDataService {
     const req = Array.isArray(tpl?.requiredFieldsJson) ? tpl.requiredFieldsJson : [];
     const pc =
       p.templateId && req.length ? p.enrichment?.profileCompleteness || profileCompleteness(req, mp, p) : null;
+    const missingProfileKeys =
+      p.templateId && req.length ? missingRequiredFieldKeys(req, mp, p) : [];
     return {
       masterDataPresentation: {
         providerReadOnly: {
@@ -639,6 +650,8 @@ class MasterDataService {
         template: tpl ? toNestedPlain(tpl.get ? tpl.get({ plain: true }) : tpl) : null,
         calculated_fields: {},
         profile_completeness: pc,
+        template_required_field_keys: [...req],
+        missing_profile_field_keys: missingProfileKeys,
         parent_child: { parent: null, children: [], child_count: 0 },
       },
     };
@@ -656,6 +669,8 @@ class MasterDataService {
     const req = Array.isArray(tpl?.requiredFieldsJson) ? tpl.requiredFieldsJson : [];
     const pc =
       a.templateId && req.length ? a.enrichment?.profileCompleteness || profileCompleteness(req, flat, null) : null;
+    const missingProfileKeys =
+      a.templateId && req.length ? missingRequiredFieldKeys(req, flat, null) : [];
     let calculated = {};
     if (t === 'rides') {
       calculated = { ...computeRideDerived(flat), ...MasterDataService.computeRideCapacity(rm) };
@@ -681,6 +696,8 @@ class MasterDataService {
         template: tpl ? toNestedPlain(tpl) : null,
         calculated_fields: calculated,
         profile_completeness: pc,
+        template_required_field_keys: [...req],
+        missing_profile_field_keys: missingProfileKeys,
         parent_child: {
           parent: a.parentAsset ? { id: a.parentAsset.assetId, name: a.parentAsset.name } : null,
           children: [],
@@ -775,6 +792,7 @@ class MasterDataService {
       if (body.name != null) patch.name = String(body.name).slice(0, 200);
       if (body.slug != null) patch.slug = String(body.slug).slice(0, 128);
       if (body.sortOrder != null) patch.sortOrder = Number(body.sortOrder);
+      if (body.parentZoneId !== undefined) patch.parentZoneId = body.parentZoneId || null;
       await row.update(patch);
       return this.getById('zones', row.id);
     }

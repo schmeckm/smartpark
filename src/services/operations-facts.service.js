@@ -25,9 +25,8 @@ const {
 const { buildCanonicalUnsTopic, slugifyName } = require('../modules/uns/uns-topic-generator.service');
 const {
   findLatestTpunsLiveRowForTopic,
-  findLatestSparkplugLiveMetricRow,
+  probeSparkplugLiveMetricForRide,
 } = require('./mqtt-sparkplug-live-buffer.service');
-const { sparkplugDeviceTopicSegment } = require('../modules/uns/sparkplug-topic-builder.service');
 const env = require('../config/env');
 const { resolveRideContext, preparedUnsTopicsForRide, capabilitySignalSource } = require('./ride-signal-capability.service');
 const { evaluateApprovedForOperationsFactsRow } = require('./approved-operational-signal.service');
@@ -182,29 +181,14 @@ function tpunsLiveValue(topicPath) {
   };
 }
 
-function sparkplugLiveValue(ctx, signalCode) {
-  const groupId = (env.sparkplugGroupId && String(env.sparkplugGroupId).trim()) || slugifyName(ctx.parkSlug);
-  const edgeNodeId = String(env.sparkplugEdgeNode || 'park_gateway');
-  const deviceSeg = sparkplugDeviceTopicSegment(ctx.assetId);
-  const row =
-    findLatestSparkplugLiveMetricRow({
-      groupId,
-      edgeNodeId,
-      deviceId: deviceSeg,
-      metricName: signalCode,
-    }) ||
-    findLatestSparkplugLiveMetricRow({
-      groupId,
-      edgeNodeId,
-      deviceId: String(ctx.assetId),
-      metricName: signalCode,
-    });
-  if (!row || row.value === undefined || row.value === null) return null;
+async function sparkplugLiveValueResolved(ctx, signalCode) {
+  const hit = await probeSparkplugLiveMetricForRide(ctx, signalCode);
+  if (!hit || hit.row.value === undefined || hit.row.value === null) return null;
   return {
-    value: row.value,
+    value: hit.row.value,
     source: /** @type {FactSource} */ ('REGISTRY'),
     confidence: /** @type {FactConfidence} */ ('MEDIUM'),
-    reason: 'mqtt_live_sparkplug_buffer',
+    reason: `mqtt_live_sparkplug_buffer (edge:${hit.edgeNodeId}, device:${hit.deviceId})`,
   };
 }
 
@@ -233,7 +217,7 @@ async function resolveRegistryPath(activeTopic, topicPath, ctx, signalCode, warn
   const live = tpunsLiveValue(topicPath);
   if (live) best = pickBetterResolution(best, live);
 
-  const sp = sparkplugLiveValue(ctx, signalCode);
+  const sp = await sparkplugLiveValueResolved(ctx, signalCode);
   if (sp) best = pickBetterResolution(best, sp);
 
   if (!best && activeTopic) {

@@ -3,11 +3,19 @@
  */
 const { Op } = require('sequelize');
 const { Park, ParkAsset, RideFeatureSnapshot } = require('../../models');
-const { featureVectorFromMap, snapshotToFeatureMap } = require('./ride-feature-vector.util');
+const {
+  featureVectorFromMap,
+  snapshotToFeatureMap,
+  applyMlFeatureMask,
+  TRAINING_FEATURE_NAMES,
+} = require('./ride-feature-vector.util');
+const { loadExplicitlyDisabledMlFeatureKeys } = require('./ride-ml-feature-mask.service');
 const { predictRidge } = require('./ride-ridge.util');
 const { findActiveModel } = require('./ml-model-registry.service');
 const { baselineForecastFromSnapshot } = require('./ride-baseline-forecast.service');
 const { topFactorsFromImportance } = require('./feature-importance.util');
+const { scheduleRideWaitMlTrace } = require('./ml-prediction-trace.service');
+const { isForecastEligiblePlain } = require('../../utils/ride-snapshot-eligibility.util');
 
 function clampConfidence(mae) {
   if (mae == null || !Number.isFinite(mae)) return 0.55;
@@ -60,9 +68,84 @@ async function predictRideWaitTimes(ctx) {
   const snap = await loadLatestRideSnapshot(ctx.parkId, ctx.rideId);
   const timestamp = new Date().toISOString();
 
+  if (snap && !isForecastEligiblePlain(snap)) {
+    const dq =
+      snap.dataQualityReason != null && String(snap.dataQualityReason).trim() !== ''
+        ? String(snap.dataQualityReason).trim()
+        : null;
+    const reasonCode = dq === 'RIDE_CLOSED' ? 'RIDE_CLOSED' : 'PARK_CLOSED';
+    const horizonsBlocked =
+      Array.isArray(ctx.horizons) && ctx.horizons.length ? ctx.horizons.map((h) => Number(h)) : [15, 30, 60];
+    const syntheticSnap = { ...snap, currentWaitTimeMin: 0, waitTime: 0 };
+    const b = baselineForecastFromSnapshot(syntheticSnap, { horizons: horizonsBlocked });
+    const predictions = b.predictions.map((p) => ({
+      ...p,
+      value: 0,
+      source: 'BASELINE',
+    }));
+    const rawClosed = snapshotToFeatureMap(syntheticSnap);
+    const maskedClosed = applyMlFeatureMask(rawClosed, new Set());
+    const horizonMetaClosed = predictions.map(() => ({
+      source: 'BASELINE',
+      fallbackUsed: true,
+      resultModelName: 'closed_period_forecast',
+      resultModelVersion: null,
+      reasonCodes: [reasonCode],
+    }));
+    scheduleRideWaitMlTrace({
+      parkId: ctx.parkId,
+      rideId: ctx.rideId,
+      note: 'FORECAST_INELIGIBLE',
+      governedSnapshotQualityReason: dq || reasonCode,
+      rawFeatureMap: rawClosed,
+      maskedFeatureMap: maskedClosed,
+      maskedKeys: new Set(),
+      predictions,
+      horizonMeta: horizonMetaClosed,
+      overallConfidence: null,
+      registryModelId: null,
+      topFactors: b.topFactors,
+    });
+    return {
+      rideId: ctx.rideId,
+      timestamp,
+      predictionMode: 'BASELINE_ONLY',
+      modelId: null,
+      confidence: null,
+      predictions,
+      topFactors: b.topFactors,
+      note: 'FORECAST_INELIGIBLE',
+      closedReasonCode: reasonCode,
+      snapshotWaitForExplain: 0,
+      featureValuesForExplain: maskedClosed,
+      mlFeaturesMaskedByCapability: [],
+    };
+  }
+
   if (!snap) {
     const cur = { currentWaitTimeMin: 0, waitTime: 0, snapshotAt: timestamp };
     const b = baselineForecastFromSnapshot(cur, { horizons });
+    const rawNoSnap = snapshotToFeatureMap(cur);
+    const explainNoSnap = applyMlFeatureMask(rawNoSnap, new Set());
+    const horizonMetaNoSnap = b.predictions.map(() => ({
+      source: 'BASELINE',
+      fallbackUsed: true,
+      resultModelName: 'baseline_forecast',
+      resultModelVersion: null,
+    }));
+    scheduleRideWaitMlTrace({
+      parkId: ctx.parkId,
+      rideId: ctx.rideId,
+      note: 'NO_SNAPSHOT',
+      rawFeatureMap: rawNoSnap,
+      maskedFeatureMap: explainNoSnap,
+      maskedKeys: new Set(),
+      predictions: b.predictions,
+      horizonMeta: horizonMetaNoSnap,
+      overallConfidence: b.confidence,
+      registryModelId: null,
+      topFactors: b.topFactors,
+    });
     return {
       rideId: ctx.rideId,
       timestamp,
@@ -72,11 +155,23 @@ async function predictRideWaitTimes(ctx) {
       predictions: b.predictions,
       topFactors: b.topFactors,
       note: 'NO_SNAPSHOT',
+      snapshotWaitForExplain: 0,
+      featureValuesForExplain: {},
+      mlFeaturesMaskedByCapability: [],
     };
   }
 
-  const xVec = featureVectorFromMap(snapshotToFeatureMap(snap));
+  const rawFeatureMap = snapshotToFeatureMap(snap);
+  const snapshotWaitForExplain = Number(rawFeatureMap.current_wait_time) || 0;
+  const disabledMlKeys = await loadExplicitlyDisabledMlFeatureKeys(ctx.parkId, ctx.rideId);
+  const featureValuesForExplain = applyMlFeatureMask(rawFeatureMap, disabledMlKeys);
+  const mlFeaturesMaskedByCapability = disabledMlKeys.size
+    ? [...disabledMlKeys].filter((k) => TRAINING_FEATURE_NAMES.includes(k)).sort()
+    : [];
+
+  const xVec = featureVectorFromMap(featureValuesForExplain);
   const predictions = [];
+  const horizonMeta = [];
   let anyBaseline = false;
   let anyRideMl = false;
   let anyGlobalMl = false;
@@ -86,6 +181,7 @@ async function predictRideWaitTimes(ctx) {
   let topFactors = [];
 
   for (const h of horizons) {
+    let mlModelRow = null;
     let source = 'BASELINE';
     let value;
     const rideRow = await findActiveModel({
@@ -100,24 +196,40 @@ async function predictRideWaitTimes(ctx) {
       scopeId: null,
       horizonMinutes: h,
     });
-    const modelRow = rideRow || globalRow;
 
-    if (modelRow) {
+    // Champion/Challenger: run both models and pick the one with lower MAE
+    const candidates = [];
+    for (const row of [rideRow, globalRow]) {
+      if (!row) continue;
       try {
-        const payload = modelRow.modelPayload || {};
-        value = predictRidge(payload, xVec);
-        value = Math.max(0, Math.min(240, value));
-        source = 'ML_MODEL';
-        if (modelRow.modelType === 'RIDE_SPECIFIC_MODEL') anyRideMl = true;
-        if (modelRow.modelType === 'GLOBAL_RIDE_MODEL') anyGlobalMl = true;
-        confidenceAcc.push(clampConfidence(modelRow.metrics?.maeMinutes));
-        if (h === 60) {
-          modelIdFor60 = modelRow.modelId;
-          modelTypeFor60 = modelRow.modelType;
-          topFactors = topFactorsFromImportance(importanceFromPayload(payload), 5);
+        const payload = row.modelPayload || {};
+        const pred = predictRidge(payload, xVec);
+        if (pred != null && Number.isFinite(pred)) {
+          candidates.push({
+            row,
+            value: Math.max(0, Math.min(240, pred)),
+            mae: Number(row.metrics?.maeMinutes) || Infinity,
+            payload,
+          });
         }
-      } catch {
-        value = null;
+      } catch { /* skip broken model */ }
+    }
+    if (candidates.length > 1) {
+      candidates.sort((a, b) => a.mae - b.mae);
+    }
+    const winner = candidates[0] || null;
+
+    if (winner) {
+      value = winner.value;
+      source = 'ML_MODEL';
+      mlModelRow = winner.row;
+      if (winner.row.modelType === 'RIDE_SPECIFIC_MODEL') anyRideMl = true;
+      if (winner.row.modelType === 'GLOBAL_RIDE_MODEL') anyGlobalMl = true;
+      confidenceAcc.push(clampConfidence(winner.mae));
+      if (h === 60) {
+        modelIdFor60 = winner.row.modelId;
+        modelTypeFor60 = winner.row.modelType;
+        topFactors = topFactorsFromImportance(importanceFromPayload(winner.payload), 5);
       }
     }
 
@@ -129,11 +241,28 @@ async function predictRideWaitTimes(ctx) {
       if (h === 60 && !topFactors.length) topFactors = b.topFactors;
     }
 
+    const challenger = candidates.length > 1 ? candidates[1] : null;
+
     predictions.push({
       horizonMinutes: h,
       value: Math.round(Number(value) * 10) / 10,
       unit: 'min',
       source,
+      challengerValue: challenger ? Math.round(challenger.value * 10) / 10 : undefined,
+      challengerModel: challenger ? challenger.row.modelType : undefined,
+    });
+
+    horizonMeta.push({
+      source,
+      fallbackUsed: source === 'BASELINE',
+      resultModelName: source === 'ML_MODEL' && mlModelRow ? mlModelRow.modelId : 'baseline_forecast',
+      resultModelVersion:
+        source === 'ML_MODEL' && mlModelRow && mlModelRow.trainedAt
+          ? new Date(mlModelRow.trainedAt).toISOString()
+          : null,
+      challengerModelName: challenger ? challenger.row.modelId : null,
+      championMae: winner ? winner.mae : null,
+      challengerMae: challenger ? challenger.mae : null,
     });
   }
 
@@ -174,6 +303,19 @@ async function predictRideWaitTimes(ctx) {
     topFactors = baselineForecastFromSnapshot(snap, { horizons: [60] }).topFactors;
   }
 
+  scheduleRideWaitMlTrace({
+    parkId: ctx.parkId,
+    rideId: ctx.rideId,
+    rawFeatureMap,
+    maskedFeatureMap: featureValuesForExplain,
+    maskedKeys: disabledMlKeys,
+    predictions,
+    horizonMeta,
+    overallConfidence: confidence,
+    registryModelId: modelId || null,
+    topFactors,
+  });
+
   return {
     rideId: ctx.rideId,
     timestamp,
@@ -182,6 +324,9 @@ async function predictRideWaitTimes(ctx) {
     confidence,
     predictions,
     topFactors,
+    snapshotWaitForExplain,
+    featureValuesForExplain,
+    mlFeaturesMaskedByCapability,
   };
 }
 

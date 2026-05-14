@@ -1,0 +1,108 @@
+/agent/actions:
+  get:
+    tags:
+      - Agent
+    summary: 'List pending proposed agent actions for scoped park'
+    description: 'Needs **`agent.review`** and **`X-Park-Id`**. Returns proposals awaiting approve/reject (`status=proposed`).'
+    parameters:
+      -
+        in: header
+        name: X-Park-Id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      -
+        in: query
+        name: limit
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+      -
+        in: query
+        name: offset
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+
+'/agent/actions/{id}/approve':
+  parameters:
+    -
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+        format: uuid
+    -
+      in: header
+      name: X-Park-Id
+      required: true
+      schema:
+        type: string
+        format: uuid
+  post:
+    tags:
+      - Agent
+    summary: 'Approve and apply a proposed agent action'
+    description: "Needs **`agent.approve`** and **`X-Park-Id`**. Executes the whitelisted write tool (e.g. batch recommendation scoring, notify audit stub, incident create).\nOn success the action row stores **`outcome_metric`** (Phase C JSON: forecast-vs-actual bridge stub + `resolution: applied`).\n"
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '404':
+        description: Not found
+      '410':
+        description: Proposal expired
+
+'/agent/actions/{id}/reject':
+  parameters:
+    -
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+        format: uuid
+    -
+      in: header
+      name: X-Park-Id
+      required: true
+      schema:
+        type: string
+        format: uuid
+  post:
+    tags:
+      - Agent
+    summary: 'Reject a proposed agent action'
+    description: "Needs **`agent.review`** and **`X-Park-Id`**. Stores **`outcome_metric`** with `resolution: rejected` and the same forecast snapshot stub as approve (for later analytics).\n"
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              reason:
+                type: string
+                maxLength: 2000
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'

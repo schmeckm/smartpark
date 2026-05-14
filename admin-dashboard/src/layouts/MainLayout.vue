@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
@@ -9,12 +9,22 @@ import { i18n, isAppLocale, setI18nLocale } from '@/i18n'
 import type { AppLocale } from '@/i18n'
 import { themePreference } from '@/composables/useUiTheme'
 import { navigationGroups } from '@/constants/rbac'
+import flagDe from '@/assets/flags/de.svg'
+import flagEn from '@/assets/flags/en.svg'
+import flagEs from '@/assets/flags/es.svg'
+import flagFr from '@/assets/flags/fr.svg'
+import GlobalStatusFooter from '@/components/layout/GlobalStatusFooter.vue'
+import NavIconCircle from '@/components/nav/NavIconCircle.vue'
+import CommandPalette from '@/components/shell/CommandPalette.vue'
+import { commandPaletteOpen } from '@/composables/useCommandPalette'
 
 const { t } = useI18n()
 const auth = useAuthStore()
 const parkCtx = useParkContextStore()
 const route = useRoute()
 const router = useRouter()
+const localeMenuOpen = ref(false)
+const localeMenuRoot = ref<HTMLElement | null>(null)
 
 const initials = computed(() => {
   const u = auth.user
@@ -39,6 +49,17 @@ const headerLocaleValue = computed(() => {
   if (u?.languageCode && isAppLocale(u.languageCode)) return u.languageCode
   return String(i18n.global.locale.value) as AppLocale
 })
+
+const localeOptions = computed(() => [
+  { value: 'en' as AppLocale, label: t('locale.en'), flag: flagEn },
+  { value: 'de' as AppLocale, label: t('locale.de'), flag: flagDe },
+  { value: 'fr' as AppLocale, label: t('locale.fr'), flag: flagFr },
+  { value: 'es' as AppLocale, label: t('locale.es'), flag: flagEs },
+])
+
+const activeLocaleOption = computed(
+  () => localeOptions.value.find((option) => option.value === headerLocaleValue.value) ?? localeOptions.value[0]
+)
 
 const isLight = computed(() => themePreference.value === 'light')
 
@@ -85,6 +106,7 @@ const shell = computed(() => {
 type NavItem = {
   to: string
   labelKey: string
+  navIcon?: string
   activePathPrefix?: string
   activeExcludePrefixes?: string[]
   altActivePrefixes?: string[]
@@ -102,8 +124,16 @@ const navSections = computed((): NavSection[] => {
     for (const raw of group.items) {
       const rr = raw.requiredRoles
       if (Array.isArray(rr) && rr.length && !auth.canAny(rr)) continue
-      const { resource, action } = raw.permission
-      if (!auth.hasPermission(resource, action)) continue
+      const anyPerms = raw.permissionsAny
+      if (Array.isArray(anyPerms) && anyPerms.length) {
+        const ok = anyPerms.some((p) => auth.hasPermission(p.resource, p.action))
+        if (!ok) continue
+      } else if (raw.permission) {
+        const { resource, action } = raw.permission
+        if (!auth.hasPermission(resource, action)) continue
+      } else {
+        continue
+      }
       let labelKey = raw.labelKey
       const alt = raw.labelKeyIfPermission
       if (alt && auth.hasPermission(alt.resource, alt.action)) {
@@ -112,6 +142,7 @@ const navSections = computed((): NavSection[] => {
       items.push({
         to: raw.to,
         labelKey,
+        navIcon: raw.navIcon,
         activePathPrefix: raw.activePathPrefix,
         activeExcludePrefixes: raw.activeExcludePrefixes,
         altActivePrefixes: raw.altActivePrefixes,
@@ -128,8 +159,8 @@ const navSections = computed((): NavSection[] => {
     id: 'personal',
     titleKey: 'nav.section.personal',
     items: [
-      { to: '/help', labelKey: 'menu.help', activePathPrefix: '/help' },
-      { to: '/settings', labelKey: 'menu.settings', exact: true },
+      { to: '/help', labelKey: 'menu.help', navIcon: 'help', activePathPrefix: '/help' },
+      { to: '/settings', labelKey: 'menu.settings', navIcon: 'settings', exact: true },
     ],
   })
 
@@ -140,10 +171,28 @@ const showParkSelector = computed(
   () => auth.isAuthenticated && auth.hasPermission('rides', 'read') && parkCtx.parks.length > 0
 )
 
+function onCommandPaletteHotkey(ev: KeyboardEvent) {
+  if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === 'k') {
+    ev.preventDefault()
+    commandPaletteOpen.value = !commandPaletteOpen.value
+  }
+}
+
+function openCommandPalette() {
+  commandPaletteOpen.value = true
+}
+
 onMounted(async () => {
+  globalThis.addEventListener('pointerdown', onGlobalPointerDown)
+  globalThis.addEventListener('keydown', onCommandPaletteHotkey)
   if (auth.isAuthenticated && auth.hasPermission('rides', 'read')) {
     await parkCtx.hydrate()
   }
+})
+
+onUnmounted(() => {
+  globalThis.removeEventListener('pointerdown', onGlobalPointerDown)
+  globalThis.removeEventListener('keydown', onCommandPaletteHotkey)
 })
 
 watch(
@@ -174,11 +223,30 @@ function isNavItemActive(item: NavItem) {
   return false
 }
 
-async function onHeaderLocale(ev: Event) {
-  const el = ev.target as HTMLSelectElement
-  const v = el.value
-  if (!isAppLocale(v)) return
+function toggleLocaleMenu() {
+  localeMenuOpen.value = !localeMenuOpen.value
+}
+
+function closeLocaleMenu() {
+  localeMenuOpen.value = false
+}
+
+function onGlobalPointerDown(ev: PointerEvent) {
+  if (!localeMenuOpen.value) return
+  const root = localeMenuRoot.value
+  if (!root) return
+  const target = ev.target as Node | null
+  if (target && root.contains(target)) return
+  closeLocaleMenu()
+}
+
+async function onLocaleOptionSelect(v: AppLocale) {
+  if (v === headerLocaleValue.value) {
+    closeLocaleMenu()
+    return
+  }
   setI18nLocale(v)
+  closeLocaleMenu()
   try {
     const u = await patchMyUserSettings({ languageCode: v })
     auth.user = u
@@ -200,7 +268,7 @@ async function onLogout() {
         <p :class="shell.brand">{{ t('app.brand') }}</p>
         <p :class="shell.tagline">{{ t('app.tagline') }}</p>
       </div>
-      <nav class="mt-6 flex flex-col gap-0">
+      <nav class="mt-6 flex flex-col gap-0" aria-label="Main navigation">
         <template v-for="section in navSections" :key="section.id">
           <p :class="shell.sectionRule">
             {{ t(section.titleKey) }}
@@ -210,14 +278,20 @@ async function onLogout() {
               v-for="item in section.items"
               :key="section.id + item.to + item.labelKey"
               :to="item.to"
-              class="rounded-md px-2.5 py-1.5 text-[13px] font-medium leading-snug"
+              class="flex items-center gap-2.5 rounded-md px-2 py-2 text-[13px] font-medium leading-snug"
               :class="[
                 shell.navHover,
                 isNavItemActive(item) ? shell.navActive : shell.navInactive,
                 item.muted ? 'text-slate-500 hover:text-slate-400' : '',
               ]"
             >
-              {{ t(item.labelKey) }}
+              <NavIconCircle
+                :name="item.navIcon"
+                :light="isLight"
+                :active="isNavItemActive(item)"
+                size="sm"
+              />
+              <span class="min-w-0 flex-1 leading-snug">{{ t(item.labelKey) }}</span>
             </RouterLink>
           </div>
         </template>
@@ -227,7 +301,7 @@ async function onLogout() {
     <div class="flex min-w-0 flex-1 flex-col">
       <header class="lg:hidden" :class="shell.mobileHeader">
         <p :class="shell.mobileBrand">{{ t('app.brand') }}</p>
-        <nav class="flex max-h-[50vh] flex-col gap-3 overflow-y-auto pr-1 text-xs">
+        <nav class="flex max-h-[50vh] flex-col gap-3 overflow-y-auto pr-1 text-xs" aria-label="Mobile navigation">
           <div v-for="section in navSections" :key="'m-' + section.id">
             <p class="mb-1 font-semibold uppercase tracking-wide text-slate-500">{{ t(section.titleKey) }}</p>
             <div class="flex flex-wrap gap-1.5">
@@ -235,9 +309,16 @@ async function onLogout() {
                 v-for="item in section.items"
                 :key="section.id + item.to + item.labelKey"
                 :to="item.to"
+                class="inline-flex max-w-full items-center gap-1.5"
                 :class="[shell.mobileNav, isNavItemActive(item) ? shell.mobileNavActive : '', item.muted ? 'text-slate-500' : '']"
               >
-                {{ t(item.labelKey) }}
+                <NavIconCircle
+                  :name="item.navIcon"
+                  :light="isLight"
+                  :active="isNavItemActive(item)"
+                  size="sm"
+                />
+                <span class="min-w-0 truncate">{{ t(item.labelKey) }}</span>
               </RouterLink>
             </div>
           </div>
@@ -249,10 +330,19 @@ async function onLogout() {
           <p class="truncate text-xs uppercase tracking-wider text-slate-500">{{ routeTitle }}</p>
         </div>
         <div class="relative flex flex-wrap items-center justify-end gap-2 sm:gap-3">
+          <button
+            type="button"
+            :class="[shell.select, 'hidden sm:inline-flex']"
+            @click="openCommandPalette"
+          >
+            {{ t('cmdK.open') }}
+            <span class="ml-2 text-slate-500">{{ t('cmdK.hint') }}</span>
+          </button>
           <template v-if="showParkSelector">
             <label class="sr-only" for="header-park">{{ t('nav.activePark') }}</label>
             <select
               id="header-park"
+              data-testid="header-park-select"
               :class="shell.select"
               :value="parkCtx.activeParkId ?? ''"
               @change="onParkSelect"
@@ -260,18 +350,44 @@ async function onLogout() {
               <option v-for="p in parkCtx.parks" :key="p.id" :value="p.id">{{ p.name }}</option>
             </select>
           </template>
-          <label class="sr-only" for="header-locale">{{ t('locale.label') }}</label>
-          <select
-            id="header-locale"
-            :class="shell.select"
-            :value="headerLocaleValue"
-            @change="onHeaderLocale"
-          >
-            <option value="en">{{ t('locale.en') }}</option>
-            <option value="de">{{ t('locale.de') }}</option>
-            <option value="fr">{{ t('locale.fr') }}</option>
-            <option value="es">{{ t('locale.es') }}</option>
-          </select>
+          <div class="relative" ref="localeMenuRoot">
+            <p class="sr-only">{{ t('locale.label') }}</p>
+            <button
+              type="button"
+              :class="[shell.select, 'inline-flex min-w-[8.5rem] items-center justify-between gap-2']"
+              :aria-expanded="localeMenuOpen ? 'true' : 'false'"
+              aria-haspopup="menu"
+              @click="toggleLocaleMenu"
+            >
+              <span class="inline-flex items-center gap-2">
+                <img
+                  :src="activeLocaleOption.flag"
+                  :alt="activeLocaleOption.label"
+                  class="h-3.5 w-5 rounded-[2px] object-cover"
+                />
+                <span>{{ activeLocaleOption.label }}</span>
+              </span>
+              <span aria-hidden="true">▾</span>
+            </button>
+            <div
+              v-if="localeMenuOpen"
+              class="absolute right-0 z-30 mt-1 min-w-[10rem] overflow-hidden rounded-md border border-slate-700 bg-slate-900 shadow-lg"
+              role="menu"
+            >
+              <button
+                v-for="option in localeOptions"
+                :key="option.value"
+                type="button"
+                class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-slate-200 hover:bg-slate-800"
+                :class="option.value === headerLocaleValue ? 'bg-slate-800' : ''"
+                role="menuitem"
+                @click="onLocaleOptionSelect(option.value)"
+              >
+                <img :src="option.flag" :alt="option.label" class="h-3.5 w-5 rounded-[2px] object-cover" />
+                <span>{{ option.label }}</span>
+              </button>
+            </div>
+          </div>
           <div
             class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-indigo-600 text-xs font-bold text-white"
           >
@@ -289,9 +405,12 @@ async function onLogout() {
         </div>
       </header>
 
-      <main class="flex-1">
+      <main class="flex-1 pb-10">
         <RouterView />
       </main>
+      <GlobalStatusFooter />
     </div>
+
+    <CommandPalette />
   </div>
 </template>

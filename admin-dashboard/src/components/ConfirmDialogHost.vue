@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
-import { useI18n } from 'vue-i18n'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
 
-const { t } = useI18n()
 const { visible, payload, matchInput, submitConfirmDialog, dismissConfirmDialog } = useConfirmDialog()
 
 const confirmDisabled = computed(() => {
@@ -12,8 +10,8 @@ const confirmDisabled = computed(() => {
   return matchInput.value.trim() !== p.mustMatch
 })
 
-const confirmLabel = computed(() => payload.value?.confirmLabel ?? t('btn.confirm'))
-const cancelLabel = computed(() => payload.value?.cancelLabel ?? t('btn.cancel'))
+const confirmLabel = computed(() => payload.value?.confirmLabel ?? 'Ja')
+const cancelLabel = computed(() => payload.value?.cancelLabel ?? 'Abbrechen')
 
 const variantClasses = computed(() => {
   const v = payload.value?.variant ?? 'default'

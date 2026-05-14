@@ -2,6 +2,14 @@ const { asyncHandler } = require('../../utils/async-handler');
 const { AppError } = require('../../utils/app-error');
 const { AssetsRepository } = require('../assets/assets.repository');
 const { enrichRideFromTemplate } = require('../adapters/themeparks/themeparks-sync.service');
+const {
+  previewRestaurantZoneNormalization,
+  applyRestaurantZoneNormalization,
+} = require('../../services/restaurant-zone-normalizer.service');
+const {
+  previewShowZoneNormalization,
+  applyShowZoneNormalization,
+} = require('../../services/show-zone-normalizer.service');
 
 function repo() {
   const models = require('../../models');
@@ -132,6 +140,48 @@ const patchRuntimeOverride = asyncHandler(async (req, res) => {
   }
 });
 
+const previewZoneNormalization = asyncHandler(async (req, res) => {
+  const q = req.validated || req.query || {};
+  const parkSlug = String(q.parkSlug || '').trim();
+  const type = String(q.type || 'RESTAURANT').trim().toUpperCase();
+  if (!parkSlug) throw new AppError('parkSlug is required', 400, { code: 'VALIDATION_ERROR' });
+  const models = require('../../models');
+  const data =
+    type === 'SHOW'
+      ? await previewShowZoneNormalization({ models, parkSlug, type })
+      : await previewRestaurantZoneNormalization({ models, parkSlug, type });
+  if (!data.park) throw new AppError('Park not found', 404, { code: 'NOT_FOUND' });
+  res.json({ success: true, data });
+});
+
+const applyZoneNormalization = asyncHandler(async (req, res) => {
+  const body = req.validated || req.body || {};
+  const parkSlug = String(body.parkSlug || '').trim();
+  const type = String(body.type || 'RESTAURANT').trim().toUpperCase();
+  const dryRun = body.dryRun !== false;
+  const overrides = Array.isArray(body.overrides) ? body.overrides : [];
+  if (!parkSlug) throw new AppError('parkSlug is required', 400, { code: 'VALIDATION_ERROR' });
+  const models = require('../../models');
+  const data =
+    type === 'SHOW'
+      ? await applyShowZoneNormalization({
+          models,
+          parkSlug,
+          type,
+          dryRun,
+          overrides,
+        })
+      : await applyRestaurantZoneNormalization({
+          models,
+          parkSlug,
+          type,
+          dryRun,
+          overrides,
+        });
+  if (!data.park) throw new AppError('Park not found', 404, { code: 'NOT_FOUND' });
+  res.json({ success: true, data });
+});
+
 module.exports = {
   listAssets,
   getAsset,
@@ -140,4 +190,6 @@ module.exports = {
   listRuntimeOverrides,
   postRuntimeOverride,
   patchRuntimeOverride,
+  previewZoneNormalization,
+  applyZoneNormalization,
 };

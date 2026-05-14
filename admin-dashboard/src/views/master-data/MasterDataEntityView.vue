@@ -16,21 +16,27 @@ import {
   getMasterDataAssetEnrichment,
   getMasterDataDetail,
   getUnsSuggestions,
+  getPlatformParkZones,
   getPlatformParks,
+  getAssetZoneNormalizationPreview,
   listEntityTypeTemplates,
   listMasterData,
   patchMasterData,
   patchMasterDataAssetEnrichment,
+  postAssetZoneNormalizationApply,
   type AdapterPipelineLogResponse,
+  type AssetZoneNormalizationRow,
   type EntityTypeTemplateRow,
   type MasterDataEntityType,
   type MasterDataGridRow,
   type MasterDataSpreadsheetEntityType,
+  type PlatformParkZoneRow,
   type UnsSuggestedTopic,
   type UnsSuggestions,
 } from '@/api/client'
 import type { PlatformPark } from '@/types/api'
 import { useToast } from '@/composables/useToast'
+import { askConfirm } from '@/composables/useConfirmDialog'
 import { useAuthStore } from '@/stores/auth'
 import MasterDataWizard from './MasterDataWizard.vue'
 import RideSignalCapabilitiesPanel from './RideSignalCapabilitiesPanel.vue'
@@ -42,7 +48,7 @@ import { utcDateStampForFilename } from '@/utils/dateTime'
 
 const route = useRoute()
 const router = useRouter()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const { push } = useToast()
 const auth = useAuthStore()
 const canPatchExtensions = computed(() => auth.hasPermission('rides', 'update'))
@@ -53,15 +59,7 @@ function formatMasterTimestamp(v: string | null | undefined) {
 }
 
 /** Tab order follows provider hierarchy: park, then the three primary child kinds (RIDE / SHOW / RESTAURANT assets), then shops & zones. */
-const ENTITY_TABS: { id: MasterDataEntityType; label: string }[] = [
-  { id: 'parks', label: 'Parks' },
-  { id: 'rides', label: 'Attractions' },
-  { id: 'shows', label: 'Shows' },
-  { id: 'restaurants', label: 'Restaurants' },
-  { id: 'shops', label: 'Shops' },
-  { id: 'zones', label: 'Zones' },
-  { id: 'templates', label: 'Templates' },
-]
+const ENTITY_TAB_IDS: MasterDataEntityType[] = ['parks', 'rides', 'shows', 'restaurants', 'shops', 'zones', 'templates']
 
 const ENTITY_ALIASES: Record<string, MasterDataEntityType> = {
   attraction: 'rides',
@@ -71,7 +69,7 @@ const ENTITY_ALIASES: Record<string, MasterDataEntityType> = {
 const entityType = computed(() => {
   const raw = String(route.params.entityType || 'parks').toLowerCase()
   const normalized = ENTITY_ALIASES[raw] ?? raw
-  const allowed = new Set(ENTITY_TABS.map((t) => t.id))
+  const allowed = new Set(ENTITY_TAB_IDS)
   return (allowed.has(normalized as MasterDataEntityType) ? normalized : 'parks') as MasterDataEntityType
 })
 
@@ -82,6 +80,8 @@ const rows = ref<MasterDataGridRow[]>([])
 const total = ref(0)
 const page = ref(0)
 const pageSize = ref(25)
+const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
+const paginationPages = computed<number[]>(() => Array.from({ length: totalPages.value }, (_, idx) => idx + 1))
 const loading = ref(false)
 const error = ref<string | null>(null)
 const search = ref('')
@@ -97,11 +97,13 @@ const parks = ref<PlatformPark[]>([])
 
 /** Datalist entries: slug (or id), external id, UUID — all resolvable by the API. */
 const parkLookupSuggestions = computed(() => {
+  void locale.value
   const o: { value: string; label: string }[] = []
   for (const p of parks.value) {
     o.push({ value: p.slug || p.id, label: p.name })
-    if (p.externalEntityId) o.push({ value: p.externalEntityId, label: `${p.name} (external)` })
-    o.push({ value: p.id, label: `${p.name} (UUID)` })
+    if (p.externalEntityId)
+      o.push({ value: p.externalEntityId, label: `${p.name} (${t('masterDataEntity.parkLabelExternal')})` })
+    o.push({ value: p.id, label: `${p.name} (${t('masterDataEntity.parkLabelUuid')})` })
   }
   return o
 })
@@ -125,6 +127,9 @@ const assetMapTo = computed(() =>
 const drawerOpen = ref(false)
 const detailLoading = ref(false)
 const detail = ref<Record<string, unknown> | null>(null)
+const detailError = ref<string | null>(null)
+/** When refreshing the same asset, keep `detail` mounted so child tabs (e.g. ride signal sources) are not destroyed. */
+const detailLoadedForAssetId = ref<string | null>(null)
 type MasterDetailDrawerTab = 'overview' | 'extensions' | 'operational' | 'signals' | 'typed' | 'raw' | 'relations' | 'locks'
 const detailTab = ref<MasterDetailDrawerTab>('overview')
 
@@ -145,6 +150,10 @@ watch([entityType, detail, drawerOpen, detailDrawerTabs], () => {
   if (!tabs.includes(detailTab.value)) detailTab.value = 'overview'
 })
 
+watch(drawerOpen, (open) => {
+  if (!open) parkZonesForDrawer.value = []
+})
+
 const editAsset = ref<Record<string, unknown>>({})
 const editRide = ref<Record<string, unknown>>({})
 const editShow = ref<Record<string, unknown>>({})
@@ -152,12 +161,38 @@ const editRestaurant = ref<Record<string, unknown>>({})
 const editShop = ref<Record<string, unknown>>({})
 const editPark = ref<Record<string, unknown>>({})
 const editZone = ref<Record<string, unknown>>({})
+/** `park_zones` for the asset’s or zone’s park — zone assignment / parent zone. */
+const parkZonesForDrawer = ref<PlatformParkZoneRow[]>([])
+const parkZonesLoading = ref(false)
 const locksJson = ref('{}')
 const saving = ref(false)
+
+const parkZoneParentOptions = computed(() =>
+  parkZonesForDrawer.value.filter((z) => !selectedId.value || z.id !== selectedId.value)
+)
+
+async function refreshParkZonesForDrawer(parkId: string | null | undefined) {
+  parkZonesForDrawer.value = []
+  const pid = String(parkId || '').trim()
+  if (!pid) return
+  parkZonesLoading.value = true
+  try {
+    parkZonesForDrawer.value = await getPlatformParkZones(pid)
+  } catch {
+    parkZonesForDrawer.value = []
+  } finally {
+    parkZonesLoading.value = false
+  }
+}
 
 /** UNS topic preview (Integrations API) for the selected integration park — filtered to the open asset in the drawer. */
 const unsTopicPreview = ref<UnsSuggestions | null>(null)
 const unsTopicPreviewLoading = ref(false)
+
+const zoneNormalizationLoading = ref(false)
+const zoneNormalizationRows = ref<AssetZoneNormalizationRow[]>([])
+const zoneNormalizationOverrides = ref<Record<string, string>>({})
+const zoneNormalizationParkSlug = ref('')
 
 const selectedId = ref<string | null>(null)
 
@@ -194,7 +229,7 @@ const templateDrawerOpen = ref(false)
 const statusStrip = ref<{ traffic: 'green' | 'amber' | 'red'; lines: string[] } | null>(null)
 const statusStripLoading = ref(false)
 const statusStripExpanded = ref(false)
-const statusHeadline = computed(() => statusStrip.value?.lines?.[0] || 'No status yet.')
+const statusHeadline = computed(() => statusStrip.value?.lines?.[0] || t('masterDataEntity.status.noStatusYet'))
 
 function bannerErr(e: unknown): string {
   if (e instanceof Error) return e.message
@@ -223,33 +258,31 @@ async function loadIntegrationStatusBanner() {
       const sp = settings.selectedPark as { externalParkId?: string; parkName?: string } | undefined
       parkOk = Boolean(sp?.externalParkId && String(sp.externalParkId).trim())
     } else {
-      headline = `Could not load Integrations settings: ${bannerErr(settingsRes.reason)}`
+      headline = t('masterDataEntity.status.settingsLoadFailed', { msg: bannerErr(settingsRes.reason) })
       traffic = 'amber'
     }
 
     if (!headline && settingsRes.status === 'fulfilled') {
       if (!parkOk) {
-        headline = 'No park saved under Integrations — pick a park and Save selection before entity sync.'
+        headline = t('masterDataEntity.status.noParkSaved')
         traffic = 'amber'
       } else {
-        headline = pollOn
-          ? 'OK — selected park; background polling is on.'
-          : 'OK — selected park; polling is off (run sync manually under Integrations).'
+        headline = pollOn ? t('masterDataEntity.status.okPollingOn') : t('masterDataEntity.status.okPollingOff')
         traffic = 'green'
       }
     }
 
     if (logRes.status === 'rejected') {
-      details.push(`Pipeline log request failed: ${bannerErr(logRes.reason)}`)
+      details.push(t('masterDataEntity.status.pipelineLogFailed', { msg: bannerErr(logRes.reason) }))
       traffic = 'amber'
     } else {
       const log: AdapterPipelineLogResponse = logRes.value
       if (log.readError) {
         traffic = 'red'
-        headline = 'Pipeline log could not be read.'
+        headline = t('masterDataEntity.status.pipelineUnreadable')
         details.push(log.readError)
       } else if (!log.loggingEnabled) {
-        details.push(log.message || 'Server pipeline file logging is disabled.')
+        details.push(log.message || t('masterDataEntity.status.serverLoggingDisabled'))
         traffic = 'amber'
       } else if (log.entries?.length) {
         const lv = (s: string) => String(s || '').toLowerCase()
@@ -259,30 +292,34 @@ async function loadIntegrationStatusBanner() {
         if (hasErr) {
           traffic = 'red'
           const bad = log.entries.find((e) => ['error', 'fatal'].includes(lv(e.level)))
-          headline = 'Pipeline log reports an error.'
-          details.push(String(bad?.message || bad?.event || 'error'))
+          headline = t('masterDataEntity.status.pipelineError')
+          details.push(String(bad?.message || bad?.event || t('masterDataEntity.status.genericError')))
         } else if (hasWarn) {
           traffic = 'amber'
-          headline = 'Warnings in pipeline log tail — see Adapter log.'
-          details.push('Warnings present — see Adapter log for full detail.')
+          headline = t('masterDataEntity.status.pipelineWarn')
+          details.push(t('masterDataEntity.status.warningsDetail'))
         }
-        const ts = last?.ts ? ` @ ${last.ts}` : ''
+        const tsSuffix = last?.ts ? ` @ ${last.ts}` : ''
         details.push(
-          `Latest tail line${ts}: ${last?.event || '—'} — ${(last?.message || '').slice(0, 140) || '—'}`,
+          t('masterDataEntity.status.latestTailLine', {
+            tsSuffix,
+            event: last?.event || '—',
+            message: (last?.message || '').slice(0, 140) || '—',
+          }),
         )
       } else if ((log.totalParsedInTail ?? 0) > 0) {
-        details.push('Tail has lines but none for adapter `themeparks_wiki` — open full Adapter log.')
+        details.push(t('masterDataEntity.status.tailNoneForAdapter'))
         traffic = 'amber'
       }
       // No extra copy for missing/empty log file; traffic already reflects settings.
     }
 
-    const lines = [headline || 'Status unavailable.', ...details.filter(Boolean)]
+    const lines = [headline || t('masterDataEntity.status.statusUnavailable'), ...details.filter(Boolean)]
     statusStrip.value = { traffic, lines }
   } catch (e) {
     statusStrip.value = {
       traffic: 'amber',
-      lines: [`Could not load status: ${bannerErr(e)}`],
+      lines: [t('masterDataEntity.status.loadFailed', { msg: bannerErr(e) })],
     }
   } finally {
     statusStripLoading.value = false
@@ -311,9 +348,23 @@ function statusBadgeClass(s: string): string {
 
 function enrichmentBadgeClass(s: string): string {
   const v = String(s || '').toUpperCase()
+  if (v === 'COMPLETE') return 'bg-emerald-900/40 text-emerald-300 ring-emerald-700/50'
+  if (v === 'INCOMPLETE') return 'bg-amber-900/40 text-amber-200 ring-amber-700/50'
   if (v === 'ENRICHED') return 'bg-indigo-900/40 text-indigo-300 ring-indigo-700/50'
   if (v === 'LOCKED') return 'bg-amber-900/40 text-amber-300 ring-amber-700/50'
   return 'bg-slate-800 text-slate-300 ring-slate-700/70'
+}
+
+/** Native tooltip: required template keys + which are still missing (backend: templateRequiredFields / missingProfileFieldKeys). */
+function profileFieldsTooltip(r: MasterDataGridRow): string {
+  const req = r.templateRequiredFields
+  if (!req?.length) return ''
+  const missing = r.missingProfileFieldKeys ?? []
+  let out = `${t('masterDataEntity.profileTooltip.required')}:\n${req.join(', ')}`
+  if (missing.length)
+    out += `\n\n${t('masterDataEntity.profileTooltip.missing')}:\n${missing.join(', ')}`
+  else out += `\n\n${t('masterDataEntity.profileTooltip.allPresent')}`
+  return out
 }
 
 const editMasterProfileJson = ref('{}')
@@ -513,6 +564,93 @@ async function onMasterDataImportFile(ev: Event) {
   }
 }
 
+function resolveRestaurantNormalizationParkSlug(): string {
+  const key = parkFilterKey.value.trim()
+  if (!key) return ''
+  const byLookup = parks.value.find((p) => p.id === key || p.slug === key || p.externalEntityId === key)
+  if (byLookup?.slug) return byLookup.slug
+  return key
+}
+
+function zoneNormalizationType(): 'RESTAURANT' | 'SHOW' | null {
+  if (entityType.value === 'restaurants') return 'RESTAURANT'
+  if (entityType.value === 'shows') return 'SHOW'
+  return null
+}
+
+const zoneNormalizationTitle = computed(() =>
+  entityType.value === 'shows' ? 'Show Zone Normalization' : 'Restaurant Zone Normalization'
+)
+
+async function loadAssetZoneNormalizationPreview() {
+  const type = zoneNormalizationType()
+  if (!type) {
+    zoneNormalizationRows.value = []
+    zoneNormalizationParkSlug.value = ''
+    return
+  }
+  const parkSlug = resolveRestaurantNormalizationParkSlug()
+  zoneNormalizationParkSlug.value = parkSlug
+  if (!parkSlug) {
+    zoneNormalizationRows.value = []
+    return
+  }
+  zoneNormalizationLoading.value = true
+  try {
+    const preview = await getAssetZoneNormalizationPreview({ parkSlug, type })
+    zoneNormalizationRows.value = preview.rows
+    zoneNormalizationOverrides.value = {}
+  } catch {
+    zoneNormalizationRows.value = []
+  } finally {
+    zoneNormalizationLoading.value = false
+  }
+}
+
+async function applyAssetZoneNormalization(dryRun: boolean) {
+  const type = zoneNormalizationType()
+  if (!type) return
+  if (!zoneNormalizationParkSlug.value) {
+    push('Choose a park first.', 'error')
+    return
+  }
+  zoneNormalizationLoading.value = true
+  try {
+    const manualOverrides = Object.entries(zoneNormalizationOverrides.value)
+      .filter(([, zoneSlug]) => String(zoneSlug || '').trim() !== '')
+      .map(([assetId, zoneSlug]) => ({ assetId, zoneSlug: String(zoneSlug).trim() }))
+    const manualOverrideAssetIds = new Set(manualOverrides.map((x) => String(x.assetId)))
+    const safetyOverrides =
+      dryRun
+        ? []
+        : zoneNormalizationRows.value
+            .filter(
+              (row) =>
+                !manualOverrideAssetIds.has(String(row.assetId)) &&
+                !['HIGH', 'MEDIUM'].includes(String(row.confidence || '').toUpperCase())
+            )
+            .map((row) => ({ assetId: row.assetId, zoneSlug: row.currentZoneSlug || null }))
+    const overrides = [...manualOverrides, ...safetyOverrides]
+    const out = await postAssetZoneNormalizationApply({
+      parkSlug: zoneNormalizationParkSlug.value,
+      type,
+      dryRun,
+      overrides,
+    })
+    zoneNormalizationRows.value = out.rows
+    if (!dryRun) {
+      push(`Zone normalization applied: ${out.updated} ${type === 'SHOW' ? 'show(s)' : 'restaurant(s)'}.`, 'success')
+      await loadGrid()
+    } else {
+      push('Dry-run completed.', 'success')
+    }
+  } catch (e) {
+    push(e instanceof Error ? e.message : 'Zone normalization failed', 'error')
+  } finally {
+    zoneNormalizationLoading.value = false
+  }
+}
+
 async function loadGrid() {
   if (isTemplatesTab.value) {
     await loadTemplates()
@@ -536,6 +674,7 @@ async function loadGrid() {
   } finally {
     loading.value = false
   }
+  await loadAssetZoneNormalizationPreview()
 }
 
 function setSort(col: string) {
@@ -546,6 +685,11 @@ function setSort(col: string) {
   }
   page.value = 0
   void loadGrid()
+}
+
+function sortChevron(col: string): string {
+  if (sortBy.value !== col) return ''
+  return sortDir.value === 'asc' ? '▲' : '▼'
 }
 
 function openWizardForRow(row: MasterDataGridRow) {
@@ -576,6 +720,7 @@ function openDrawerQuick(row: MasterDataGridRow) {
 
 function openRow(row: MasterDataGridRow) {
   if (isTemplatesTab.value) return
+  /** Row click: guided wizard (basic data, capacity, staffing, ML profile, …). */
   if (wizardEntityTab.value) {
     openWizardForRow(row)
     return
@@ -606,13 +751,24 @@ async function loadUnsTopicPreviewForDrawer() {
 
 async function loadDetail() {
   if (!selectedId.value || isTemplatesTab.value) return
+  const assetKey = selectedId.value
+  const switchingAsset = detailLoadedForAssetId.value !== assetKey
   detailLoading.value = true
-  detail.value = null
+  detailError.value = null
   unsTopicPreview.value = null
+  if (switchingAsset) {
+    detail.value = null
+    detailLoadedForAssetId.value = null
+  }
   try {
     const et = entityType.value as Exclude<MasterDataEntityType, 'templates'>
-    const d = await getMasterDataDetail(et, selectedId.value)
+    const d = await getMasterDataDetail(et, assetKey)
+    if (!d || typeof d !== 'object') {
+      detailError.value = 'Keine Detaildaten vom Server erhalten.'
+      return
+    }
     detail.value = d
+    detailLoadedForAssetId.value = assetKey
     if (d.entityKind === 'asset') {
       const a = (d.asset as Record<string, unknown> & { rideMaster?: Record<string, unknown> }) || {}
       const {
@@ -631,16 +787,20 @@ async function loadDetail() {
         ...assetScalars
       } = a
       editAsset.value = { ...assetScalars }
+      if (editAsset.value.zoneId == null || editAsset.value.zoneId === undefined) {
+        editAsset.value.zoneId = ''
+      }
       editRide.value = { ...(a.rideMaster || {}) }
       editShow.value = { ...((a as { showMaster?: Record<string, unknown> }).showMaster || {}) }
       editRestaurant.value = { ...((a as { restaurantMaster?: Record<string, unknown> }).restaurantMaster || {}) }
       editShop.value = { ...((a as { shopMaster?: Record<string, unknown> }).shopMaster || {}) }
-      const enr = await getMasterDataAssetEnrichment(selectedId.value)
+      const enr = await getMasterDataAssetEnrichment(assetKey)
       locksJson.value = JSON.stringify(enr.locks || {}, null, 2)
       const pres = d.masterDataPresentation as { master_profile?: Record<string, unknown> } | undefined
       editMasterProfileJson.value = JSON.stringify(pres?.master_profile || {}, null, 2)
       if (['rides', 'shows', 'restaurants', 'shops'].includes(entityType.value)) {
         await loadUnsTopicPreviewForDrawer()
+        await refreshParkZonesForDrawer(String(editAsset.value.parkId || ''))
       }
     } else if (d.entityKind === 'park') {
       const p = (d.park as Record<string, unknown>) || {}
@@ -653,7 +813,8 @@ async function loadDetail() {
       editMasterProfileJson.value = '{}'
     }
   } catch (e) {
-    push(e instanceof Error ? e.message : 'Load failed', 'error')
+    detailError.value = e instanceof Error ? e.message : 'Load failed'
+    push(detailError.value, 'error')
   } finally {
     detailLoading.value = false
   }
@@ -685,6 +846,7 @@ async function saveDetail() {
         name: editZone.value.name,
         slug: editZone.value.slug,
         sortOrder: editZone.value.sortOrder,
+        parentZoneId: editZone.value.parentZoneId ? String(editZone.value.parentZoneId) : null,
       })
     } else {
       const body: Record<string, unknown> = { asset: { ...editAsset.value } }
@@ -721,7 +883,13 @@ async function onDeactivate() {
   if (!selectedId.value) return
   const et = entityType.value
   if (et !== 'parks' && et !== 'rides' && et !== 'shows' && et !== 'restaurants' && et !== 'shops') return
-  if (!confirm('Deactivate this record? Provider-linked rows stay in the database (active flag / park enrichment).')) return
+  const ok = await askConfirm({
+    message: 'Deactivate this record? Provider-linked rows stay in the database (active flag / park enrichment).',
+    confirmLabel: 'Ja',
+    cancelLabel: 'Abbrechen',
+    variant: 'danger',
+  })
+  if (!ok) return
   try {
     await deactivateMasterData(et, selectedId.value)
     push('Deactivated', 'success')
@@ -853,7 +1021,7 @@ watch(
   (p) => {
     const raw = String(p || '').toLowerCase()
     const normalized = ENTITY_ALIASES[raw] ?? raw
-    const allowed = new Set<string>(ENTITY_TABS.map((t) => t.id))
+    const allowed = new Set<string>(ENTITY_TAB_IDS)
     if (ENTITY_ALIASES[raw]) {
       void router.replace({ name: 'master-data', params: { entityType: ENTITY_ALIASES[raw] } })
       return
@@ -886,28 +1054,24 @@ watch([page, pageSize], () => {
   <div class="mx-auto max-w-[1200px] space-y-4 px-4 py-6 sm:px-6">
     <div class="flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 class="font-display text-xl font-semibold text-white">Master data</h1>
-        <p class="mt-1 text-sm text-slate-400">
-          Curate operational fields; provider snapshots refresh on sync. Under each park, attractions (rides), shows,
-          and restaurants are the primary child entity kinds—each belongs to exactly one park. Field locks live in
-          enrichment (API:
-          <span class="font-mono text-slate-500">locks.asset</span> / <span class="font-mono text-slate-500">locks.rideMaster</span>).
-        </p>
+        <h1 class="font-display text-xl font-semibold text-white">{{ t('menu.masterData') }}</h1>
       </div>
-      <RouterLink class="text-sm text-brand-400 hover:text-brand-300" to="/">← Operations</RouterLink>
+      <RouterLink class="text-sm text-brand-400 hover:text-brand-300" to="/">{{
+        t('masterDataEntity.backToOperations')
+      }}</RouterLink>
     </div>
 
     <nav class="flex flex-wrap gap-2 border-b border-slate-800 pb-2">
       <RouterLink
-        v-for="t in ENTITY_TABS"
-        :key="t.id"
-        :to="{ name: 'master-data', params: { entityType: t.id } }"
+        v-for="tabId in ENTITY_TAB_IDS"
+        :key="tabId"
+        :to="{ name: 'master-data', params: { entityType: tabId } }"
         class="rounded-md px-3 py-1.5 text-sm font-medium"
         :class="
-          entityType === t.id ? 'bg-brand-600 text-white' : 'border border-slate-700 text-slate-300 hover:bg-slate-800'
+          entityType === tabId ? 'bg-brand-600 text-white' : 'border border-slate-700 text-slate-300 hover:bg-slate-800'
         "
       >
-        {{ t.label }}
+        {{ t(`masterDataEntity.tabs.${tabId}`) }}
       </RouterLink>
     </nav>
 
@@ -917,8 +1081,8 @@ watch([page, pageSize], () => {
     >
       <div class="flex flex-wrap items-start justify-between gap-3 border-b border-slate-800/80 pb-2">
         <div class="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
-          <span class="font-medium text-slate-100">Adapter / sync signal</span>
-          <span class="text-[10px] text-slate-500">themeparks_wiki · pipeline tail</span>
+          <span class="font-medium text-slate-100">{{ t('masterDataEntity.bannerTitle') }}</span>
+          <span class="text-[10px] text-slate-500">{{ t('masterDataEntity.bannerSubtitle') }}</span>
           <template v-if="!statusStripLoading && statusStrip">
             <span
               class="inline-block h-3 w-3 shrink-0 rounded-full ring-2 ring-slate-600 ring-offset-2 ring-offset-slate-900"
@@ -929,33 +1093,33 @@ watch([page, pageSize], () => {
               }"
               :title="
                 statusStrip.traffic === 'green'
-                  ? 'Green: no blocking issues in this check'
+                  ? t('masterDataEntity.tooltipGreen')
                   : statusStrip.traffic === 'red'
-                    ? 'Red: error in pipeline log or log unreadable'
-                    : 'Amber: review Integrations or Adapter log'
+                    ? t('masterDataEntity.tooltipRed')
+                    : t('masterDataEntity.tooltipAmber')
               "
             />
             <span class="text-[10px] font-medium uppercase tracking-wide text-slate-400">{{
-              statusStrip.traffic === 'green' ? 'OK' : statusStrip.traffic === 'red' ? 'Error' : 'Check'
+              statusStrip.traffic === 'green'
+                ? t('masterDataEntity.trafficOk')
+                : statusStrip.traffic === 'red'
+                  ? t('masterDataEntity.trafficError')
+                  : t('masterDataEntity.trafficCheck')
             }}</span>
           </template>
         </div>
         <div class="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
-          <RouterLink class="text-brand-400 hover:text-brand-300" to="/integrations">Integrations →</RouterLink>
-          <RouterLink class="text-brand-400 hover:text-brand-300" :to="{ name: 'adapter-pipeline-log' }"
-            >Adapter operations center →</RouterLink
-          >
           <button
             type="button"
             class="rounded border border-slate-600 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-800"
             @click="void loadIntegrationStatusBanner()"
           >
-            Refresh
+            {{ t('masterDataEntity.refresh') }}
           </button>
         </div>
       </div>
 
-      <div v-if="statusStripLoading" class="text-sm text-slate-400">Loading status…</div>
+      <div v-if="statusStripLoading" class="text-sm text-slate-400">{{ t('masterDataEntity.loadingStatus') }}</div>
       <div v-else-if="statusStrip" class="space-y-2">
         <p class="break-words border-l-2 border-slate-600 pl-3 text-[12px] leading-relaxed text-slate-200">
           {{ statusHeadline }}
@@ -965,7 +1129,7 @@ watch([page, pageSize], () => {
           class="text-[11px] text-brand-400 underline hover:text-brand-300"
           @click="statusStripExpanded = !statusStripExpanded"
         >
-          {{ statusStripExpanded ? 'Hide details' : 'Show details' }}
+          {{ statusStripExpanded ? t('masterDataEntity.hideDetails') : t('masterDataEntity.showDetails') }}
         </button>
         <div v-if="statusStripExpanded" class="space-y-2">
           <p
@@ -978,13 +1142,13 @@ watch([page, pageSize], () => {
         </div>
       </div>
       <p v-else class="text-sm text-slate-400">
-        No status lines yet.
+        {{ t('masterDataEntity.noStatusLines') }}
         <button
           type="button"
           class="ml-1 text-brand-400 underline hover:text-brand-300"
           @click="void loadIntegrationStatusBanner()"
         >
-          Reload
+          {{ t('masterDataEntity.reload') }}
         </button>
       </p>
     </div>
@@ -993,46 +1157,44 @@ watch([page, pageSize], () => {
       v-if="showIntegrationsSyncHint"
       class="rounded-lg border border-amber-900/60 bg-amber-950/30 px-4 py-3 text-sm text-amber-100/95"
     >
-      <p class="font-medium text-amber-200">No rows — this grid only shows what is already in the platform DB</p>
+      <p class="font-medium text-amber-200">{{ t('masterDataEntity.syncHintTitle') }}</p>
       <p class="mt-2 text-xs leading-relaxed text-amber-100/85">
-        For <strong class="text-amber-50">ThemeParks.wiki</strong>, attractions, shows, and restaurants are written after you open
-        <strong class="text-amber-50">Integrations</strong> (<span class="font-mono text-amber-300">/integrations</span>, not Devices &amp; Services),
-        <strong class="text-amber-50">Save selection</strong> for a park, then run <strong class="text-amber-50">Sync entities</strong> or
-        <strong class="text-amber-50">Sync all for selected park</strong> successfully. You typically need
-        <span class="font-mono text-amber-300">integrations → manage</span>.
+        {{ t('masterDataEntity.syncHintBody') }}
       </p>
       <p class="mt-2 text-xs text-amber-200/80">
-        For a quick test, <strong class="text-amber-50">Create (wizard)</strong> adds a manual asset (provider MANUAL).
+        {{ t('masterDataEntity.syncHintTest') }}
       </p>
       <RouterLink
         class="mt-3 inline-block rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-amber-950 hover:bg-amber-500"
         to="/integrations"
       >
-        Open Integrations →
+        {{ t('masterDataEntity.syncHintLink') }}
       </RouterLink>
     </aside>
 
     <div v-if="!isTemplatesTab" class="flex flex-wrap items-end gap-3 rounded-lg border border-slate-800 bg-slate-900/50 p-3">
       <label class="text-xs text-slate-500">
-        Search
+        {{ t('masterDataEntity.filters.search') }}
         <input
           v-model="search"
           type="search"
           class="mt-1 block w-48 rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm text-white"
-          placeholder="Name, slug, external id, UUID…"
+          :placeholder="t('masterDataEntity.filters.searchPlaceholder')"
           @keydown.enter="page = 0; void loadGrid()"
         />
       </label>
       <label v-if="entityType !== 'parks'" class="text-xs text-slate-500">
-        <span class="block">Filter by park</span>
-        <span class="mt-0.5 block text-[10px] font-normal text-slate-600">UUID, slug, or external entity id</span>
+        <span class="block">{{ t('masterDataEntity.filters.filterByPark') }}</span>
+        <span class="mt-0.5 block text-[10px] font-normal text-slate-600">{{
+          t('masterDataEntity.filters.filterByParkHint')
+        }}</span>
         <input
           v-model="parkFilterKey"
           list="md-park-filter-dl"
           type="text"
           autocomplete="off"
           class="mt-1 block w-56 rounded border border-slate-700 bg-slate-950 px-2 py-1.5 font-mono text-xs text-white"
-          placeholder="Empty = all parks"
+          :placeholder="t('masterDataEntity.filters.parkPlaceholder')"
           @keydown.enter="page = 0; void loadGrid()"
         />
         <datalist id="md-park-filter-dl">
@@ -1040,22 +1202,22 @@ watch([page, pageSize], () => {
         </datalist>
       </label>
       <label class="text-xs text-slate-500">
-        Provider
+        {{ t('masterDataEntity.filters.provider') }}
         <input
           v-model="provider"
           class="mt-1 block w-32 rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm text-white"
-          placeholder="e.g. MANUAL"
+          :placeholder="t('masterDataEntity.filters.providerPlaceholder')"
           @keydown.enter="page = 0; void loadGrid()"
         />
       </label>
       <label class="text-xs text-slate-500">
-        Status
+        {{ t('masterDataEntity.filters.status') }}
         <select
           v-model="status"
           class="mt-1 block w-32 rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm text-white"
           @change="page = 0; void loadGrid()"
         >
-          <option value="">Any</option>
+          <option value="">{{ t('masterDataEntity.filters.any') }}</option>
           <option value="OPEN">OPEN</option>
           <option value="CLOSED">CLOSED</option>
           <option value="UNKNOWN">UNKNOWN</option>
@@ -1063,44 +1225,44 @@ watch([page, pageSize], () => {
         </select>
       </label>
       <label class="text-xs text-slate-500">
-        Enrichment
+        {{ t('masterDataEntity.filters.enrichment') }}
         <select
           v-model="enrichmentStatus"
           class="mt-1 block w-28 rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm text-white"
           @change="page = 0; void loadGrid()"
         >
-          <option value="">Any</option>
+          <option value="">{{ t('masterDataEntity.filters.any') }}</option>
           <option value="BASIC">BASIC</option>
           <option value="ENRICHED">ENRICHED</option>
           <option value="LOCKED">LOCKED</option>
         </select>
       </label>
       <label v-if="isAssetSection" class="text-xs text-slate-500">
-        Zone (UUID)
+        {{ t('masterDataEntity.filters.zoneUuid') }}
         <input
           v-model="filterZoneId"
           class="mt-1 block w-40 rounded border border-slate-700 bg-slate-950 px-2 py-1.5 font-mono text-xs text-white"
-          placeholder="Filter by zone id"
+          :placeholder="t('masterDataEntity.filters.zonePlaceholder')"
           @keydown.enter="page = 0; void loadGrid()"
         />
       </label>
       <label v-if="entityType === 'parks' || isAssetSection" class="text-xs text-slate-500">
-        Template (UUID)
+        {{ t('masterDataEntity.filters.templateUuid') }}
         <input
           v-model="filterTemplateId"
           class="mt-1 block w-40 rounded border border-slate-700 bg-slate-950 px-2 py-1.5 font-mono text-xs text-white"
-          placeholder="Filter by template id"
+          :placeholder="t('masterDataEntity.filters.templatePlaceholder')"
           @keydown.enter="page = 0; void loadGrid()"
         />
       </label>
       <label v-if="entityType === 'parks' || isAssetSection" class="text-xs text-slate-500">
-        Profile
+        {{ t('masterDataEntity.filters.profile') }}
         <select
           v-model="filterProfileCompleteness"
           class="mt-1 block w-32 rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm text-white"
           @change="page = 0; void loadGrid()"
         >
-          <option value="">Any</option>
+          <option value="">{{ t('masterDataEntity.filters.any') }}</option>
           <option value="COMPLETE">COMPLETE</option>
           <option value="INCOMPLETE">INCOMPLETE</option>
         </select>
@@ -1110,30 +1272,30 @@ watch([page, pageSize], () => {
         class="rounded-md bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-500"
         @click="page = 0; void loadGrid()"
       >
-        Apply filters
+        {{ t('masterDataEntity.filters.apply') }}
       </button>
       <button
         type="button"
         class="rounded-md border border-slate-600 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
         @click="resetGridFilters"
       >
-        Reset filters
+        {{ t('masterDataEntity.filters.reset') }}
       </button>
       <RouterLink
         class="inline-flex items-center rounded-md border border-slate-600 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
         :to="assetMapTo"
-        title="Open platform asset map; preselects park when the park filter matches"
+        :title="t('masterDataEntity.filters.assetMapTitle')"
       >
-        Asset map
+        {{ t('masterDataEntity.filters.assetMap') }}
       </RouterLink>
       <button
         type="button"
         class="rounded-md border border-slate-600 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 disabled:opacity-50"
         :disabled="exportImportBusy"
-        title="Download JSON for all rows matching current filters (server cap 2000)"
+        :title="t('masterDataEntity.filters.downloadJsonTitle')"
         @click="void downloadMasterDataExport()"
       >
-        Download JSON
+        {{ t('masterDataEntity.filters.downloadJson') }}
       </button>
       <input
         ref="masterDataImportInput"
@@ -1146,20 +1308,20 @@ watch([page, pageSize], () => {
         type="button"
         class="rounded-md border border-slate-600 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 disabled:opacity-50"
         :disabled="exportImportBusy"
-        title="Upload export JSON; applies each item’s patch (same as PATCH). Requires rides:update."
+        :title="t('masterDataEntity.filters.uploadJsonTitle')"
         @click="triggerMasterDataImportPick()"
       >
-        Upload JSON
+        {{ t('masterDataEntity.filters.uploadJson') }}
       </button>
       <template v-if="excelMasterDataSupported">
         <button
           type="button"
           class="rounded-md border border-emerald-700/80 bg-emerald-950/40 px-3 py-2 text-sm text-emerald-100 hover:bg-emerald-900/50 disabled:opacity-50"
           :disabled="exportImportBusy"
-          title="Download Excel (.xlsx) for attractions, shows, restaurants, or shops — same filters as the grid"
+          :title="t('masterDataEntity.filters.downloadExcelTitle')"
           @click="void downloadMasterDataExcel()"
         >
-          Download Excel
+          {{ t('masterDataEntity.filters.downloadExcel') }}
         </button>
         <input
           ref="masterDataExcelImportInput"
@@ -1172,10 +1334,10 @@ watch([page, pageSize], () => {
           type="button"
           class="rounded-md border border-emerald-700/80 bg-emerald-950/40 px-3 py-2 text-sm text-emerald-100 hover:bg-emerald-900/50 disabled:opacity-50"
           :disabled="exportImportBusy"
-          title="Upload edited Excel; multipart field file. Requires rides:update."
+          :title="t('masterDataEntity.filters.uploadExcelTitle')"
           @click="triggerMasterDataExcelImportPick()"
         >
-          Upload Excel
+          {{ t('masterDataEntity.filters.uploadExcel') }}
         </button>
       </template>
       <button
@@ -1184,7 +1346,7 @@ watch([page, pageSize], () => {
         class="rounded-md border border-slate-600 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
         @click="openWizardCreate"
       >
-        Create (wizard)
+        {{ t('masterDataEntity.filters.createWizard') }}
       </button>
       <button
         v-else-if="isAssetSection"
@@ -1192,33 +1354,140 @@ watch([page, pageSize], () => {
         class="rounded-md border border-slate-600 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
         @click="createOpen = true"
       >
-        Create manual
+        {{ t('masterDataEntity.filters.createManual') }}
       </button>
     </div>
 
     <p v-if="error" class="text-sm text-rose-400">{{ error }}</p>
-    <p v-if="loading" class="text-sm text-slate-500">Loading…</p>
+    <p v-if="loading" class="text-sm text-slate-500">{{ t('masterDataEntity.loadingGrid') }}</p>
+    <div
+      v-if="entityType === 'restaurants' || entityType === 'shows'"
+      class="space-y-2 rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-xs text-slate-300"
+    >
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="font-semibold text-slate-200">{{ zoneNormalizationTitle }}</span>
+        <span class="text-slate-500">Park: {{ zoneNormalizationParkSlug || 'set park filter' }}</span>
+        <button
+          type="button"
+          class="rounded border border-slate-700 px-2 py-1 hover:bg-slate-800 disabled:opacity-50"
+          :disabled="zoneNormalizationLoading || !zoneNormalizationParkSlug"
+          @click="void loadAssetZoneNormalizationPreview()"
+        >
+          Preview
+        </button>
+        <button
+          type="button"
+          class="rounded border border-emerald-700 px-2 py-1 text-emerald-200 hover:bg-emerald-900/30 disabled:opacity-50"
+          :disabled="zoneNormalizationLoading || !zoneNormalizationParkSlug"
+          @click="void applyAssetZoneNormalization(true)"
+        >
+          Dry-run apply
+        </button>
+        <button
+          type="button"
+          class="rounded border border-brand-700 px-2 py-1 text-brand-200 hover:bg-brand-900/30 disabled:opacity-50"
+          :disabled="zoneNormalizationLoading || !zoneNormalizationParkSlug"
+          @click="void applyAssetZoneNormalization(false)"
+        >
+          Bulk apply
+        </button>
+      </div>
+      <p class="text-[10px] text-slate-500">Bulk apply updates HIGH and MEDIUM confidence by default; use override per row for exceptions.</p>
+      <p v-if="zoneNormalizationLoading" class="text-slate-500">Resolving zones…</p>
+      <div v-else-if="zoneNormalizationRows.length" class="max-h-64 overflow-auto rounded border border-slate-800">
+        <table class="min-w-full text-left text-[11px]">
+          <thead class="bg-slate-900 text-slate-500">
+            <tr>
+              <th class="px-2 py-1">Asset</th>
+              <th class="px-2 py-1">Venue hint</th>
+              <th class="px-2 py-1">Current zone</th>
+              <th class="px-2 py-1">Proposed zone</th>
+              <th class="px-2 py-1">Override</th>
+              <th class="px-2 py-1">Match type</th>
+              <th class="px-2 py-1">Confidence</th>
+              <th class="px-2 py-1">Reason</th>
+              <th class="px-2 py-1">Edge</th>
+              <th class="px-2 py-1">Sparkplug topic</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="r in zoneNormalizationRows.slice(0, 50)" :key="r.assetId" class="border-t border-slate-800">
+              <td class="px-2 py-1 text-slate-200">{{ r.assetName }}</td>
+              <td class="px-2 py-1">{{ r.venueName || '—' }}</td>
+              <td class="px-2 py-1">{{ r.currentZoneSlug || '—' }}</td>
+              <td class="px-2 py-1">{{ r.proposedZoneSlug || '—' }}</td>
+              <td class="px-2 py-1">
+                <input
+                  v-model="zoneNormalizationOverrides[r.assetId]"
+                  class="w-32 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 font-mono text-[10px]"
+                  :placeholder="r.proposedZoneSlug || 'zone_slug'"
+                />
+              </td>
+              <td class="px-2 py-1">{{ r.matchType || '—' }}</td>
+              <td class="px-2 py-1">{{ r.confidence }}</td>
+              <td class="max-w-[16rem] truncate px-2 py-1" :title="r.reason">{{ r.reason }}</td>
+              <td class="px-2 py-1 font-mono text-[10px]">{{ r.edgeNodeId || '—' }}</td>
+              <td class="max-w-[22rem] truncate px-2 py-1 font-mono text-[10px]" :title="r.topicPreview">{{ r.topicPreview }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
 
     <div v-if="!isTemplatesTab" class="overflow-x-auto rounded-lg border border-slate-800">
       <table class="min-w-full text-left text-sm text-slate-200">
         <thead class="border-b border-slate-800 bg-slate-900/80 text-xs uppercase text-slate-500">
           <tr>
-            <th class="cursor-pointer px-3 py-2" @click="setSort('name')">Name</th>
-            <th class="px-3 py-2">Slug</th>
-            <th class="px-3 py-2">Type</th>
-            <th class="px-3 py-2">Park</th>
-            <th class="px-3 py-2">Zone</th>
-            <th class="px-3 py-2">Parent</th>
-            <th class="px-3 py-2">Provider</th>
-            <th class="px-3 py-2">External ID</th>
-            <th class="cursor-pointer px-3 py-2" @click="setSort('status')">Status</th>
-            <th class="px-3 py-2">Wait (min)</th>
-            <th class="px-3 py-2">Active</th>
-            <th class="px-3 py-2">Template</th>
-            <th class="px-3 py-2">Profile / Enrichment</th>
-            <th class="cursor-pointer px-3 py-2" @click="setSort('lastSyncedAt')">Last sync</th>
-            <th class="cursor-pointer px-3 py-2" @click="setSort('updatedAt')">Updated</th>
-            <th v-if="wizardEntityTab" class="px-3 py-2">More</th>
+            <th class="cursor-pointer select-none px-3 py-2" @click="setSort('name')">
+              {{ t('masterDataEntity.table.name') }} {{ sortChevron('name') }}
+            </th>
+            <th class="cursor-pointer select-none px-3 py-2" @click="setSort('slug')">
+              {{ t('masterDataEntity.table.slug') }} {{ sortChevron('slug') }}
+            </th>
+            <th class="cursor-pointer select-none px-3 py-2" @click="setSort('type')">
+              {{ t('masterDataEntity.table.type') }} {{ sortChevron('type') }}
+            </th>
+            <th class="cursor-pointer select-none px-3 py-2" @click="setSort('parkName')">
+              {{ t('masterDataEntity.table.park') }} {{ sortChevron('parkName') }}
+            </th>
+            <th class="cursor-pointer select-none px-3 py-2" @click="setSort('zoneName')">
+              {{ t('masterDataEntity.table.zone') }} {{ sortChevron('zoneName') }}
+            </th>
+            <th class="cursor-pointer select-none px-3 py-2" @click="setSort('parentName')">
+              {{ t('masterDataEntity.table.parent') }} {{ sortChevron('parentName') }}
+            </th>
+            <th class="cursor-pointer select-none px-3 py-2" @click="setSort('provider')">
+              {{ t('masterDataEntity.table.provider') }} {{ sortChevron('provider') }}
+            </th>
+            <th class="cursor-pointer select-none px-3 py-2" @click="setSort('externalId')">
+              {{ t('masterDataEntity.table.externalId') }} {{ sortChevron('externalId') }}
+            </th>
+            <th class="cursor-pointer select-none px-3 py-2" @click="setSort('status')">
+              {{ t('masterDataEntity.table.status') }} {{ sortChevron('status') }}
+            </th>
+            <th class="cursor-pointer select-none px-3 py-2" @click="setSort('waitTimeMin')">
+              {{ t('masterDataEntity.table.waitMin') }} {{ sortChevron('waitTimeMin') }}
+            </th>
+            <th class="cursor-pointer select-none px-3 py-2" @click="setSort('active')">
+              {{ t('masterDataEntity.table.active') }} {{ sortChevron('active') }}
+            </th>
+            <th class="cursor-pointer select-none px-3 py-2" @click="setSort('templateCode')">
+              {{ t('masterDataEntity.table.template') }} {{ sortChevron('templateCode') }}
+            </th>
+            <th
+              class="cursor-pointer select-none px-3 py-2"
+              :title="t('masterDataEntity.profileTooltip.columnHint')"
+              @click="setSort('enrichmentStatus')"
+            >
+              {{ t('masterDataEntity.table.profileEnrichment') }} {{ sortChevron('enrichmentStatus') }}
+            </th>
+            <th class="cursor-pointer select-none px-3 py-2" @click="setSort('lastSyncedAt')">
+              {{ t('masterDataEntity.table.lastSync') }} {{ sortChevron('lastSyncedAt') }}
+            </th>
+            <th class="cursor-pointer select-none px-3 py-2" @click="setSort('updatedAt')">
+              {{ t('masterDataEntity.table.updated') }} {{ sortChevron('updatedAt') }}
+            </th>
+            <th v-if="wizardEntityTab" class="px-3 py-2">{{ t('masterDataEntity.table.detailPanel') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -1259,14 +1528,15 @@ watch([page, pageSize], () => {
                 {{ typeof r.waitTimeMin === 'number' ? `${Math.round(r.waitTimeMin)}m` : '—' }}
               </span>
             </td>
-            <td class="px-3 py-2">{{ r.active === false ? 'No' : 'Yes' }}</td>
+            <td class="px-3 py-2">{{ r.active === false ? t('masterDataEntity.no') : t('masterDataEntity.yes') }}</td>
             <td class="max-w-[6rem] truncate px-3 py-2 font-mono text-[10px] text-slate-400" :title="r.templateCode || ''">
               {{ r.templateCode || '—' }}
             </td>
             <td class="px-3 py-2 text-xs">
               <span
-                class="inline-flex rounded px-2 py-0.5 text-[11px] font-medium ring-1"
+                class="inline-flex cursor-help rounded px-2 py-0.5 text-[11px] font-medium ring-1"
                 :class="enrichmentBadgeClass(r.enrichmentStatus)"
+                :title="profileFieldsTooltip(r) || undefined"
               >
                 {{ r.enrichmentStatus || 'BASIC' }}
               </span>
@@ -1274,8 +1544,12 @@ watch([page, pageSize], () => {
             <td class="px-3 py-2 font-mono text-[10px] text-slate-500">{{ formatMasterTimestamp(r.lastSyncedAt) }}</td>
             <td class="px-3 py-2 font-mono text-[10px] text-slate-500">{{ formatMasterTimestamp(r.updatedAt) }}</td>
             <td v-if="wizardEntityTab" class="px-3 py-2" @click.stop>
-              <button type="button" class="text-xs text-slate-400 underline hover:text-white" @click="openDrawerQuick(r)">
-                Drawer
+              <button
+                type="button"
+                class="text-xs text-slate-400 underline hover:text-white"
+                @click="openDrawerQuick(r)"
+              >
+                {{ t('masterDataEntity.table.detailPanel') }}
               </button>
             </td>
           </tr>
@@ -1287,10 +1561,10 @@ watch([page, pageSize], () => {
       <table class="min-w-full text-left text-sm text-slate-200">
         <thead class="border-b border-slate-800 bg-slate-900/80 text-xs uppercase text-slate-500">
           <tr>
-            <th class="px-3 py-2">Entity type</th>
-            <th class="px-3 py-2">Code</th>
-            <th class="px-3 py-2">Name</th>
-            <th class="px-3 py-2">Description</th>
+            <th class="px-3 py-2">{{ t('masterDataEntity.table.entityType') }}</th>
+            <th class="px-3 py-2">{{ t('masterDataEntity.table.code') }}</th>
+            <th class="px-3 py-2">{{ t('masterDataEntity.table.name') }}</th>
+            <th class="px-3 py-2">{{ t('masterDataEntity.table.description') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -1309,27 +1583,38 @@ watch([page, pageSize], () => {
       </table>
     </div>
 
-    <div class="flex items-center justify-between text-sm text-slate-400">
-      <span>{{ total }} row(s)</span>
-      <div class="flex gap-2">
+    <div class="flex items-center justify-between gap-3 text-sm text-slate-400">
+      <span>{{ t('masterDataEntity.pagination.rows', { count: total }) }}</span>
+      <div v-if="!isTemplatesTab" class="flex items-center gap-2">
         <button
-          v-if="!isTemplatesTab"
           type="button"
           class="rounded border border-slate-700 px-2 py-1 disabled:opacity-40"
           :disabled="page <= 0"
           @click="page -= 1; void loadGrid()"
         >
-          Prev
+          {{ t('masterDataEntity.pagination.prev') }}
         </button>
-        <span v-if="!isTemplatesTab">Page {{ page + 1 }}</span>
+        <div class="flex max-w-[50vw] items-center gap-1 overflow-x-auto">
+          <button
+            v-for="(item, idx) in paginationPages"
+            :key="`p-${idx}-${item}`"
+            type="button"
+            class="rounded border px-2 py-1 text-xs"
+            :class="item === page + 1 ? 'border-brand-500 bg-brand-600 text-white' : 'border-slate-700 text-slate-300 hover:bg-slate-800/70'"
+            :disabled="item === page + 1"
+            @click="page = item - 1; void loadGrid()"
+          >
+            {{ item }}
+          </button>
+        </div>
+        <span class="whitespace-nowrap text-xs text-slate-500">{{ t('masterDataEntity.pagination.page', { n: page + 1 }) }} / {{ totalPages }}</span>
         <button
-          v-if="!isTemplatesTab"
           type="button"
           class="rounded border border-slate-700 px-2 py-1 disabled:opacity-40"
           :disabled="(page + 1) * pageSize >= total"
           @click="page += 1; void loadGrid()"
         >
-          Next
+          {{ t('masterDataEntity.pagination.next') }}
         </button>
       </div>
     </div>
@@ -1354,11 +1639,26 @@ watch([page, pageSize], () => {
       >
         <div class="h-full w-full max-w-lg overflow-y-auto border-l border-slate-800 bg-slate-950 shadow-xl">
           <div class="flex items-center justify-between border-b border-slate-800 px-4 py-3">
-            <h2 class="text-sm font-semibold text-white">Detail</h2>
+            <h2 class="text-sm font-semibold text-white">{{ t('masterDataEntity.detailDrawerTitle') }}</h2>
             <button type="button" class="text-slate-400 hover:text-white" @click="drawerOpen = false">✕</button>
           </div>
-          <div v-if="detailLoading" class="p-4 text-sm text-slate-500">Loading…</div>
+          <div v-if="detailError && !detail" class="p-4 text-sm text-rose-300">
+            {{ detailError }}
+          </div>
+          <div v-else-if="detailLoading && !detail" class="p-4 text-sm text-slate-500">{{ t('masterDataEntity.detailLoading') }}</div>
           <div v-else-if="detail" class="space-y-3 p-4">
+            <div
+              v-if="detailLoading"
+              class="rounded border border-slate-700/80 bg-slate-900/70 px-2 py-1.5 text-[11px] text-slate-400"
+            >
+              {{ t('masterDataEntity.detailLoading') }}
+            </div>
+            <div
+              v-if="detailError"
+              class="rounded border border-rose-900/50 bg-rose-950/35 px-2 py-1.5 text-[11px] text-rose-200"
+            >
+              {{ detailError }}
+            </div>
             <div class="flex flex-wrap gap-1 text-xs">
               <button
                 v-for="tab in detailDrawerTabs"
@@ -1428,6 +1728,26 @@ watch([page, pageSize], () => {
                 <input v-model="editAsset.name" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm" />
                 <label class="mt-2 block text-xs text-slate-500">Slug</label>
                 <input v-model="editAsset.slug" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm" />
+                <template v-if="['rides', 'shows', 'restaurants', 'shops'].includes(entityType)">
+                  <label class="mt-2 block text-xs text-slate-500">Zone (Datenbank <span class="font-mono text-slate-400">park_zones</span>)</label>
+                  <p v-if="parkZonesLoading" class="mt-1 text-xs text-slate-500">Zonen werden geladen…</p>
+                  <select
+                    v-else
+                    v-model="editAsset.zoneId"
+                    class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-white"
+                  >
+                    <option value="">— Keine Zuordnung —</option>
+                    <option v-for="z in parkZonesForDrawer" :key="z.id" :value="z.id">
+                      {{ z.name }} ({{ z.slug }})
+                    </option>
+                  </select>
+                  <p
+                    v-if="!parkZonesLoading && !parkZonesForDrawer.length && editAsset.parkId"
+                    class="mt-1 text-[10px] leading-snug text-amber-500/90"
+                  >
+                    Für diesen Park gibt es noch keine Zonen in der Datenbank — Tab „Zones“ oder Provider-Sync prüfen.
+                  </p>
+                </template>
                 <label class="mt-2 block text-xs text-slate-500">Status</label>
                 <input v-model="editAsset.status" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm" />
                 <div
@@ -1436,7 +1756,7 @@ watch([page, pageSize], () => {
                 >
                   <h4 class="text-xs font-semibold uppercase tracking-wide text-slate-300">UNS topics</h4>
                   <p class="mt-1 text-[10px] leading-relaxed text-slate-500">
-                    Preview from the integration park (Master Data + mappings + schema). Match by external id, asset id, or slug.
+                    Preview from the integration park (asset data + mappings + schema). Match by external id, asset id, or slug.
                   </p>
                   <p v-if="unsTopicPreview?.sparkplug" class="mt-2 font-mono text-[10px] text-slate-500">
                     Sparkplug: {{ unsTopicPreview.sparkplug.groupId }} / {{ unsTopicPreview.sparkplug.edgeNodeId }}
@@ -1461,7 +1781,7 @@ watch([page, pageSize], () => {
                   </template>
                   <p v-else class="mt-2 text-xs text-slate-500">
                     No matching rows. Align Integrations park with this asset’s park and run
-                    <span class="text-slate-400">Generate from Master Data</span> on the Integrations page.
+                    <span class="text-slate-400">Generate from asset data</span> on the Integrations page.
                   </p>
                   <RouterLink
                     class="mt-3 inline-flex rounded-md border border-slate-600 px-2.5 py-1.5 text-[11px] text-brand-300 hover:bg-slate-800"
@@ -1506,7 +1826,10 @@ watch([page, pageSize], () => {
                 <SignalsCapabilitiesPanel entity-type="park_asset" :entity-id="selectedId" :editable="canPatchExtensions" />
               </template>
               <template v-if="detailTab === 'signals' && entityType === 'rides' && selectedId">
-                <RideSignalCapabilitiesPanel :ride-asset-id="selectedId" />
+                <RideSignalCapabilitiesPanel
+                  :ride-asset-id="selectedId"
+                  :asset-slug="String(editAsset.slug || '').trim()"
+                />
               </template>
               <template v-if="detailTab === 'raw'">
                 <pre class="max-h-80 overflow-auto rounded border border-slate-800 bg-slate-900 p-2 text-[10px] text-slate-400">{{
@@ -1559,6 +1882,18 @@ watch([page, pageSize], () => {
                 type="number"
                 class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm"
               />
+              <label class="mt-2 block text-xs text-slate-500">Übergeordnete Zone (optional)</label>
+              <p v-if="parkZonesLoading" class="mt-1 text-xs text-slate-500">Zonen werden geladen…</p>
+              <select
+                v-else
+                v-model="editZone.parentZoneId"
+                class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-white"
+              >
+                <option value="">— Top-Level (keine Parent-Zone) —</option>
+                <option v-for="z in parkZoneParentOptions" :key="z.id" :value="z.id">
+                  {{ z.name }} ({{ z.slug }})
+                </option>
+              </select>
             </template>
 
             <template v-else>
@@ -1584,6 +1919,7 @@ watch([page, pageSize], () => {
               </button>
             </div>
           </div>
+          <div v-else class="p-4 text-sm text-slate-500">Keine Detaildaten geladen.</div>
         </div>
       </div>
     </Teleport>
@@ -1610,8 +1946,14 @@ watch([page, pageSize], () => {
           <label class="mt-3 block text-xs text-slate-500">Slug (optional)</label>
           <input v-model="createSlug" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-2 text-sm" />
           <div class="mt-4 flex justify-end gap-2">
-            <button type="button" class="text-sm text-slate-400" @click="createOpen = false">Cancel</button>
             <button type="button" class="rounded-md bg-brand-600 px-3 py-2 text-sm text-white" @click="submitCreate">Create</button>
+            <button
+              type="button"
+              class="rounded border border-slate-600 px-3 py-2 text-sm text-slate-300"
+              @click="createOpen = false"
+            >
+              Cancel
+            </button>
           </div>
         </div>
       </div>

@@ -1,6 +1,7 @@
 const { ProviderAdapterInterface } = require('../../adapters/provider-adapter.interface');
 const { requestJson } = require('../../adapters/http-client');
 const { normalizeScheduleDateString } = require('../../../utils/schedule-date.util');
+const { coerceNumericWaitMinutes } = require('../../../utils/canonical-wait-payload.util');
 
 const PROVIDER = 'wartezeiten_app';
 const BASE_URL = 'https://api.wartezeiten.app';
@@ -135,7 +136,7 @@ class WartezeitenAppAdapter extends ProviderAdapterInterface {
             payload: {
               externalEntityName: r.name || r.attractionName || 'Unknown attraction',
               entityType: 'ATTRACTION',
-              waitTime: typeof r.waitTime === 'number' ? r.waitTime : null,
+              waitTime: coerceNumericWaitMinutes(r.waitTime ?? r.wait_time ?? r.waitMinutes),
               status: r.status || null,
               isOpen: r.isOpen != null ? Boolean(r.isOpen) : null,
               sampledAt: new Date().toISOString(),

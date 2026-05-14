@@ -49,10 +49,30 @@ async function insertModel(entry) {
   return MlModelRegistry.create(entry);
 }
 
+/**
+ * Load a registry row by `model_id` (auditable id string). Optional trace ensures ride-scoped rows
+ * are only returned when they match the trace's ride.
+ * @param {string} modelId
+ * @param {{ rideId?: string|null }|null} [trace]
+ * @returns {Promise<object|null>} plain row or null
+ */
+async function findModelRegistryRowForTrace(modelId, trace) {
+  const mid = String(modelId || '').trim();
+  if (!mid) return null;
+  const row = await MlModelRegistry.findOne({ where: { modelId: mid } });
+  if (!row) return null;
+  const plain = row.get({ plain: true });
+  if (plain.scopeType === 'ride') {
+    if (!trace || !trace.rideId || String(plain.scopeId) !== String(trace.rideId)) return null;
+  }
+  return plain;
+}
+
 module.exports = {
   deactivateForScope,
   findActiveModel,
   insertModel,
+  findModelRegistryRowForTrace,
   GLOBAL_TYPES,
   RIDE_TYPES,
 };

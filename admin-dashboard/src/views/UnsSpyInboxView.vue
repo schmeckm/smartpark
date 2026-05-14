@@ -396,7 +396,7 @@ onMounted(() => {
         <p class="mt-1 max-w-3xl text-sm text-slate-400">{{ t('unsSpyInbox.subtitle') }}</p>
         <p class="mt-2 max-w-3xl text-xs text-slate-500">{{ t('unsSpyInbox.subtitleAdapterActions') }}</p>
         <p class="mt-2 text-xs text-slate-500">
-          <RouterLink class="text-brand-300 hover:underline" to="/uns/governance">{{ t('menu.unsGovernance') }}</RouterLink>
+          <RouterLink class="text-brand-300 hover:underline" to="/diagnostics/governance">{{ t('menu.unsGovernance') }}</RouterLink>
         </p>
       </div>
       <button

@@ -1,0 +1,18 @@
+# Smart Park OS — adapter install config (YAML). Managed by PATCH/POST install-local only.
+schemaVersion: 1
+adapterKey: calendar_school_holidays
+installedAt: '2026-05-08T10:30:01.379Z'
+updatedAt: '2026-05-13T19:29:39.146Z'
+configJson:
+  parkSlug: europapark
+  timezone: Europe/Berlin
+contextJson:
+  parkSlug: europapark
+  sparkplugGroupId: europa_park
+  sparkplugEdgeNode: calendar_gateway
+outputProfiles:
+  - SPARKPLUG_JSON
+  - CANONICAL_HISTORIAN
+emitEnabled: true
+ingestCanonicalEnabled: true
+scheduleCron: '0 3 * * *'

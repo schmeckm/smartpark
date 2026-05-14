@@ -16,6 +16,8 @@ function defineMlGlobalFactor(sequelize) {
       defaultValue: { type: DataTypes.DECIMAL(12, 6), allowNull: true, field: 'default_value' },
       currentValue: { type: DataTypes.DECIMAL(12, 6), allowNull: true, field: 'current_value' },
       sourceType: { type: DataTypes.STRING(24), allowNull: false, defaultValue: 'MANUAL', field: 'source_type' },
+      adapterKey: { type: DataTypes.STRING(120), allowNull: true, field: 'adapter_key' },
+      mqttTopic: { type: DataTypes.STRING(500), allowNull: true, field: 'mqtt_topic' },
       unit: { type: DataTypes.STRING(40), allowNull: true },
       validFrom: { type: DataTypes.DATEONLY, allowNull: true, field: 'valid_from' },
       validTo: { type: DataTypes.DATEONLY, allowNull: true, field: 'valid_to' },

@@ -246,6 +246,28 @@ async function runVisitorFlowFromLog(parkId, opts = {}) {
   const { VisitorJourneyEvent, ParkAsset, Park, AssetType } = require('../models');
   const topEdges = Math.min(80, Math.max(15, Number(opts.topEdges) || 45));
 
+  /**
+   * Live geo-pressure snapshot, keyed by slug. Gives from-log nodes the same
+   * operational context (ride load, stress) as synthetic nodes — without it
+   * the flow view would render with `pressureScore: 0` everywhere and any
+   * Phase 1 visualization that colours by pressure would look broken.
+   * Failure here MUST NOT fail the whole call, since pressure is enrichment.
+   */
+  let pressureBySlug = new Map();
+  try {
+    const engine = new GeoPressureEngineService();
+    const pressurePayload = await engine.buildPressurePayload(parkId, { mode: 'live' });
+    if (Array.isArray(pressurePayload?.entities)) {
+      for (const e of pressurePayload.entities) {
+        if (e?.slug) {
+          pressureBySlug.set(String(e.slug), Number(e.pressureScore) || 0);
+        }
+      }
+    }
+  } catch {
+    pressureBySlug = new Map();
+  }
+
   const to = opts.to != null ? new Date(opts.to) : new Date();
   const from = opts.from != null ? new Date(opts.from) : new Date(to.getTime() - 24 * 60 * 60 * 1000);
   if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from > to) {
@@ -402,7 +424,7 @@ async function runVisitorFlowFromLog(parkId, opts = {}) {
       entityType: code,
       lat: j.latitude != null ? Number(j.latitude) : null,
       lng: j.longitude != null ? Number(j.longitude) : null,
-      pressureScore: 0,
+      pressureScore: pressureBySlug.get(String(j.slug)) ?? 0,
     };
   });
 
@@ -444,6 +466,7 @@ async function runVisitorFlowFromLog(parkId, opts = {}) {
       transitionsSimulated: transitionCount,
       guestsSimulated: byCase.size,
       eventsInWindow: rows.length,
+      casesInWindow: byCase.size,
       casesWithPath,
     },
   };

@@ -29,6 +29,7 @@ import {
   weekdayVisitAverages,
   yearVisitGrandTotal,
 } from '@/utils/visitPlanning.utils'
+import HelpPanelButton from '@/components/help/HelpPanelButton.vue'
 
 const { t, locale } = useI18n()
 const parkCtx = useParkContextStore()
@@ -93,6 +94,10 @@ const forecastApplying = ref(false)
 const forecastActualsLoading = ref(false)
 /** `null` = not loaded; `0` = no cells for that Ist year */
 const forecastActualsCellCount = ref<number | null>(null)
+
+const showPlanningHelp = ref(false)
+
+const activeVersion = computed(() => versions.value.find((v) => v.id === activeVersionId.value) ?? null)
 
 const forecastApplyDisabled = computed(
   () =>
@@ -196,6 +201,71 @@ function setCell(rowId: string, dateIso: string, raw: string) {
 function onCellInput(rowId: string, dateIso: string, ev: Event) {
   const el = ev.target as HTMLInputElement
   setCell(rowId, dateIso, el.value)
+}
+
+function adjacentDataRow(from: HTMLTableRowElement, dir: 1 | -1): HTMLTableRowElement | null {
+  let row: HTMLTableRowElement | null = from
+  for (;;) {
+    row =
+      dir === 1
+        ? (row?.nextElementSibling as HTMLTableRowElement | null) ?? null
+        : (row?.previousElementSibling as HTMLTableRowElement | null) ?? null
+    if (!row) return null
+    if (row.querySelector('td input[type="number"]')) return row
+  }
+}
+
+function navigateGridCell(ev: KeyboardEvent) {
+  if (readOnly.value) return
+  const input = ev.target as HTMLInputElement
+  if (input.type !== 'number') return
+  const key = ev.key
+  if (!['ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown'].includes(key)) return
+  const td = input.closest('td')
+  const tr = input.closest('tr')
+  if (!td || !tr) return
+  ev.preventDefault()
+  const idx = Array.prototype.indexOf.call(tr.children, td)
+
+  const focusNum = (el: Element | null | undefined) => {
+    const inp = el?.querySelector?.('input[type="number"]') as HTMLInputElement | undefined
+    inp?.focus()
+    inp?.select?.()
+  }
+
+  if (key === 'ArrowRight') {
+    let el: Element | null = td
+    for (;;) {
+      el = el.nextElementSibling
+      if (!el) return
+      const inp = el.querySelector('input[type="number"]') as HTMLInputElement | null
+      if (inp) {
+        inp.focus()
+        inp.select?.()
+        return
+      }
+    }
+  }
+  if (key === 'ArrowLeft') {
+    let el: Element | null = td
+    for (;;) {
+      el = el.previousElementSibling
+      if (!el) return
+      const inp = el.querySelector('input[type="number"]') as HTMLInputElement | null
+      if (inp) {
+        inp.focus()
+        inp.select?.()
+        return
+      }
+    }
+  }
+  if (key === 'ArrowDown') {
+    focusNum(adjacentDataRow(tr as HTMLTableRowElement, 1)?.children[idx] as HTMLElement | undefined)
+    return
+  }
+  if (key === 'ArrowUp') {
+    focusNum(adjacentDataRow(tr as HTMLTableRowElement, -1)?.children[idx] as HTMLElement | undefined)
+  }
 }
 
 function buildPayload(): VisitPlanPayload {
@@ -362,10 +432,11 @@ async function onCreateVersion() {
 
 async function onDeleteVersion() {
   if (readOnly.value || !activeVersionId.value) return
+  const vname = activeVersion.value?.name?.trim() || t('hotelPlanning.versionUntitled')
   const ok = await askConfirm({
     variant: 'danger',
     title: t('hotelPlanning.deleteVersionTitle'),
-    message: t('hotelPlanning.deleteVersionMsg'),
+    message: t('hotelPlanning.deleteVersionMsg', { name: vname }),
     confirmLabel: t('btn.confirm'),
     cancelLabel: t('btn.cancel'),
   })
@@ -575,13 +646,69 @@ const saveStatusLabel = computed(() => {
       return ''
   }
 })
+
+const saveStatusBadgeClass = computed(() => {
+  switch (saveStatus.value) {
+    case 'dirty':
+      return isLight.value
+        ? 'border-amber-200 bg-amber-50 text-amber-900'
+        : 'border-amber-500/40 bg-amber-950/35 text-amber-100'
+    case 'saving':
+      return isLight.value
+        ? 'border-slate-200 bg-slate-100 text-slate-700'
+        : 'border-slate-600 bg-slate-800/90 text-slate-200'
+    case 'saved':
+      return isLight.value
+        ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+        : 'border-emerald-500/35 bg-emerald-950/30 text-emerald-100'
+    case 'error':
+      return isLight.value
+        ? 'border-red-200 bg-red-50 text-red-900'
+        : 'border-red-500/35 bg-red-950/25 text-red-100'
+    default:
+      return ''
+  }
+})
+
+const btnPrimary =
+  'rounded-md border border-brand-600 bg-brand-600 px-3 py-2 text-xs font-medium text-white shadow-sm hover:bg-brand-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:opacity-50 dark:focus-visible:ring-offset-slate-950'
+
+const btnGhost = computed(() =>
+  isLight.value
+    ? 'rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-800 shadow-sm hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:opacity-40'
+    : 'rounded-md border border-slate-600 bg-transparent px-3 py-2 text-xs font-medium text-slate-200 hover:bg-slate-800/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 disabled:opacity-40'
+)
+
+const btnGhostDanger = computed(() =>
+  isLight.value
+    ? 'rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-red-700 shadow-sm hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:opacity-40'
+    : 'rounded-md border border-slate-600 bg-transparent px-3 py-2 text-xs font-medium text-slate-200 hover:bg-red-950/40 hover:text-red-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/60 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 disabled:opacity-40'
+)
 </script>
 
 <template>
   <div class="mx-auto max-w-[100rem] space-y-5 px-4 py-6 sm:px-6">
-    <header>
+    <header class="space-y-2">
       <h1 :class="ui.title">{{ t('hotelPlanning.title') }}</h1>
-      <p :class="ui.subtitle">{{ t('hotelPlanning.subtitle') }}</p>
+      <p :class="ui.subtitle">{{ t('hotelPlanning.subtitleShort') }}</p>
+      <HelpPanelButton
+        class="!mt-2 !inline-flex text-left"
+        :expanded="showPlanningHelp"
+        controls-id="hotel-planning-help-panel"
+        @click="showPlanningHelp = !showPlanningHelp"
+      >
+        {{ showPlanningHelp ? t('hotelPlanning.helpHideDetails') : t('hotelPlanning.helpShowDetails') }}
+      </HelpPanelButton>
+      <section
+        id="hotel-planning-help-panel"
+        v-show="showPlanningHelp"
+        :class="[ui.infoBox, '!mt-3 space-y-2']"
+        :aria-label="t('hotelPlanning.helpShowDetails')"
+      >
+        <p class="text-xs leading-relaxed">{{ t('hotelPlanning.subtitle') }}</p>
+        <p class="text-xs leading-relaxed">{{ t('hotelPlanning.integrationHint') }}</p>
+        <p class="text-xs leading-relaxed">{{ t('hotelPlanning.keyboardGridHint') }}</p>
+      </section>
     </header>
 
     <div v-if="!parkCtx.activeParkId" :class="ui.infoBox">
@@ -589,8 +716,9 @@ const saveStatusLabel = computed(() => {
     </div>
 
     <template v-else>
-      <div :class="ui.card" class="space-y-4">
-        <div class="flex flex-wrap items-end gap-4">
+      <div :class="ui.card" class="space-y-5">
+        <h2 :class="[ui.h2, 'text-base sm:text-sm']">{{ t('hotelPlanning.sectionSettings') }}</h2>
+        <div class="flex flex-wrap items-end gap-x-6 gap-y-4">
           <label class="block">
             <span :class="ui.label" class="!mt-0">{{ t('hotelPlanning.planYear') }}</span>
             <select
@@ -622,13 +750,13 @@ const saveStatusLabel = computed(() => {
               </option>
             </select>
           </label>
-          <label class="block min-w-[14rem]">
+          <label class="block min-w-[14rem] flex-1 basis-[14rem]">
             <span :class="ui.label" class="!mt-0">{{ t('hotelPlanning.versionLabel') }}</span>
             <select
               v-model="activeVersionId"
               :disabled="versionsLoading"
               :class="ui.control"
-              class="!mt-1 w-full"
+              class="!mt-1 w-full min-w-[12rem]"
             >
               <option :value="null">{{ t('hotelPlanning.pickVersion') }}</option>
               <option v-for="v in versions" :key="v.id" :value="v.id">
@@ -637,12 +765,15 @@ const saveStatusLabel = computed(() => {
               </option>
             </select>
           </label>
-          <p :class="[ui.muted, 'w-full basis-full !mt-0']">{{ t('hotelPlanning.horizonHint') }}</p>
+        </div>
+        <p :class="[ui.muted, '!mt-0']">{{ t('hotelPlanning.horizonHint') }}</p>
+
+        <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
           <div class="flex flex-wrap gap-2">
             <button
               v-if="!readOnly"
               type="button"
-              class="mt-6 rounded-md border border-brand-600 bg-brand-600 px-3 py-2 text-xs font-medium text-white hover:bg-brand-500 disabled:opacity-50"
+              :class="btnPrimary"
               :disabled="versionsLoading"
               @click="
                 () => {
@@ -656,7 +787,7 @@ const saveStatusLabel = computed(() => {
             <button
               v-if="!readOnly"
               type="button"
-              class="mt-6 rounded-md border border-slate-600 px-3 py-2 text-xs text-slate-200 hover:bg-slate-800 disabled:opacity-40"
+              :class="btnGhostDanger"
               :disabled="!activeVersionId || versionsLoading"
               @click="onDeleteVersion"
             >
@@ -665,7 +796,7 @@ const saveStatusLabel = computed(() => {
             <button
               v-if="!readOnly"
               type="button"
-              class="mt-6 rounded-md border border-slate-500 px-3 py-2 text-xs text-slate-200 hover:bg-slate-800 disabled:opacity-40"
+              :class="btnGhost"
               :disabled="!activeVersionId || saving"
               @click="saveNow"
             >
@@ -673,7 +804,7 @@ const saveStatusLabel = computed(() => {
             </button>
             <button
               type="button"
-              class="mt-6 rounded-md border border-slate-500 px-3 py-2 text-xs text-slate-200 hover:bg-slate-800 disabled:opacity-40"
+              :class="btnGhost"
               :disabled="!activeVersionId || versionsLoading || excelBusy"
               @click="onExportVisitPlanExcel"
             >
@@ -682,7 +813,7 @@ const saveStatusLabel = computed(() => {
             <button
               v-if="!readOnly"
               type="button"
-              class="mt-6 rounded-md border border-slate-500 px-3 py-2 text-xs text-slate-200 hover:bg-slate-800 disabled:opacity-40"
+              :class="btnGhost"
               :disabled="!activeVersionId || versionsLoading || excelBusy"
               @click="triggerVisitPlanExcelImport"
             >
@@ -696,11 +827,30 @@ const saveStatusLabel = computed(() => {
               @change="onVisitPlanExcelFileChange"
             />
           </div>
+          <output
+            v-if="activeVersionId && saveStatus !== 'idle' && saveStatusLabel"
+            class="inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-medium sm:ml-1"
+            :class="saveStatusBadgeClass"
+            aria-live="polite"
+          >
+            {{ saveStatusLabel }}
+          </output>
         </div>
-        <p v-if="saveStatusLabel && activeVersionId" :class="ui.muted">{{ saveStatusLabel }}</p>
+
         <p v-if="readOnly" :class="ui.infoBox">{{ t('hotelPlanning.readOnlyHint') }}</p>
-        <p :class="ui.muted">{{ t('hotelPlanning.excelHint') }}</p>
-        <p :class="ui.muted">{{ t('hotelPlanning.integrationHint') }}</p>
+
+        <details :class="[isLight ? 'rounded-lg border border-slate-200 bg-slate-50/80' : 'rounded-lg border border-slate-700/80 bg-slate-950/30']">
+          <summary
+            class="cursor-pointer select-none px-3 py-2 text-xs font-medium"
+            :class="isLight ? 'text-slate-800' : 'text-slate-200'"
+          >
+            {{ t('hotelPlanning.excelDetailsTitle') }}
+          </summary>
+          <div class="space-y-2 border-t px-3 py-3 text-xs leading-relaxed" :class="isLight ? 'border-slate-200 text-slate-700' : 'border-slate-700 text-slate-400'">
+            <p>{{ t('hotelPlanning.excelDetailsSummary') }}</p>
+            <p>{{ t('hotelPlanning.excelHint') }}</p>
+          </div>
+        </details>
       </div>
 
       <div v-if="showForecastDialog" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
@@ -748,7 +898,8 @@ const saveStatusLabel = computed(() => {
             </button>
             <button
               type="button"
-              class="rounded-md border border-amber-600 bg-amber-600 px-3 py-2 text-xs font-medium text-white disabled:opacity-50"
+              :class="btnPrimary"
+              class="disabled:opacity-50"
               :disabled="forecastApplyDisabled"
               @click="onApplyPriorYearForecast"
             >
@@ -790,12 +941,16 @@ const saveStatusLabel = computed(() => {
       </div>
 
       <div v-if="activeVersionId && !detailLoading" :class="ui.card" class="space-y-4">
-        <h2 :class="ui.h2">{{ t('hotelPlanning.statsTitle') }}</h2>
-        <p :class="ui.muted">{{ t('hotelPlanning.statsHint') }}</p>
+        <h2 :class="[ui.h2, 'text-base sm:text-sm']">{{ t('hotelPlanning.sectionStats') }}</h2>
+        <p :class="[ui.muted, '!mt-0 font-medium text-slate-500 dark:text-slate-400']">
+          {{ t('hotelPlanning.statsTitle') }}
+        </p>
+        <p :class="[ui.muted, '!mt-1']">{{ t('hotelPlanning.statsHint') }}</p>
         <div class="flex flex-wrap gap-8">
-          <div>
+          <div class="max-w-md">
             <p :class="ui.statLabel">{{ t('hotelPlanning.statsYearTotal') }}</p>
             <p :class="ui.statValue">{{ yearGrandTotal.toLocaleString(locale) }}</p>
+            <p :class="[ui.muted, '!mt-2 max-w-prose']">{{ t('hotelPlanning.statsYearTotalCaption') }}</p>
           </div>
         </div>
         <div class="grid gap-6 lg:grid-cols-2">
@@ -828,17 +983,28 @@ const saveStatusLabel = computed(() => {
               <tbody>
                 <tr v-for="row in weekdayAvgs" :key="row.dow" :class="ui.tableRow">
                   <td :class="ui.tableCell">{{ row.label }}</td>
-                  <td :class="[ui.tableCell, 'text-right font-mono']">{{ row.avg.toLocaleString(locale) }}</td>
+                  <td
+                    :class="[
+                      ui.tableCell,
+                      'text-right font-mono',
+                      row.avg == null ? (isLight ? 'text-slate-400' : 'text-slate-500') : '',
+                    ]"
+                    :title="row.avg == null ? t('hotelPlanning.statsWeekdayEmptyHint') : undefined"
+                  >
+                    <template v-if="row.avg != null">{{ row.avg.toLocaleString(locale) }}</template>
+                    <span v-else aria-hidden="true">{{ t('hotelPlanning.statsNoAvg') }}</span>
+                  </td>
                 </tr>
               </tbody>
             </table>
+            <p :class="[ui.muted, '!mt-2 max-w-prose']">{{ t('hotelPlanning.statsWeekdayEmptyHint') }}</p>
           </div>
         </div>
         <div class="flex flex-wrap gap-2">
           <button
             v-if="!readOnly"
             type="button"
-            class="rounded-md border border-indigo-600 bg-indigo-600/90 px-3 py-2 text-xs font-medium text-white hover:bg-indigo-500 disabled:opacity-40"
+            :class="btnGhost"
             :disabled="!activeVersionId"
             @click="onProjectWeekdayMeans"
           >
@@ -847,7 +1013,7 @@ const saveStatusLabel = computed(() => {
           <button
             v-if="!readOnly"
             type="button"
-            class="rounded-md border border-emerald-700 bg-emerald-700/90 px-3 py-2 text-xs font-medium text-white hover:bg-emerald-600 disabled:opacity-40"
+            :class="btnGhost"
             :disabled="actualsSaving"
             @click="onSaveActualsFromGrid"
           >
@@ -856,7 +1022,7 @@ const saveStatusLabel = computed(() => {
           <button
             v-if="!readOnly"
             type="button"
-            class="rounded-md border border-amber-600 bg-amber-600/90 px-3 py-2 text-xs font-medium text-white hover:bg-amber-500 disabled:opacity-40"
+            :class="btnGhost"
             :disabled="!activeVersionId || forecastApplying"
             @click="openForecastDialog"
           >
@@ -872,27 +1038,35 @@ const saveStatusLabel = computed(() => {
       <section
         v-if="activeVersionId && !detailLoading"
         :class="ui.card"
-        class="overflow-x-auto p-2 sm:p-4"
+        class="p-2 sm:p-4"
         :aria-label="t('hotelPlanning.gridAria')"
       >
+        <h2 :class="[ui.h2, 'mb-3 text-base sm:text-sm']">{{ t('hotelPlanning.sectionGrid') }}</h2>
         <div class="mb-3 flex flex-wrap gap-2">
-          <button
-            v-if="!readOnly"
-            type="button"
-            class="rounded-md border border-brand-600 bg-brand-600 px-3 py-2 text-xs font-medium text-white hover:bg-brand-500"
-            @click="addHotel"
-          >
+          <button v-if="!readOnly" type="button" :class="btnPrimary" @click="addHotel">
             {{ t('hotelPlanning.addHotel') }}
           </button>
         </div>
 
-        <table class="border-collapse text-sm">
+        <div
+          :class="[
+            'max-w-full overflow-x-auto scroll-smooth rounded-lg border [scrollbar-gutter:stable]',
+            isLight ? 'border-slate-200 shadow-[inset_0_-1px_0_0_rgba(15,23,42,0.06)]' : 'border-slate-800 shadow-[inset_0_-1px_0_0_rgba(0,0,0,0.25)]',
+          ]"
+        >
+          <table class="border-collapse text-sm">
           <thead>
             <tr>
               <th scope="col" :class="thCorner">{{ t('hotelPlanning.colCategory') }}</th>
-              <th v-for="day in dateColumns" :key="day" scope="col" :class="thHead">
+              <th
+                v-for="day in dateColumns"
+                :key="day"
+                scope="col"
+                :class="thHead"
+                :title="day"
+              >
                 <span class="block whitespace-nowrap">{{ fmtHeader(day) }}</span>
-                <span class="block font-normal normal-case text-slate-500">{{ day }}</span>
+                <span class="sr-only">{{ day }}</span>
               </th>
             </tr>
           </thead>
@@ -916,6 +1090,7 @@ const saveStatusLabel = computed(() => {
                   :class="inp"
                   :aria-label="t('hotelPlanning.cellAriaChannel', { channel: t(ch.labelKey), date: day })"
                   @input="onCellInput(ch.id, day, $event)"
+                  @keydown="navigateGridCell"
                 />
               </td>
             </tr>
@@ -955,6 +1130,7 @@ const saveStatusLabel = computed(() => {
                   :class="inp"
                   :aria-label="t('hotelPlanning.cellAriaHotelGuest', { hotel: h.name, date: day })"
                   @input="onCellInput(h.id, day, $event)"
+                  @keydown="navigateGridCell"
                 />
               </td>
             </tr>
@@ -965,12 +1141,14 @@ const saveStatusLabel = computed(() => {
               </td>
             </tr>
           </tbody>
-        </table>
+          </table>
+        </div>
 
+        <p :class="[ui.muted, 'mt-3 max-w-prose']">{{ t('hotelPlanning.gridScrollHint') }}</p>
         <p v-if="hotels.length === 0" :class="[ui.muted, 'mt-4 text-center']">
           {{ t('hotelPlanning.emptyHotels') }}
         </p>
-        <p :class="[ui.muted, 'mt-3']">{{ t('hotelPlanning.rowTotalHint') }}</p>
+        <p :class="[ui.muted, 'mt-3 max-w-prose']">{{ t('hotelPlanning.rowTotalHint') }}</p>
       </section>
 
       <div v-if="!activeVersionId && !versionsLoading && !detailLoading" :class="ui.infoBox">

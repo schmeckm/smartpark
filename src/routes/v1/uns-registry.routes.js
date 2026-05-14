@@ -21,16 +21,17 @@ const topicsListQuery = Joi.object({
   offset: Joi.number().integer().min(0).optional(),
 }).unknown(false);
 
-router.get('/mirror/summary', requirePermission('integrations', 'read'), controller.getMirrorSummary);
+router.get('/mirror/summary', requirePermission('iotOt', 'settings.read'), controller.getMirrorSummary);
+router.post('/mirror/sync', requirePermission('iotOt', 'settings.read'), controller.postMirrorSync);
 router.get(
   '/entities',
-  requirePermission('integrations', 'read'),
+  requirePermission('iotOt', 'settings.read'),
   validate(registryListQuery, 'query'),
   controller.listEntities
 );
 router.get(
   '/topics',
-  requirePermission('integrations', 'read'),
+  requirePermission('iotOt', 'settings.read'),
   validate(topicsListQuery, 'query'),
   controller.listTopics
 );

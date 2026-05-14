@@ -3,7 +3,7 @@ const { AppError } = require('../utils/app-error');
 const sim = require('../services/simulator.service');
 
 const start = asyncHandler(async (req, res) => {
-  const data = sim.start();
+  const data = sim.start(req.body || {});
   res.json({ success: true, data });
 });
 
@@ -12,11 +12,11 @@ const stop = asyncHandler(async (req, res) => {
 });
 
 const scenario = asyncHandler(async (req, res) => {
-  const { name } = req.validated;
+  const { name, parkId } = req.validated;
   if (!name || !sim.SCENARIOS[name]) {
     throw new AppError('Unknown scenario', 400, { code: 'UNKNOWN_SCENARIO' });
   }
-  const out = await sim.runScenario(name);
+  const out = await sim.runScenario(name, { parkId: parkId || null });
   res.json({ success: true, data: { scenario: name, result: out } });
 });
 

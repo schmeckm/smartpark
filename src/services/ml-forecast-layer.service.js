@@ -207,13 +207,36 @@ async function mergeMlEnterpriseLayer(summary, ctx) {
 
   const mlFactorCurrents = mlFactorCurrentsForApiResponse(currentResolutions);
 
+  const prev = summary._decomp || {};
+  const mlDelta15 = f15 != null && summary.forecast15Minutes != null ? f15 - summary.forecast15Minutes : 0;
+  const mlDelta60 = f60 != null && summary.forecast60Minutes != null ? f60 - summary.forecast60Minutes : 0;
+  const currentWait = summary.currentAvgWaitMinutes ?? null;
+
+  const forecastDecomposition = {
+    currentWait,
+    trendBase15: prev.trendBase15 ?? null,
+    trendBase60: prev.trendBase60 ?? null,
+    factorAdjDelta15: prev.factorAdjDelta15 ?? 0,
+    factorAdjDelta60: prev.factorAdjDelta60 ?? 0,
+    xLayerDelta15: prev.xLayerDelta15 ?? 0,
+    xLayerDelta60: prev.xLayerDelta60 ?? 0,
+    xLayerFactors: prev.xLayerFactors ?? [],
+    mlDelta15,
+    mlDelta60,
+    mlFactors: factors.filter((f) => !String(f.feature).startsWith('ML_CONFIG')),
+    final15: f15,
+    final60: f60,
+  };
+
+  const { _decomp, ...rest } = summary;
   return {
-    ...summary,
+    ...rest,
     forecast15Minutes: f15,
     forecast60Minutes: f60,
     topInfluencingFactors: mergedFactors,
     forecastSource: hasMl ? 'FEATURE_MODEL' : summary.forecastSource,
     mlFactorCurrents,
+    forecastDecomposition,
   };
 }
 

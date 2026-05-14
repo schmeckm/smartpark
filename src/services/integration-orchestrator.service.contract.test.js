@@ -90,6 +90,7 @@ const REQUIRED_SETTING_KEYS = {
   selectedProvider: 'externalParkData.selectedProvider',
   selectedDestination: 'externalParkData.selectedDestination',
   selectedPark: 'externalParkData.selectedPark',
+  dataSourceMode: 'externalParkData.dataSourceMode',
   autoApplyEnabled: 'externalParkData.autoApplyEnabled',
   pollingEnabled: 'externalParkData.pollingEnabled',
   pollingIntervalSeconds: 'externalParkData.pollingIntervalSeconds',
@@ -108,7 +109,7 @@ test('integration-orchestrator: module exports the documented surface', () => {
   assert.notEqual(moduleUnderTest.SETTING_KEYS, null, 'SETTING_KEYS must not be null');
 });
 
-test('integration-orchestrator: SETTING_KEYS pins the 9 known app_settings keys', () => {
+test('integration-orchestrator: SETTING_KEYS pins the 10 known app_settings keys', () => {
   const actual = moduleUnderTest.SETTING_KEYS;
   for (const [k, v] of Object.entries(REQUIRED_SETTING_KEYS)) {
     assert.equal(

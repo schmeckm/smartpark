@@ -44,13 +44,35 @@ const {
   featureDraftPutBody,
 } = require('../../validators/ai-studio.validators');
 const mlPredictionController = require('../../controllers/ml-prediction.controller');
+const mlPredictionTraceController = require('../../controllers/ml-prediction-trace.controller');
+const mlForecastAccuracyController = require('../../controllers/ml-forecast-accuracy.controller');
+const mlFeatureStoreReadinessController = require('../../controllers/ml-feature-store-readiness.controller');
+const mlFeatureStoreSnapshotDebugController = require('../../controllers/ml-feature-store-snapshot-debug.controller');
 const {
   predictRideMerged,
   rideIdPathParams,
   trainGlobalWaitBody,
   datasetStatsQuery: mlRideDatasetStatsQuery,
   parkMlSummaryQuery,
+  mlPredictionTracesQuery,
+  predictionTraceIdParams,
+  mlForecastAccuracyQuery,
+  mlForecastAccuracyLogIdParams,
+  mlFeatureStoreReadinessQuery,
+  mlFeatureStoreSnapshotDebugQuery,
 } = require('../../validators/ml-wait-predict.validators');
+const { requireMlProfileEnabled } = require('../../middleware/ml-profile-enabled.middleware');
+const mlMetadataProfileController = require('../../controllers/ml-metadata-profile.controller');
+const {
+  parkListQuery,
+  rideListQuery,
+  parkIdParams: mlMetadataParkProfileIdParams,
+  rideIdParams: mlMetadataRideProfileIdParams,
+  parkProfileBody,
+  parkProfilePutMerged,
+  rideProfileBody,
+  rideProfilePutMerged,
+} = require('../../validators/ml-metadata-profile.validators');
 
 /**
  * Register authenticated AI routes on the v1 router (full paths under /ai/…).
@@ -190,6 +212,13 @@ function registerProtectedAiRoutes(v1Router) {
     validate(entityForecastParams, 'params'),
     validate(parkForecastQuery, 'query'),
     aiController.entityForecastSummary
+  );
+  v1Router.get(
+    '/ai/entities/:externalEntityId/forecast/explanation',
+    requirePermission('ai', 'read'),
+    validate(entityForecastParams, 'params'),
+    validate(parkForecastQuery, 'query'),
+    aiController.entityForecastExplanation
   );
   v1Router.get(
     '/ai/parks/:externalParkId/entities/forecast/summary',
@@ -411,6 +440,151 @@ function registerProtectedAiRoutes(v1Router) {
     // Canonical `/ai/ml/...` mount (Phase B5).
     v1Router[reg.method](`/ai/ml${reg.path}`, ...reg.handlers);
   }
+
+  v1Router.get(
+    '/ai/ml/prediction-traces',
+    requirePermission('ai', 'read'),
+    requireParkContext,
+    validate(mlPredictionTracesQuery, 'query'),
+    mlPredictionTraceController.getMlPredictionTraces
+  );
+  v1Router.get(
+    '/ai/ml/prediction-traces/filter-options',
+    requirePermission('ai', 'read'),
+    requireParkContext,
+    mlPredictionTraceController.getMlPredictionTraceFilterOptions
+  );
+  v1Router.get(
+    '/ai/ml/prediction-traces/:predictionId/coefficients',
+    requirePermission('ai', 'read'),
+    requireParkContext,
+    validate(predictionTraceIdParams, 'params'),
+    mlPredictionTraceController.getMlPredictionTraceCoefficients
+  );
+  v1Router.get(
+    '/ai/ml/prediction-traces/:predictionId',
+    requirePermission('ai', 'read'),
+    requireParkContext,
+    validate(predictionTraceIdParams, 'params'),
+    mlPredictionTraceController.getMlPredictionTraceById
+  );
+
+  v1Router.get(
+    '/ai/ml/forecast-accuracy/kpis',
+    requirePermission('ai', 'read'),
+    requireParkContext,
+    validate(mlForecastAccuracyQuery, 'query'),
+    mlForecastAccuracyController.getMlForecastAccuracyKpis
+  );
+  v1Router.get(
+    '/ai/ml/forecast-accuracy/model-win-rates',
+    requirePermission('ai', 'read'),
+    requireParkContext,
+    mlForecastAccuracyController.getMlModelWinRateStats
+  );
+  v1Router.get(
+    '/ai/ml/forecast-accuracy/retro-lookback',
+    requirePermission('ai', 'read'),
+    requireParkContext,
+    mlForecastAccuracyController.getMlRetroLookback
+  );
+  v1Router.get(
+    '/ai/ml/forecast-accuracy/:id',
+    requirePermission('ai', 'read'),
+    requireParkContext,
+    validate(mlForecastAccuracyLogIdParams, 'params'),
+    mlForecastAccuracyController.getMlForecastAccuracyById
+  );
+  v1Router.get(
+    '/ai/ml/forecast-accuracy',
+    requirePermission('ai', 'read'),
+    requireParkContext,
+    validate(mlForecastAccuracyQuery, 'query'),
+    mlForecastAccuracyController.getMlForecastAccuracyLogs
+  );
+
+  v1Router.get(
+    '/ai/ml/feature-store-readiness',
+    requirePermission('ai', 'read'),
+    requireParkContext,
+    validate(mlFeatureStoreReadinessQuery, 'query'),
+    mlFeatureStoreReadinessController.getMlFeatureStoreReadiness
+  );
+
+  v1Router.get(
+    '/ai/ml/feature-store-snapshot-debug',
+    requirePermission('ai', 'read'),
+    requireParkContext,
+    validate(mlFeatureStoreSnapshotDebugQuery, 'query'),
+    mlFeatureStoreSnapshotDebugController.getMlFeatureStoreSnapshotDebug
+  );
+
+  /* Phase 3 — ML metadata profiles (ML_PROFILE_ENABLED) */
+  v1Router.get(
+    '/ai/ml/park-profiles',
+    requirePermission('ai', 'read'),
+    requireParkContext,
+    requireMlProfileEnabled,
+    validate(parkListQuery, 'query'),
+    mlMetadataProfileController.getParkProfiles
+  );
+  v1Router.get(
+    '/ai/ml/park-profiles/:id',
+    requirePermission('ai', 'read'),
+    requireParkContext,
+    requireMlProfileEnabled,
+    validate(mlMetadataParkProfileIdParams, 'params'),
+    mlMetadataProfileController.getParkProfileOne
+  );
+  v1Router.post(
+    '/ai/ml/park-profiles',
+    requirePermission('ai', 'refresh'),
+    requireParkContext,
+    requireMlProfileEnabled,
+    validate(parkProfileBody, 'body'),
+    mlMetadataProfileController.postParkProfile
+  );
+  v1Router.put(
+    '/ai/ml/park-profiles/:id',
+    requirePermission('ai', 'refresh'),
+    requireParkContext,
+    requireMlProfileEnabled,
+    validateMergedParamsBody(parkProfilePutMerged),
+    mlMetadataProfileController.putParkProfile
+  );
+
+  v1Router.get(
+    '/ai/ml/ride-profiles',
+    requirePermission('ai', 'read'),
+    requireParkContext,
+    requireMlProfileEnabled,
+    validate(rideListQuery, 'query'),
+    mlMetadataProfileController.getRideProfiles
+  );
+  v1Router.get(
+    '/ai/ml/ride-profiles/:id',
+    requirePermission('ai', 'read'),
+    requireParkContext,
+    requireMlProfileEnabled,
+    validate(mlMetadataRideProfileIdParams, 'params'),
+    mlMetadataProfileController.getRideProfileOne
+  );
+  v1Router.post(
+    '/ai/ml/ride-profiles',
+    requirePermission('ai', 'refresh'),
+    requireParkContext,
+    requireMlProfileEnabled,
+    validate(rideProfileBody, 'body'),
+    mlMetadataProfileController.postRideProfile
+  );
+  v1Router.put(
+    '/ai/ml/ride-profiles/:id',
+    requirePermission('ai', 'refresh'),
+    requireParkContext,
+    requireMlProfileEnabled,
+    validateMergedParamsBody(rideProfilePutMerged),
+    mlMetadataProfileController.putRideProfile
+  );
 }
 
 module.exports = { registerProtectedAiRoutes, aiController };

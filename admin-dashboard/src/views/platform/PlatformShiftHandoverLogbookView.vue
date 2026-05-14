@@ -2,17 +2,29 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
-import { getPlatformAssets, getPlatformParks, listShiftHandovers } from '@/api/client'
+import {
+  acknowledgeShiftHandover,
+  getPlatformAssets,
+  getPlatformParks,
+  listShiftHandoverDueReminders,
+  listShiftHandovers,
+  markShiftHandoverReminderSent,
+  patchShiftHandoverTasks,
+  shiftHandoverPdfUrl,
+} from '@/api/client'
 import type { PlatformAsset, PlatformPark, ShiftHandoverRow } from '@/types/api'
 import { useRegionalDateTime } from '@/composables/useRegionalDateTime'
 import { useToast } from '@/composables/useToast'
+import { useAuthStore } from '@/stores/auth'
 import { useParkContextStore } from '@/stores/parkContext'
 import { setApiParkContextId } from '@/utils/apiParkContext'
 
 const { t } = useI18n()
 const { push } = useToast()
 const { formatDateTime } = useRegionalDateTime()
+const auth = useAuthStore()
 const parkContext = useParkContextStore()
+const canEdit = computed(() => auth.hasPermission('rides', 'update'))
 
 const parks = ref<PlatformPark[]>([])
 const parkId = ref('')
@@ -28,6 +40,7 @@ let searchDebounce: ReturnType<typeof setTimeout> | null = null
 
 const assets = ref<PlatformAsset[]>([])
 const assetsBusy = ref(false)
+const reminderRows = ref<ShiftHandoverRow[]>([])
 
 const GROUP_KEYS = ['RIDE', 'RESTAURANT', 'SHOW', 'SHOP', 'OTHER'] as const
 
@@ -166,6 +179,83 @@ function snapshotBlock(row: ShiftHandoverRow): string[] {
   return lines
 }
 
+function diffLines(row: ShiftHandoverRow): string[] {
+  const d = row.diffSnapshot?.delta
+  if (!d) return []
+  return [
+    `Stillstände Δ: ${d.downtimeEventCount ?? 0} · offen Δ: ${d.openDowntimeCount ?? 0}`,
+    `Ausfallzeit Δ: geplant ${d.plannedDowntimeMinutes ?? 0} min · ungeplant ${d.unplannedDowntimeMinutes ?? 0} min`,
+    `Vorfälle Δ: neu ${d.incidentsCreatedInWindow ?? 0} · offen ${d.incidentsOpenActiveTotal ?? 0} · hoch/kritisch ${d.incidentsOpenHighOrCritical ?? 0}`,
+  ]
+}
+
+function taskStatusLabel(status?: string) {
+  if (status === 'DONE') return 'Erledigt'
+  if (status === 'CANCELLED') return 'Abgebrochen'
+  return 'Offen'
+}
+
+function isReminderDue(row: ShiftHandoverRow) {
+  return Boolean(row.reminderDueAt && !row.acknowledgedAt && !row.reminderSentAt && new Date(row.reminderDueAt) <= new Date())
+}
+
+async function refreshDueReminders() {
+  if (!parkId.value) return
+  try {
+    reminderRows.value = await listShiftHandoverDueReminders(parkId.value, 50)
+  } catch {
+    reminderRows.value = []
+  }
+}
+
+async function acknowledgeRow(row: ShiftHandoverRow) {
+  if (!parkId.value || !canEdit.value) return
+  const note = window.prompt('Quittierungsnotiz (optional):', '') ?? ''
+  try {
+    await acknowledgeShiftHandover(parkId.value, row.id, { note: note.trim() || null })
+    push('Übergabe quittiert', 'success')
+    await loadEntries()
+    await refreshDueReminders()
+  } catch (e) {
+    push(e instanceof Error ? e.message : 'Quittierung fehlgeschlagen', 'error')
+  }
+}
+
+async function markReminder(row: ShiftHandoverRow) {
+  if (!parkId.value || !canEdit.value) return
+  try {
+    await markShiftHandoverReminderSent(parkId.value, row.id)
+    push('Erinnerung als versendet markiert', 'success')
+    await loadEntries()
+    await refreshDueReminders()
+  } catch (e) {
+    push(e instanceof Error ? e.message : 'Erinnerung markieren fehlgeschlagen', 'error')
+  }
+}
+
+async function toggleTaskDone(row: ShiftHandoverRow, taskId: string, done: boolean) {
+  if (!parkId.value || !canEdit.value) return
+  const tasks = (row.followUpTasks || []).map((t) =>
+    t.id === taskId ? { ...t, status: (done ? 'DONE' : 'OPEN') as 'OPEN' | 'DONE' | 'CANCELLED' } : t
+  )
+  try {
+    await patchShiftHandoverTasks(
+      parkId.value,
+      row.id,
+      tasks.map((t) => ({
+        id: t.id,
+        title: t.title,
+        dueAt: t.dueAt || null,
+        ownerUserId: t.ownerUserId || null,
+        status: t.status,
+      }))
+    )
+    await loadEntries()
+  } catch (e) {
+    push(e instanceof Error ? e.message : 'Aufgabenupdate fehlgeschlagen', 'error')
+  }
+}
+
 async function loadEntries() {
   if (!parkId.value) return
   busy.value = true
@@ -200,6 +290,7 @@ async function loadEntries() {
       }
     }
     entries.value = await listShiftHandovers(parkId.value, params)
+    await refreshDueReminders()
   } catch (e) {
     entries.value = []
     push(e instanceof Error ? e.message : 'Laden fehlgeschlagen', 'error')
@@ -254,6 +345,7 @@ onMounted(async () => {
     await loadParks()
     await loadAssets()
     await loadEntries()
+    await refreshDueReminders()
   } catch (e) {
     push(e instanceof Error ? e.message : 'Laden fehlgeschlagen', 'error')
   }
@@ -304,6 +396,22 @@ onMounted(async () => {
       </div>
 
       <div class="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+        <div v-if="reminderRows.length" class="mb-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-200">
+          <p class="font-semibold">Fällige Erinnerungen</p>
+          <ul class="mt-1 space-y-1">
+            <li v-for="r in reminderRows" :key="'r-' + r.id" class="flex items-center justify-between gap-3">
+              <span>{{ r.shiftLabel || '—' }} · fällig {{ r.reminderDueAt ? formatDateTime(r.reminderDueAt) : '—' }}</span>
+              <button
+                v-if="canEdit"
+                type="button"
+                class="rounded border border-amber-400/60 px-2 py-1 text-[11px] hover:bg-amber-500/20"
+                @click="markReminder(r)"
+              >
+                Als versendet markieren
+              </button>
+            </li>
+          </ul>
+        </div>
         <div class="flex flex-wrap items-end gap-3">
           <div>
             <label for="lb-park" class="block text-xs text-slate-500">Park</label>
@@ -424,6 +532,32 @@ onMounted(async () => {
             row.createdAt ? formatDateTime(row.createdAt) : ''
           }}</time>
         </div>
+        <div class="mt-2 flex flex-wrap gap-2 text-xs">
+          <a
+            class="rounded border border-slate-600 px-2 py-1 text-slate-300 hover:bg-slate-800 print:hidden"
+            :href="shiftHandoverPdfUrl(parkId, row.id)"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Server-PDF/HTML
+          </a>
+          <button
+            v-if="canEdit && !row.acknowledgedAt"
+            type="button"
+            class="rounded border border-emerald-500/60 px-2 py-1 text-emerald-200 hover:bg-emerald-500/20 print:hidden"
+            @click="acknowledgeRow(row)"
+          >
+            Quittieren
+          </button>
+          <button
+            v-if="canEdit && isReminderDue(row)"
+            type="button"
+            class="rounded border border-amber-500/60 px-2 py-1 text-amber-200 hover:bg-amber-500/20 print:hidden"
+            @click="markReminder(row)"
+          >
+            Erinnerung versendet
+          </button>
+        </div>
         <p class="mt-1 text-sm text-slate-400 print:text-gray-800">
           Schichtfenster: {{ formatDateTime(row.windowFrom) }} — {{ formatDateTime(row.windowTo) }}
         </p>
@@ -432,8 +566,36 @@ onMounted(async () => {
           Von {{ row.createdBy.firstName }} {{ row.createdBy.lastName }}
           <span v-if="row.createdBy.email" class="font-mono"> · {{ row.createdBy.email }}</span>
         </div>
+        <div v-if="row.acknowledgedAt" class="mt-1 text-xs text-emerald-300 print:text-gray-700">
+          Quittiert: {{ formatDateTime(row.acknowledgedAt) }}
+          <span v-if="row.acknowledgedBy"> · {{ row.acknowledgedBy.firstName }} {{ row.acknowledgedBy.lastName }}</span>
+          <span v-if="row.acknowledgementNote"> · {{ row.acknowledgementNote }}</span>
+        </div>
+        <div v-if="diffLines(row).length" class="mt-3 space-y-1 rounded-lg border border-slate-800 bg-slate-900/40 px-3 py-2 text-xs text-slate-300">
+          <p class="font-medium text-slate-200">Diff zur vorherigen Übergabe</p>
+          <p v-for="(line, idx) in diffLines(row)" :key="'d-' + idx">{{ line }}</p>
+        </div>
         <div class="mt-3 space-y-1 rounded-lg bg-slate-900/60 px-3 py-2 text-xs text-slate-400 print:bg-gray-100 print:text-gray-900">
           <p v-for="(line, i) in snapshotBlock(row)" :key="i" class="leading-relaxed">{{ line }}</p>
+        </div>
+        <div v-if="row.followUpTasks?.length" class="mt-3 rounded-lg border border-slate-800 bg-slate-900/40 px-3 py-2 text-xs text-slate-300">
+          <p class="font-medium text-slate-200">Folgeaufgaben</p>
+          <ul class="mt-1 space-y-1">
+            <li v-for="task in row.followUpTasks" :key="task.id" class="flex items-center justify-between gap-3">
+              <span>
+                {{ task.title }} · {{ taskStatusLabel(task.status) }}
+                <span v-if="task.dueAt"> · fällig {{ formatDateTime(task.dueAt) }}</span>
+              </span>
+              <label v-if="canEdit && task.status !== 'CANCELLED'" class="inline-flex items-center gap-1 print:hidden">
+                <input
+                  type="checkbox"
+                  :checked="task.status === 'DONE'"
+                  @change="toggleTaskDone(row, task.id, ($event.target as HTMLInputElement).checked)"
+                />
+                erledigt
+              </label>
+            </li>
+          </ul>
         </div>
         <div v-if="row.notes?.trim()" class="mt-4 text-sm leading-relaxed text-slate-200 print:text-black">
           <p class="text-xs font-medium uppercase text-slate-500 print:text-gray-600">Notiz</p>

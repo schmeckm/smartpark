@@ -1,12 +1,21 @@
 const { Router } = require('express');
 const Joi = require('joi');
-const { validate } = require('../../middleware/validate.middleware');
-const { requirePermission } = require('../../middleware/rbac.middleware');
+const { validate, validateMerged } = require('../../middleware/validate.middleware');
+const { requirePermission, requireAnyPermission } = require('../../middleware/rbac.middleware');
 const controller = require('./uns.controller');
 
 const router = Router();
 
 const parkParams = Joi.object({ parkId: Joi.string().required() });
+
+const sparkplugTopicPreviewMerged = Joi.object({
+  parkId: Joi.string().required(),
+  assetId: Joi.string().uuid().optional(),
+  assetSlug: Joi.string().min(1).max(240).optional(),
+  messageType: Joi.string().valid('DDATA', 'DBIRTH', 'DDEATH', 'NBIRTH', 'NDEATH').optional(),
+})
+  .or('assetId', 'assetSlug')
+  .unknown(false);
 const nodeParams = Joi.object({ id: Joi.string().uuid().required() });
 
 const entityKindSchema = Joi.string()
@@ -65,7 +74,7 @@ const unsHierarchyImportBody = Joi.object({
   roots: Joi.array().default([]).items(Joi.object().unknown(true)),
 }).unknown(true);
 
-router.get('/parks/:parkId/tree', requirePermission('integrations', 'read'), validate(parkParams, 'params'), controller.getTree);
+router.get('/parks/:parkId/tree', requirePermission('iotOt', 'settings.read'), validate(parkParams, 'params'), controller.getTree);
 router.post(
   '/parks/:parkId/nodes',
   requirePermission('integrations', 'manage'),
@@ -83,20 +92,20 @@ router.put(
 router.delete('/nodes/:id', requirePermission('integrations', 'manage'), validate(nodeParams, 'params'), controller.deleteNode);
 router.get(
   '/parks/:parkId/latest-state',
-  requirePermission('integrations', 'read'),
+  requirePermission('iotOt', 'settings.read'),
   validate(parkParams, 'params'),
   controller.getLatestState
 );
-router.get('/parks/:parkId/topics', requirePermission('integrations', 'read'), validate(parkParams, 'params'), controller.getTopics);
+router.get('/parks/:parkId/topics', requirePermission('iotOt', 'settings.read'), validate(parkParams, 'params'), controller.getTopics);
 router.get(
   '/parks/:parkId/hierarchy-schema',
-  requirePermission('integrations', 'read'),
+  requirePermission('iotOt', 'settings.read'),
   validate(parkParams, 'params'),
   controller.getHierarchySchema
 );
 router.post(
   '/parks/:parkId/hierarchy-schema/preview',
-  requirePermission('integrations', 'read'),
+  requirePermission('iotOt', 'settings.read'),
   validate(parkParams, 'params'),
   validate(unsHierarchyImportBody),
   controller.postHierarchySchemaPreview
@@ -111,14 +120,22 @@ router.put(
 router.post('/test/publish', requirePermission('integrations', 'manage'), validate(publishBody), controller.testPublish);
 
 router.get(
+  '/parks/:parkId/sparkplug-topic-preview',
+  requireAnyPermission(['iotOt', 'settings.read'], ['rides', 'read']),
+  validateMerged(sparkplugTopicPreviewMerged),
+  controller.getSparkplugTopicPreview
+);
+
+/** Read-only MQTT ring buffer: SQDC / operations use `rides.read`; UNS tooling keeps `iotOt.settings.read`. */
+router.get(
   '/parks/:parkId/mqtt-live/events',
-  requirePermission('integrations', 'read'),
+  requireAnyPermission(['iotOt', 'settings.read'], ['rides', 'read']),
   validate(parkParams, 'params'),
   controller.getMqttLiveEvents
 );
 router.get(
   '/parks/:parkId/mqtt-live/status',
-  requirePermission('integrations', 'read'),
+  requireAnyPermission(['iotOt', 'settings.read'], ['rides', 'read']),
   validate(parkParams, 'params'),
   controller.getMqttLiveStatus
 );

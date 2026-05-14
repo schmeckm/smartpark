@@ -24,4 +24,10 @@ module.exports = {
   UNS_SPY_DISCOVERY_IGNORE: 'uns_spy.discovery.ignore',
   UNS_SPY_MQTT_PROPOSAL_APPROVE: 'uns_spy.mqtt_proposal.approve',
   UNS_SPY_MQTT_PROPOSAL_REJECT: 'uns_spy.mqtt_proposal.reject',
+  AGENT_RUN_START: 'agent.run.start',
+  AGENT_RUN_COMPLETE: 'agent.run.complete',
+  AGENT_RUN_FAILED: 'agent.run.failed',
+  AGENT_ACTION_APPROVED: 'agent.action.approved',
+  AGENT_ACTION_REJECTED: 'agent.action.rejected',
+  AGENT_NOTIFY_DISPATCH: 'agent.notify.dispatch',
 };

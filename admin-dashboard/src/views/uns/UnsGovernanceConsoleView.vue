@@ -107,6 +107,18 @@ const STALE_MS = 15 * 60 * 1000
 const governanceRideId = ref('')
 const governanceRideOptions = ref<{ id: string; name: string }[]>([])
 const rideCapabilities = ref<RideSignalCapabilitiesPayload | null>(null)
+/** Parsed from capability UNS previews — scopes park-wide MQTT buffer rows to the selected governance ride. */
+const governanceRideAssetSlug = computed(() => {
+  const caps = rideCapabilities.value
+  if (!caps?.signals?.length) return ''
+  const sample = caps.signals.find((s) => String(s.unsTopicPreview || '').toLowerCase().includes('/rides/'))
+  const m = sample?.unsTopicPreview?.match(/\/rides\/([^/]+)\//i)
+  return m?.[1]?.trim().toLowerCase() || ''
+})
+const governanceLiveMatchOpts = computed(() => {
+  const s = governanceRideAssetSlug.value.trim()
+  return s ? { rideAssetSlug: s } : undefined
+})
 const liveEvents = ref<UnsMqttLiveEvent[]>([])
 const latestStates = ref<UnsLatestState[]>([])
 const operationFactRide = ref<OperationFactRide | null>(null)
@@ -281,6 +293,7 @@ const readiness = computed(() =>
     staleMs: STALE_MS,
     latestStates: latestStates.value,
     liveEvents: liveEvents.value,
+    rideAssetSlug: governanceRideAssetSlug.value || null,
   })
 )
 
@@ -756,7 +769,7 @@ async function refresh() {
       if (caps) {
         for (const s of caps.signals) {
           if (s.signalSource === 'NOT_AVAILABLE' && (s.isPreparedTopic || s.isPreparedSparkplug)) disabledPrepared += 1
-          const liveEv = pickLatestLiveEvent(s, live)
+          const liveEv = pickLatestLiveEvent(s, live, governanceLiveMatchOpts.value)
           const stIso = latestStateEventTimeForTopic(states, s.unsTopicPreview)
           const k = kpiKeyForSignalCode(s.signalCode)
           const obs = k && of ? (of.sourceBreakdown[k]?.source ?? null) : null
@@ -819,13 +832,13 @@ onMounted(() => {
         <h1 class="font-display text-xl font-semibold text-white">{{ t('unsGovernance.title') }}</h1>
         <p class="mt-1 max-w-3xl text-sm text-slate-400">{{ t('unsGovernance.subtitle') }}</p>
         <div class="mt-2 flex flex-wrap gap-2 text-xs">
-          <RouterLink class="text-brand-300 hover:underline" to="/uns/spy-inbox">{{ t('unsGovernance.linkSpyInbox') }}</RouterLink>
+          <RouterLink class="text-brand-300 hover:underline" to="/realtime/discovery">{{ t('unsGovernance.linkSpyInbox') }}</RouterLink>
           <span class="text-slate-600">·</span>
           <RouterLink class="text-brand-300 hover:underline" to="/data-quality">{{ t('unsGovernance.linkDataQuality') }}</RouterLink>
           <span class="text-slate-600">·</span>
-          <RouterLink class="text-brand-300 hover:underline" to="/uns/signal-view">{{ t('unsGovernance.linkSignalView') }}</RouterLink>
+          <RouterLink class="text-brand-300 hover:underline" to="/realtime/topics">{{ t('unsGovernance.linkSignalView') }}</RouterLink>
           <span class="text-slate-600">·</span>
-          <RouterLink class="text-brand-300 hover:underline" to="/uns/registry-mirror">{{ t('unsGovernance.linkRegistryMirror') }}</RouterLink>
+          <RouterLink class="text-brand-300 hover:underline" to="/diagnostics/registry-mirror">{{ t('unsGovernance.linkRegistryMirror') }}</RouterLink>
           <span class="text-slate-600">·</span>
           <RouterLink class="text-brand-300 hover:underline" :to="{ name: 'master-data', params: { entityType: 'rides' } }">
             {{ t('unsGovernance.linkRideCapabilities') }}
@@ -1491,7 +1504,7 @@ onMounted(() => {
             <dd class="mt-1 font-mono text-xs break-all">
               {{
                 (() => {
-                  const e = pickLatestLiveEvent(lineageSig, liveEvents)
+                  const e = pickLatestLiveEvent(lineageSig, liveEvents, governanceLiveMatchOpts)
                   return e ? `${formatDateTime(e.receivedAt)} · ${e.canonicalUnsTopic || e.metric || '—'}` : '—'
                 })()
               }}

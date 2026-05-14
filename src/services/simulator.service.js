@@ -10,7 +10,7 @@ const Z_PLAZA = 'b1000001-0000-4000-8000-000000000001';
 const R_LAGOON = 'c2000001-0000-4000-8000-000000000005';
 const R_SILVER = 'c2000001-0000-4000-8000-000000000001';
 
-const sim = { running: false, timer: null, lastScenario: null, tick: 0 };
+const sim = { running: false, timer: null, lastScenario: null, lastContext: {}, defaultContext: {}, tick: 0 };
 
 const crowdEventService = new CrowdEventService();
 const ingestion = new IngestionService();
@@ -43,14 +43,15 @@ const SCENARIOS = {
     }
     return { rideId: R_LAGOON, status: 'MAINTENANCE' };
   },
-  RAIN_SHIFT_TO_INDOOR: async () =>
+  RAIN_SHIFT_TO_INDOOR: async (ctx = {}) =>
     ingestion.ingestWeatherObservationFromApi({
       condition: 'RAIN',
       temperatureC: 12,
       rainMm: 4.2,
       windKmh: 22,
       source: 'simulator',
-      parkId: 'demo-park',
+      parkId: ctx.parkId || 'default',
+      internalParkId: ctx.parkId || null,
       observedAt: new Date().toISOString(),
     }),
   FOOD_RUSH_LUNCH: async () => {
@@ -102,8 +103,9 @@ function runTick() {
   const name = sim.lastScenario && keys.includes(sim.lastScenario) ? sim.lastScenario : keys[sim.tick % keys.length];
   sim.tick += 1;
   const fn = SCENARIOS[name];
+  const ctx = sim.lastScenario === name ? sim.lastContext || {} : sim.defaultContext || {};
   if (fn) {
-    fn()
+    fn(ctx)
       .then((result) => {
         emitSimulatorTick({ scenario: name, ok: true, result, at: new Date().toISOString() });
       })
@@ -113,13 +115,16 @@ function runTick() {
   }
 }
 
-function start() {
+function start(options = {}) {
   if (sim.running) {
     return { alreadyRunning: true, running: true };
   }
+  sim.defaultContext = {
+    parkId: options.parkId ? String(options.parkId) : null,
+  };
   sim.running = true;
   sim.timer = setInterval(runTick, 12000);
-  return { running: true, tickMs: 12000, scenarios: Object.keys(SCENARIOS) };
+  return { running: true, tickMs: 12000, scenarios: Object.keys(SCENARIOS), context: sim.defaultContext };
 }
 
 function stop() {
@@ -131,14 +136,17 @@ function stop() {
   return { running: false };
 }
 
-async function runScenario(name) {
+async function runScenario(name, context = {}) {
   if (!name || !SCENARIOS[name]) {
     const e = new Error('Unknown scenario');
     e.statusCode = 400;
     throw e;
   }
   sim.lastScenario = name;
-  return SCENARIOS[name]();
+  sim.lastContext = {
+    parkId: context.parkId ? String(context.parkId) : sim.defaultContext?.parkId || null,
+  };
+  return SCENARIOS[name](sim.lastContext);
 }
 
 module.exports = { start, stop, runScenario, SCENARIOS, isRunning: () => sim.running };

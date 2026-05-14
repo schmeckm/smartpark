@@ -357,6 +357,17 @@ const parkForecastExplanation = asyncHandler(async (req, res) => {
   res.json({ success: true, data });
 });
 
+const entityForecastExplanation = asyncHandler(async (req, res) => {
+  const q = req.validated || req.query || {};
+  const data = await parkForecastService.getEntityExplanation(req.params.externalEntityId, {
+    provider: q.provider,
+    externalParkId: q.externalParkId,
+    entityType: q.entityType,
+    horizon: q.horizon ? Number(q.horizon) : 60,
+  });
+  res.json({ success: true, data });
+});
+
 /** `data` includes `mlFactorCurrents` when ML merge ran (same shape as park summary). */
 const entityForecastSummary = asyncHandler(async (req, res) => {
   const q = req.validated || req.query || {};
@@ -472,6 +483,7 @@ module.exports = {
   parkForecastSummary,
   parkForecastSeries,
   parkForecastExplanation,
+  entityForecastExplanation,
   entityForecastSummary,
   parkEntityForecastSummaries,
   getFactorConfigs,

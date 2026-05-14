@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-05-08T09:18:44.409Z",
+  "generatedAt": "2026-05-13T05:31:13.848Z",
   "apiPrefix": "/api/v1",
-  "routeCount": 336,
+  "routeCount": 383,
   "routes": [
     {
       "method": "POST",
@@ -186,6 +186,69 @@
       "inOpenApi": true
     },
     {
+      "method": "POST",
+      "path": "/api/v1/agent/actions/:id/approve",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/agent/actions/:id/reject",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agent/actions",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agent/approval-metrics",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/agent/preflight",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/agent/runs/:id/replay",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agent/runs/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agent/runs",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/agent/runs",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
       "method": "GET",
       "path": "/api/v1/ai/assets/:assetId/effective-ml-config",
       "mountOrigin": "src/routes/v1/index.js",
@@ -202,6 +265,13 @@
     {
       "method": "PUT",
       "path": "/api/v1/ai/assets/:assetId/ml-profile",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/entities/:externalEntityId/forecast/explanation",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
       "inOpenApi": true
@@ -355,6 +425,55 @@
     },
     {
       "method": "GET",
+      "path": "/api/v1/ai/ml/forecast-accuracy/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/ml/forecast-accuracy/kpis",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/ml/forecast-accuracy",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/ml/park-profiles/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/ai/ml/park-profiles/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/ml/park-profiles",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai/ml/park-profiles",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
       "path": "/api/v1/ai/ml/predict/park-summary",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
@@ -366,6 +485,62 @@
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
       "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/ml/prediction-traces/:predictionId/coefficients",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/ml/prediction-traces/:predictionId",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/ml/prediction-traces/filter-options",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/ml/prediction-traces",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/ml/ride-profiles/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/ai/ml/ride-profiles/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/ml/ride-profiles",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai/ml/ride-profiles",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
     },
     {
       "method": "POST",
@@ -620,6 +795,55 @@
       "inOpenApi": true
     },
     {
+      "method": "GET",
+      "path": "/api/v1/assets/:assetId/pdm-evaluation-logs",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/assets/:assetId/pdm-rules/:ruleId",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/assets/:assetId/pdm-rules/:ruleId",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/:assetId/pdm-rules",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/assets/:assetId/pdm-rules",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/:assetId/pdm-sparkplug-metrics",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/:assetId/predictive-maintenance",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
       "method": "POST",
       "path": "/api/v1/assets/:assetId/ride-master/enrich-template",
       "mountOrigin": "src/routes/v1/index.js",
@@ -667,6 +891,20 @@
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
       "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/assets/zone-normalization/apply",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/zone-normalization/preview",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
     },
     {
       "method": "GET",
@@ -1376,6 +1614,34 @@
       "inOpenApi": true
     },
     {
+      "method": "DELETE",
+      "path": "/api/v1/master-data/signal-catalog/:catalogId",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/master-data/signal-catalog/:catalogId",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/master-data/signal-catalog",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/master-data/signal-catalog",
+      "mountOrigin": "src/app.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
       "method": "GET",
       "path": "/api/v1/master-data/templates/:id",
       "mountOrigin": "src/app.js",
@@ -1642,8 +1908,50 @@
       "inOpenApi": true
     },
     {
+      "method": "PATCH",
+      "path": "/api/v1/parks/:parkId/level0",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
       "method": "GET",
       "path": "/api/v1/parks/:parkId/operational-context",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/parks/:parkId/shift-handovers/:entryId/acknowledge",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/parks/:parkId/shift-handovers/:entryId/pdf",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/parks/:parkId/shift-handovers/:entryId/reminders/mark-sent",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/parks/:parkId/shift-handovers/:entryId/tasks",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/parks/:parkId/shift-handovers/reminders/due",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
       "inOpenApi": true
@@ -1661,6 +1969,13 @@
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
       "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/parks/:parkId/zones",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
     },
     {
       "method": "GET",
@@ -2062,6 +2377,13 @@
       "inOpenApi": true
     },
     {
+      "method": "POST",
+      "path": "/api/v1/uns-registry/mirror/sync",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
       "method": "GET",
       "path": "/api/v1/uns-registry/topics",
       "mountOrigin": "src/routes/v1/index.js",
@@ -2186,6 +2508,13 @@
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
       "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/uns/parks/:parkId/sparkplug-topic-preview",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
     },
     {
       "method": "GET",
@@ -2357,8 +2686,8 @@
     }
   ],
   "stats": {
-    "missingFromOpenapiCount": 2,
-    "openapiOperationCount": 334,
+    "missingFromOpenapiCount": 19,
+    "openapiOperationCount": 364,
     "documentedNotLiveCount": 0
   }
 }

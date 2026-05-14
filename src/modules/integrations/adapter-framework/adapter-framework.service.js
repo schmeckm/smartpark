@@ -175,16 +175,30 @@ class AdapterFrameworkService {
     const prevMeta = existing?.metadata && typeof existing.metadata === 'object' ? existing.metadata : {};
 
     const now = new Date().toISOString();
+    const existingDoc = this.installConfigRepo.load(key);
     const doc = {
-      ...defaultInstallDocument(key),
-      installedAt: now,
+      ...(existingDoc || defaultInstallDocument(key)),
+      installedAt: existingDoc?.installedAt || now,
       updatedAt: now,
-      configJson: body.configJson && typeof body.configJson === 'object' ? body.configJson : {},
-      contextJson: body.contextJson && typeof body.contextJson === 'object' ? body.contextJson : {},
-      outputProfiles: resolveInstallOutputProfiles(body.outputProfiles),
-      emitEnabled: body.emitEnabled === true,
-      ingestCanonicalEnabled: body.ingestCanonicalEnabled === true,
-      scheduleCron: body.scheduleCron != null && body.scheduleCron !== '' ? String(body.scheduleCron) : null,
+      configJson:
+        body.configJson && typeof body.configJson === 'object'
+          ? body.configJson
+          : (existingDoc?.configJson ?? {}),
+      contextJson:
+        body.contextJson && typeof body.contextJson === 'object'
+          ? body.contextJson
+          : (existingDoc?.contextJson ?? {}),
+      outputProfiles: resolveInstallOutputProfiles(body.outputProfiles ?? existingDoc?.outputProfiles),
+      emitEnabled:
+        typeof body.emitEnabled === 'boolean' ? body.emitEnabled : existingDoc?.emitEnabled === true,
+      ingestCanonicalEnabled:
+        typeof body.ingestCanonicalEnabled === 'boolean'
+          ? body.ingestCanonicalEnabled
+          : existingDoc?.ingestCanonicalEnabled === true,
+      scheduleCron:
+        body.scheduleCron != null
+          ? (body.scheduleCron !== '' ? String(body.scheduleCron) : null)
+          : (existingDoc?.scheduleCron ?? null),
     };
     this.installConfigRepo.saveFull(key, doc);
 
@@ -220,7 +234,15 @@ class AdapterFrameworkService {
   }
 
   async getInstalledPackageRecord(idOrKey) {
-    const raw = await this._findInstalledRowByIdOrKey(idOrKey);
+    let raw = await this._findInstalledRowByIdOrKey(idOrKey);
+    if (!raw && !looksLikeUuidPk(idOrKey)) {
+      const key = String(idOrKey || '').trim();
+      if (key && this.unifiedLoader.loadByAdapterKey(key)?.manifest) {
+        // Keep details route resilient: if the package exists on disk but the DB row
+        // was not created yet, materialize it on-demand from defaults/YAML.
+        raw = await this.installLocalPackage({ adapterKey: key });
+      }
+    }
     if (!raw) return null;
     return this.hydrateInstallConfig(raw);
   }

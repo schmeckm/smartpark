@@ -14,6 +14,7 @@ import {
 import { useAuthStore } from '@/stores/auth'
 import { usePageSurfaces } from '@/composables/usePageSurfaces'
 import { useToast } from '@/composables/useToast'
+import { askConfirm } from '@/composables/useConfirmDialog'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -310,8 +311,13 @@ async function saveModal() {
 async function deactivate(r: MlProfileRow) {
   if (!canEdit.value) return
   if (r.activeFlag === false) return
-  // eslint-disable-next-line no-alert
-  if (!window.confirm(t('mlProfilesAdmin.confirmDeactivate', { code: r.profileCode }))) return
+  const ok = await askConfirm({
+    message: t('mlProfilesAdmin.confirmDeactivate', { code: r.profileCode }),
+    confirmLabel: 'Ja',
+    cancelLabel: 'Abbrechen',
+    variant: 'danger',
+  })
+  if (!ok) return
   saveLoading.value = true
   try {
     await deleteMlProfile(String(r.id))

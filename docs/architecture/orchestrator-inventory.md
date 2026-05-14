@@ -333,7 +333,7 @@ isolation if anything breaks.
 
 | Test file | Asserts |
 |---|---|
-| `src/services/integration-orchestrator.service.contract.test.js` | • the orchestrator class exports a member named `IntegrationOrchestratorService`<br>• `SETTING_KEYS` is exported and freezes the 9 known keys<br>• every method name in §2.1 / §2.2 / §2.3 exists on the instance prototype<br>• every such method is a function (no accidental property)<br>• `new Service()` constructs without DB access (no top-level side effects) |
+| `src/services/integration-orchestrator.service.contract.test.js` | • the orchestrator class exports a member named `IntegrationOrchestratorService`<br>• `SETTING_KEYS` is exported and freezes the 10 known keys<br>• every method name in §2.1 / §2.2 / §2.3 exists on the instance prototype<br>• every such method is a function (no accidental property)<br>• `new Service()` constructs without DB access (no top-level side effects) |
 | `scripts/check-orchestrator-provider-branches.mjs` + `docs/governance/orchestrator-provider-branches-baseline.json` | • the count of `provider.*===.*'<key>'` branches in the orchestrator file matches baseline<br>• new branches require an explicit baseline bump |
 | `scripts/check-orchestrator-provider-branches.test.mjs` | • script logic itself (parses input, counts matches, diffs against baseline, exits non-zero on drift) |
 

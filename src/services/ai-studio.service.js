@@ -9,6 +9,7 @@ const {
 } = models;
 const { AssetsRepository } = require('../modules/assets/assets.repository');
 const { AppError } = require('../utils/app-error');
+const { TRAINING_FEATURE_NAMES } = require('./ml/ride-feature-vector.util');
 const {
   FEATURE_STORE_TRAIN_FEATURES,
   buildRideStudioRows,
@@ -180,12 +181,15 @@ class AiStudioService {
         targets: TARGETS_BY_ENTITY[code] || [],
         assetTypeCode: ASSET_TYPE_FOR_ENTITY[code] || null,
       })),
-      features: STUDIO_FEATURES.map((code) => ({ code, label: code.replace(/_/g, ' ') })),
-      /** Phase 1 FEATURE_STORE uses only these (traffic / neighbor_wait_times not configured on snapshots). */
+      features: [...new Set([...STUDIO_FEATURES, ...TRAINING_FEATURE_NAMES])].map((code) => ({
+        code,
+        label: code.replace(/_/g, ' '),
+      })),
+      /** FEATURE_STORE training uses the same feature keys as ride Ridge (`TRAINING_FEATURE_NAMES`). */
       featureStoreTrainFeatures: [...FEATURE_STORE_TRAIN_FEATURES],
       datasets: [
         { code: 'SANDBOX', description: 'Synthetic stub learner (backwards compatible)' },
-        { code: 'FEATURE_STORE', description: 'Real rows from ride_feature_snapshots_5m (RIDE entity, Phase 1)' },
+        { code: 'FEATURE_STORE', description: 'Real rows from ride_feature_snapshots_5m; X = same map as ride Ridge (RIDE, Phase 1)' },
       ],
       manualAlgorithms: MANUAL_ALGORITHMS.map((code) => ({
         code,
@@ -575,7 +579,7 @@ class AiStudioService {
       for (const f of features) {
         if (!FEATURE_STORE_TRAIN_FEATURES.includes(f)) {
           throw new AppError(
-            `FEATURE_STORE training does not support feature "${f}". Use only: ${FEATURE_STORE_TRAIN_FEATURES.join(', ')}. (traffic and neighbor_wait_times are not configured.)`,
+            `FEATURE_STORE training does not support feature "${f}". Use only ridge keys: ${FEATURE_STORE_TRAIN_FEATURES.join(', ')}.`,
             422,
             { code: 'INVALID_FEATURES_FOR_FEATURE_STORE' }
           );
@@ -776,14 +780,7 @@ class AiStudioService {
       return { features: null, resolvedSnapshotAt: null, ridePlain: null };
     }
     const rp = rideRow.get({ plain: true });
-    const parkRow = await ParkFeatureSnapshot.findOne({
-      where: {
-        provider: rp.provider,
-        externalParkId: rp.externalParkId,
-        snapshotAt: rp.snapshotAt,
-      },
-    });
-    const features = mapSnapshotRowToStudioFeatures(rp, parkRow ? parkRow.get({ plain: true }) : null);
+    const features = mapSnapshotRowToStudioFeatures(rp);
     const resolvedSnapshotAt =
       rp.snapshotAt instanceof Date ? rp.snapshotAt.toISOString() : new Date(rp.snapshotAt).toISOString();
     return { features, resolvedSnapshotAt, ridePlain: rp };

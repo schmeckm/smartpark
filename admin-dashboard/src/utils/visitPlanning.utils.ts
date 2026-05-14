@@ -1,5 +1,8 @@
 /** Cell key: `${rowId}::YYYY-MM-DD` */
 
+/** Fixed row ids for ticket channels (must match backend / planning grid). */
+export const VISIT_PLAN_TICKET_CHANNEL_ROW_IDS = ['sp:ch:kasse', 'sp:ch:vorverkauf', 'sp:ch:freikarten'] as const
+
 export function cellKey(rowId: string, dateIso: string) {
   return `${rowId}::${dateIso}`
 }
@@ -121,7 +124,7 @@ export function weekdayVisitAverages(
   rowIds: readonly string[],
   year: number,
   locale: string
-): { dow: number; label: string; avg: number }[] {
+): { dow: number; label: string; avg: number | null }[] {
   const dates = allDatesInYear(year)
   const sums = [0, 0, 0, 0, 0, 0, 0]
   const counts = [0, 0, 0, 0, 0, 0, 0]
@@ -135,7 +138,7 @@ export function weekdayVisitAverages(
     const refSunday = new Date(2026, 0, 4)
     const label = fmt.format(new Date(refSunday.getFullYear(), refSunday.getMonth(), refSunday.getDate() + dow))
     const c = counts[dow]
-    const avg = c > 0 ? Math.round(sums[dow] / c) : 0
+    const avg = sums[dow] === 0 ? null : Math.round(sums[dow] / c)
     return { dow, label, avg }
   })
 }

@@ -1,5 +1,6 @@
 const { logger } = require('../utils/logger');
 const { getPlatformSettingsService } = require('./platform-settings.service');
+const { msUntilNextUtcWallMultipleMinutes } = require('../utils/utc-schedule-align.util');
 
 const { ZoneCrowdSamplingService } = require('./zone-crowd-sampling.service');
 
@@ -284,7 +285,11 @@ class AiOrchestratorService {
         }
         await this.runFullPipeline();
         const intervalSec = await ps.getNumber('AI_SAMPLING_INTERVAL_SECONDS', 300);
-        schedule(Math.max(30_000, intervalSec * 1000));
+        const align5m = await ps.getBoolean('AI_SAMPLING_ALIGN_TO_5M_UTC', true);
+        const nextMs = align5m
+          ? msUntilNextUtcWallMultipleMinutes(5, new Date(), 2000)
+          : intervalSec * 1000;
+        schedule(Math.max(30_000, nextMs));
       } catch (e) {
         logger.warn({ err: e?.message || String(e) }, 'ai orchestrator tick failed');
         schedule(60_000);

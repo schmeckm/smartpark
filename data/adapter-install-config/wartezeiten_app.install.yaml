@@ -1,0 +1,14 @@
+# Smart Park OS — adapter install config (YAML). Managed by PATCH/POST install-local only.
+schemaVersion: 1
+adapterKey: wartezeiten_app
+installedAt: '2026-05-08T10:26:34.771Z'
+updatedAt: '2026-05-13T10:51:20.558Z'
+configJson: {}
+contextJson:
+  parkSlug: europapark
+outputProfiles:
+  - SPARKPLUG_JSON
+  - CANONICAL_HISTORIAN
+emitEnabled: true
+ingestCanonicalEnabled: true
+scheduleCron: null

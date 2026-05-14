@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { RouterLink } from 'vue-router'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 </script>
 
 <template>
@@ -7,21 +10,21 @@ import { RouterLink } from 'vue-router'
     <div>
       <h1 class="font-display text-xl font-semibold text-white">Platform MDM</h1>
       <p class="mt-2 text-sm text-slate-400">
-        Hier pflegst du die <strong class="font-medium text-slate-200">kanonischen Stammdaten</strong> (park_assets, ride/show/restaurant_master_data,
+        Hier pflegst du die <strong class="font-medium text-slate-200">kanonischen Asset-Daten</strong> (park_assets, ride/show/restaurant_master_data,
         asset_targets, Runtime-Overrides), die aus den Integrationen (z.&nbsp;B. ThemeParks.wiki) befüllt werden.
       </p>
     </div>
 
     <div class="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-      <h2 class="text-sm font-semibold text-white">Stammdaten bearbeiten</h2>
+      <h2 class="text-sm font-semibold text-white">Asset-Daten bearbeiten</h2>
       <ol class="mt-2 list-decimal space-y-2 pl-5 text-sm text-slate-300">
         <li>
-          <RouterLink to="/platform/assets" class="text-brand-400 hover:text-brand-300">Asset explorer</RouterLink>
-          öffnen, Park wählen, in der Tabelle beim gewünschten Asset die Aktion nutzen.
+          <RouterLink to="/admin/master-data/rides" class="text-brand-400 hover:text-brand-300">{{ t('menu.masterData') }} → Attractions</RouterLink>
+          öffnen und dort filtern/suchen (Park, Status, Provider, etc.).
         </li>
         <li>
-          Bei Typ <span class="font-mono text-xs text-slate-400">RIDE</span> auf
-          <strong class="text-slate-200">Ride MDM</strong> klicken — dort öffnet sich die Seite
+          Attraktion öffnen und auf
+          <strong class="text-slate-200">Ride MDM</strong> wechseln — dort öffnet sich die Seite
           <span class="font-mono text-xs text-slate-500">/platform/rides/&lt;assetId&gt;</span>
           (Kapazität, Personal, KPI-Ziele <code class="text-xs text-slate-500">asset_targets</code>, …).
         </li>
@@ -34,18 +37,18 @@ import { RouterLink } from 'vue-router'
 
     <div class="grid gap-3 sm:grid-cols-2">
       <RouterLink
-        to="/platform/assets"
+        to="/admin/master-data/rides"
         class="rounded-xl border border-slate-700 bg-slate-950/60 p-4 transition hover:border-brand-500/50 hover:bg-slate-900"
       >
-        <p class="text-sm font-medium text-white">Asset explorer</p>
-        <p class="mt-1 text-xs text-slate-500">Liste aller Assets → Ride-Stammdaten verlinkt</p>
+        <p class="text-sm font-medium text-white">{{ t('menu.masterData') }}</p>
+        <p class="mt-1 text-xs text-slate-500">Attractions/Shows/Restaurants mit Filtern</p>
       </RouterLink>
       <RouterLink
         to="/platform/oee"
         class="rounded-xl border border-slate-700 bg-slate-950/60 p-4 transition hover:border-brand-500/50 hover:bg-slate-900"
       >
-        <p class="text-sm font-medium text-white">OEE / Stillstände</p>
-        <p class="mt-1 text-xs text-slate-500">Geplant &amp; ungeplant · Verfügbarkeit MVP</p>
+        <p class="text-sm font-medium text-white">OEE — Verfügbarkeit &amp; Stillstände</p>
+        <p class="mt-1 text-xs text-slate-500">Gauge · Stillstände · Ziele aus Ride MDM</p>
       </RouterLink>
       <RouterLink
         to="/platform/shift-handover"

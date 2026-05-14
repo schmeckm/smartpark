@@ -50,14 +50,35 @@ function addCalendarDaysIso(isoDate, deltaDays) {
   return d.toISOString().slice(0, 10);
 }
 
+function roundMoney(n) {
+  return Math.round(n * 100) / 100;
+}
+
+/** Positive EUR/day slice used for C-ring (same rule as legacy electricity-only). */
+function positiveCostPartEuro(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return roundMoney(n);
+}
+
+/** Sum of positive `electricityCostEurPerDay` + `maintenanceCostEurPerDay` in `delivery_json` for cost ring. */
+function totalOperatingCostEurFromDeliveryJson(dj) {
+  if (!dj || typeof dj !== 'object') return null;
+  const sum = positiveCostPartEuro(dj.electricityCostEurPerDay) + positiveCostPartEuro(dj.maintenanceCostEurPerDay);
+  return sum > 0 ? roundMoney(sum) : null;
+}
+
 function electricityFromDeliveryJson(snapPlain) {
   const dj =
     snapPlain?.deliveryJson && typeof snapPlain.deliveryJson === 'object' ? snapPlain.deliveryJson : {};
   const kwh = Number(dj.electricityKwhPerDay);
   const eur = Number(dj.electricityCostEurPerDay);
+  const maint = Number(dj.maintenanceCostEurPerDay);
   return {
     electricityKwhPerDay: Number.isFinite(kwh) ? Math.round(kwh * 1000) / 1000 : null,
-    electricityCostEurPerDay: Number.isFinite(eur) ? Math.round(eur * 100) / 100 : null,
+    electricityCostEurPerDay: Number.isFinite(eur) ? roundMoney(eur) : null,
+    maintenanceCostEurPerDay: Number.isFinite(maint) ? roundMoney(maint) : null,
+    totalCostEurPerDay: totalOperatingCostEurFromDeliveryJson(dj),
   };
 }
 
@@ -97,11 +118,10 @@ function normalizeScoreRingPair(greenRaw, amberRaw, defGreen, defAmber) {
   return { greenMin: g, amberMin: a };
 }
 
-/** Daily electricity cost (EUR) in snapshot `delivery_json` → cost ring (C). */
+/** Daily operating cost (EUR): electricity + maintenance in `delivery_json` → cost ring (C). */
 function costDayToneWith(dj, eurGreenMax, eurAmberMax) {
-  if (!dj || typeof dj !== 'object') return 'empty';
-  const eur = Number(dj.electricityCostEurPerDay);
-  if (!Number.isFinite(eur) || eur <= 0) return 'empty';
+  const eur = totalOperatingCostEurFromDeliveryJson(dj);
+  if (eur == null) return 'empty';
   let gMax = Number.isFinite(eurGreenMax) ? eurGreenMax : 200;
   let aMax = Number.isFinite(eurAmberMax) ? eurAmberMax : 500;
   gMax = Math.max(1, gMax);
@@ -201,6 +221,92 @@ function aggregateMoodsByDate(rows) {
   return m;
 }
 
+function utcIsoDateFromField(isoOrDate) {
+  if (isoOrDate == null) return null;
+  const d = isoOrDate instanceof Date ? isoOrDate : new Date(isoOrDate);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 10);
+}
+
+/** UTC [from, to] for incidents/events that can fill month-ring segments (days ≤ real UTC today). */
+function monthRingActivityBoundsUtc(monthB, realTodayIso) {
+  const endDay = monthB.monthEnd < realTodayIso ? monthB.monthEnd : realTodayIso;
+  const from = new Date(`${monthB.monthStart}T00:00:00.000Z`);
+  const to = new Date(`${endDay}T23:59:59.999Z`);
+  return { from, to };
+}
+
+/**
+ * Per UTC day: S/Q/D from `computeScores` when that day has ≥1 incident or SQDC event
+ * (OEE/queue/mood omitted → delivery follows event-only path in `computeScores`).
+ *
+ * @param {Array<Record<string, unknown>>} incidentsSerialized
+ * @param {Array<Record<string, unknown>>} sqdcEventsPlain
+ * @param {ReturnType<typeof monthUtcBounds>} monthB
+ * @param {string} realTodayIso
+ * @param {string | null} assetScopeId park board: null; asset board: filter SQDC events (null assetId = park-wide)
+ * @returns {Map<string, { safety: number, quality: number, delivery: number }>}
+ */
+function buildMonthRingComputedScoresByDate(
+  incidentsSerialized,
+  sqdcEventsPlain,
+  monthB,
+  realTodayIso,
+  assetScopeId
+) {
+  const byDate = new Map();
+  const inMonth = (ds) =>
+    Boolean(ds && ds >= monthB.monthStart && ds <= monthB.monthEnd && ds <= realTodayIso);
+
+  for (const inc of incidentsSerialized) {
+    const ds = utcIsoDateFromField(inc.createdAt);
+    if (!inMonth(ds)) continue;
+    let b = byDate.get(ds);
+    if (!b) {
+      b = { incidents: [], events: [] };
+      byDate.set(ds, b);
+    }
+    b.incidents.push(inc);
+  }
+
+  for (const ev of sqdcEventsPlain) {
+    const ds = utcIsoDateFromField(ev.eventTime);
+    if (!inMonth(ds)) continue;
+    if (assetScopeId != null) {
+      const aid = ev.assetId;
+      if (aid != null && String(aid) !== String(assetScopeId)) continue;
+    }
+    let b = byDate.get(ds);
+    if (!b) {
+      b = { incidents: [], events: [] };
+      byDate.set(ds, b);
+    }
+    b.events.push(ev);
+  }
+
+  const out = new Map();
+  for (const [ds, buckets] of byDate) {
+    if (!buckets.incidents.length && !buckets.events.length) continue;
+    const s = computeScores({
+      incidents: buckets.incidents,
+      sqdcEvents: buckets.events,
+      oee01: null,
+      queueMinutes: null,
+      avgMood1to5: null,
+    });
+    out.set(ds, { safety: s.safety, quality: s.quality, delivery: s.delivery });
+  }
+  return out;
+}
+
+function ringToneFromSnapOrComputed(snapVal, key, computedForDay, ringTones) {
+  const fromSnap = scoreToRingToneWith(snapVal, ringTones.scoreGreen, ringTones.scoreAmber);
+  if (fromSnap !== 'empty') return fromSnap;
+  const c = computedForDay?.[key];
+  if (c == null || !Number.isFinite(Number(c))) return 'empty';
+  return scoreToRingToneWith(c, ringTones.scoreGreen, ringTones.scoreAmber);
+}
+
 /**
  * @param {ReturnType<typeof monthUtcBounds>} monthB
  * @param {import('sequelize').Model[]} snapRows
@@ -213,8 +319,9 @@ function aggregateMoodsByDate(rows) {
  *   peopleMoodGreenMin: number,
  *   peopleMoodAmberMin: number,
  * }} ringTones
+ * @param {Map<string, { safety: number, quality: number, delivery: number }> | null | undefined} computedByDate
  */
-function buildMonthRingOverview(monthB, snapRows, moodByDate, ringTones) {
+function buildMonthRingOverview(monthB, snapRows, moodByDate, ringTones, computedByDate) {
   const snapMap = new Map();
   for (const r of snapRows) {
     const p = r.get ? r.get({ plain: true }) : r;
@@ -239,13 +346,14 @@ function buildMonthRingOverview(monthB, snapRows, moodByDate, ringTones) {
           )
         : 'empty';
 
+    const computedDay = computedByDate?.get(ds);
     const row = snapMap.get(ds);
     if (!row) {
       days.push({
         date: ds,
-        safety: 'empty',
-        quality: 'empty',
-        delivery: 'empty',
+        safety: ringToneFromSnapOrComputed(null, 'safety', computedDay, ringTones),
+        quality: ringToneFromSnapOrComputed(null, 'quality', computedDay, ringTones),
+        delivery: ringToneFromSnapOrComputed(null, 'delivery', computedDay, ringTones),
         cost: 'empty',
         people: peopleTone,
       });
@@ -254,9 +362,9 @@ function buildMonthRingOverview(monthB, snapRows, moodByDate, ringTones) {
     const dj = row.deliveryJson && typeof row.deliveryJson === 'object' ? row.deliveryJson : {};
     days.push({
       date: ds,
-      safety: scoreToRingToneWith(row.safetyScore, ringTones.scoreGreen, ringTones.scoreAmber),
-      quality: scoreToRingToneWith(row.qualityScore, ringTones.scoreGreen, ringTones.scoreAmber),
-      delivery: scoreToRingToneWith(row.deliveryScore, ringTones.scoreGreen, ringTones.scoreAmber),
+      safety: ringToneFromSnapOrComputed(row.safetyScore, 'safety', computedDay, ringTones),
+      quality: ringToneFromSnapOrComputed(row.qualityScore, 'quality', computedDay, ringTones),
+      delivery: ringToneFromSnapOrComputed(row.deliveryScore, 'delivery', computedDay, ringTones),
       cost: costDayToneWith(dj, ringTones.costEurGreenMax, ringTones.costEurAmberMax),
       people: peopleTone,
     });
@@ -462,6 +570,8 @@ class SqdcBoardService {
     assertParkMatchesContext(contextParkId, urlParkId);
     const { from, to } = dayBoundsUtc(date);
     const monthB = monthUtcBounds(date);
+    const realTodayIso = new Date().toISOString().slice(0, 10);
+    const monthAct = monthRingActivityBoundsUtc(monthB, realTodayIso);
     const historyFrom = addCalendarDaysIso(date, -29);
     const toneDefs = await loadSqdcToneThresholds();
     const parkRingTones = {
@@ -486,6 +596,8 @@ class SqdcBoardService {
       monthParkSnapshotRows,
       monthParkMoodRows,
       parkOverallHistoryRows,
+      monthIncidentsForRing,
+      monthSqdcEventsForRing,
     ] = await Promise.all([
       incidentService.listForPark(contextParkId, {
         limit: 200,
@@ -574,6 +686,20 @@ class SqdcBoardService {
         },
         attributes: ['snapshotDate', 'overallScore'],
         order: [['snapshotDate', 'ASC']],
+      }),
+      incidentService.listForPark(contextParkId, {
+        limit: 800,
+        offset: 0,
+        createdFrom: monthAct.from.toISOString(),
+        createdTo: monthAct.to.toISOString(),
+      }),
+      SqdcEvent.findAll({
+        where: {
+          parkId: contextParkId,
+          eventTime: { [Op.between]: [monthAct.from, monthAct.to] },
+        },
+        order: [['eventTime', 'DESC']],
+        limit: 2000,
       }),
     ]);
 
@@ -675,7 +801,20 @@ class SqdcBoardService {
     };
 
     const moodByDateParkMonth = aggregateMoodsByDate(monthParkMoodRows);
-    const monthRingOverview = buildMonthRingOverview(monthB, monthParkSnapshotRows, moodByDateParkMonth, parkRingTones);
+    const ringComputedByDatePark = buildMonthRingComputedScoresByDate(
+      monthIncidentsForRing.items || [],
+      monthSqdcEventsForRing.map((e) => e.get({ plain: true })),
+      monthB,
+      realTodayIso,
+      null
+    );
+    const monthRingOverview = buildMonthRingOverview(
+      monthB,
+      monthParkSnapshotRows,
+      moodByDateParkMonth,
+      parkRingTones,
+      ringComputedByDatePark
+    );
     const parkSnapPlain = parkSnap ? parkSnap.get({ plain: true }) : null;
     const elecPark = electricityFromDeliveryJson(parkSnapPlain);
 
@@ -716,6 +855,8 @@ class SqdcBoardService {
       rollup,
       monthRingOverview,
       electricityCostEurPerDay: elecPark.electricityCostEurPerDay,
+      maintenanceCostEurPerDay: elecPark.maintenanceCostEurPerDay,
+      totalCostEurPerDay: elecPark.totalCostEurPerDay,
       overallScoreHistory,
       uiThresholds: sqdcUiThresholdsPayload(toneDefs),
     };
@@ -737,6 +878,8 @@ class SqdcBoardService {
 
     const historyFrom = addCalendarDaysIso(date, -29);
     const monthB = monthUtcBounds(date);
+    const realTodayIso = new Date().toISOString().slice(0, 10);
+    const monthAct = monthRingActivityBoundsUtc(monthB, realTodayIso);
     const toneDefs = await loadSqdcToneThresholds();
     const assetRingTones = {
       scoreGreen: toneDefs.asset.greenMin,
@@ -757,6 +900,8 @@ class SqdcBoardService {
       overallHistoryRows,
       monthSnapshotRows,
       monthMoodRows,
+      monthIncidentsForRing,
+      monthSqdcEventsForRing,
     ] = await Promise.all([
       incidentService.listForPark(contextParkId, {
         limit: 100,
@@ -840,6 +985,23 @@ class SqdcBoardService {
         },
         attributes: ['feedbackDate', 'moodScore'],
       }),
+      incidentService.listForPark(contextParkId, {
+        limit: 800,
+        offset: 0,
+        linkedEntityType: 'PARK_ASSET',
+        linkedEntityId: String(assetId),
+        createdFrom: monthAct.from.toISOString(),
+        createdTo: monthAct.to.toISOString(),
+      }),
+      SqdcEvent.findAll({
+        where: {
+          parkId: contextParkId,
+          eventTime: { [Op.between]: [monthAct.from, monthAct.to] },
+          [Op.or]: [{ assetId: null }, { assetId: String(assetId) }],
+        },
+        order: [['eventTime', 'DESC']],
+        limit: 2000,
+      }),
     ]);
 
     const incidents = incidentsRes.items || [];
@@ -872,7 +1034,20 @@ class SqdcBoardService {
     });
 
     const moodByDate = aggregateMoodsByDate(monthMoodRows);
-    const monthRingOverview = buildMonthRingOverview(monthB, monthSnapshotRows, moodByDate, assetRingTones);
+    const ringComputedByDateAsset = buildMonthRingComputedScoresByDate(
+      monthIncidentsForRing.items || [],
+      monthSqdcEventsForRing.map((e) => e.get({ plain: true })),
+      monthB,
+      realTodayIso,
+      String(assetId)
+    );
+    const monthRingOverview = buildMonthRingOverview(
+      monthB,
+      monthSnapshotRows,
+      moodByDate,
+      assetRingTones,
+      ringComputedByDateAsset
+    );
 
     const elec = electricityFromDeliveryJson(snapPlain);
     const deliveryJsonPlain =
@@ -928,6 +1103,8 @@ class SqdcBoardService {
         plannedCapacityPph: plain.rideMaster?.capacityPph ?? null,
         electricityKwhPerDay: elec.electricityKwhPerDay,
         electricityCostEurPerDay: elec.electricityCostEurPerDay,
+        maintenanceCostEurPerDay: elec.maintenanceCostEurPerDay,
+        totalCostEurPerDay: elec.totalCostEurPerDay,
       },
       deliveryJson: deliveryJsonPlain,
       overallScoreHistory,

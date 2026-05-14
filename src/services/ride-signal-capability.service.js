@@ -1,6 +1,7 @@
 'use strict';
 
 const { Op } = require('sequelize');
+const { sequelize } = require('../db/sequelize');
 const { AppError } = require('../utils/app-error');
 const {
   ParkAsset,
@@ -16,6 +17,7 @@ const {
 } = require('../models');
 const { buildCanonicalUnsTopic } = require('../modules/uns/uns-topic-generator.service');
 const env = require('../config/env');
+const { resolveSparkplugEdgeNodeForAsset } = require('./sparkplug-edge-resolver.service');
 
 const LEGACY_PARK_ASSETS = 'park_assets';
 const REGISTRY_SOURCE_OPERATOR = 'OPERATOR_CONFIGURED';
@@ -101,6 +103,13 @@ function isActivationEligibleSparkplug(signalSource) {
   return signalSource === 'MQTT_EDGE';
 }
 
+function normalizeMlUsageFlags(cj, fallbackSignalSource) {
+  const fallbackMl = fallbackSignalSource === 'ML';
+  const useForMl = typeof cj?.useForMl === 'boolean' ? cj.useForMl : fallbackMl;
+  const useForForecast = typeof cj?.useForForecast === 'boolean' ? cj.useForForecast : useForMl;
+  return { useForMl, useForForecast };
+}
+
 /**
  * PREPARED_OPERATOR UNS registry topics belonging to this ride (payload + optional park guard).
  * @param {{ parkId: string, assetId: string }} ctx
@@ -160,6 +169,7 @@ async function getCapabilitiesForRide(rideAssetId) {
     const cj = cap ? { ...(cap.get('capabilityJson') || {}) } : {};
     const signalSource = typeof cj.signalSource === 'string' && SIGNAL_SOURCES.has(cj.signalSource) ? cj.signalSource : 'NOT_AVAILABLE';
     const valueType = typeof cj.valueType === 'string' ? cj.valueType : 'number';
+    const usage = normalizeMlUsageFlags(cj, signalSource);
     const topicPath =
       signalSource !== 'NOT_AVAILABLE' && signalSource !== 'MASTER_DATA'
         ? buildCanonicalUnsTopic({
@@ -182,6 +192,8 @@ async function getCapabilitiesForRide(rideAssetId) {
       unit: plain.unit,
       valueType,
       signalSource,
+      useForMl: usage.useForMl,
+      useForForecast: usage.useForForecast,
       unsTopicPreview,
       sparkplugMetricPreview,
       capabilityId: cap ? cap.id : null,
@@ -208,7 +220,7 @@ async function getCapabilitiesForRide(rideAssetId) {
  * Used by MQTT topic proposal approval (Phase T.1).
  *
  * @param {string} rideAssetId
- * @param {{ signalCatalogId: string, signalSource: string, valueType?: string }} patch
+ * @param {{ signalCatalogId: string, signalSource: string, valueType?: string, useForMl?: boolean, useForForecast?: boolean }} patch
  */
 async function mergeOperatorCapabilityForRide(rideAssetId, patch) {
   const ctx = await resolveRideContext(rideAssetId);
@@ -221,6 +233,8 @@ async function mergeOperatorCapabilityForRide(rideAssetId, patch) {
     throw new AppError(`Invalid signalSource: ${src}`, 422, { code: 'INVALID_SIGNAL_SOURCE' });
   }
   const now = new Date();
+  const useForMl = typeof patch.useForMl === 'boolean' ? patch.useForMl : src === 'ML';
+  const useForForecast = typeof patch.useForForecast === 'boolean' ? patch.useForForecast : useForMl;
   const [row, created] = await RideSignalCapability.findOrCreate({
     where: {
       parkId: ctx.parkId,
@@ -232,6 +246,8 @@ async function mergeOperatorCapabilityForRide(rideAssetId, patch) {
       capabilityJson: {
         signalSource: src,
         valueType: patch.valueType || 'number',
+        useForMl,
+        useForForecast,
         updatedBy: 'merge_operator_capability',
       },
       mirroredAt: now,
@@ -244,6 +260,11 @@ async function mergeOperatorCapabilityForRide(rideAssetId, patch) {
         ...prev,
         signalSource: src,
         valueType: patch.valueType != null ? String(patch.valueType) : prev.valueType || 'number',
+        useForMl: typeof patch.useForMl === 'boolean' ? patch.useForMl : normalizeMlUsageFlags(prev, src).useForMl,
+        useForForecast:
+          typeof patch.useForForecast === 'boolean'
+            ? patch.useForForecast
+            : normalizeMlUsageFlags(prev, src).useForForecast,
         updatedBy: 'merge_operator_capability',
       },
       mirroredAt: now,
@@ -254,7 +275,7 @@ async function mergeOperatorCapabilityForRide(rideAssetId, patch) {
 
 /**
  * @param {string} rideAssetId
- * @param {{ capabilities: Array<{ signalCatalogId: string, signalSource: string, valueType?: string }> }} body
+ * @param {{ capabilities: Array<{ signalCatalogId: string, signalSource: string, valueType?: string, useForMl?: boolean, useForForecast?: boolean }> }} body
  */
 async function upsertCapabilitiesForRide(rideAssetId, body) {
   const ctx = await resolveRideContext(rideAssetId);
@@ -264,18 +285,11 @@ async function upsertCapabilitiesForRide(rideAssetId, body) {
     throw new AppError('capabilities array required', 422, { code: 'VALIDATION_ERROR' });
   }
 
-  await RideSignalCapability.destroy({
-    where: {
-      parkId: ctx.parkId,
-      assetId: ctx.assetId,
-      registrySource: REGISTRY_SOURCE_OPERATOR,
-    },
-  });
-
   const rows = [];
   for (const item of incoming) {
     if (!item?.signalCatalogId) continue;
-    const sig = await SignalCatalog.findByPk(item.signalCatalogId);
+    const catalogId = String(item.signalCatalogId).trim();
+    const sig = await SignalCatalog.findByPk(catalogId);
     if (!sig) {
       throw new AppError(`Unknown signal_catalog id ${item.signalCatalogId}`, 422, { code: 'UNKNOWN_SIGNAL' });
     }
@@ -283,22 +297,39 @@ async function upsertCapabilitiesForRide(rideAssetId, body) {
     if (!SIGNAL_SOURCES.has(src)) {
       throw new AppError(`Invalid signalSource: ${src}`, 422, { code: 'INVALID_SIGNAL_SOURCE' });
     }
+    const useForMl = typeof item.useForMl === 'boolean' ? item.useForMl : src === 'ML';
+    const useForForecast = typeof item.useForForecast === 'boolean' ? item.useForForecast : useForMl;
     rows.push({
       parkId: ctx.parkId,
       assetId: ctx.assetId,
-      signalCatalogId: item.signalCatalogId,
+      signalCatalogId: catalogId,
       registrySource: REGISTRY_SOURCE_OPERATOR,
       capabilityJson: {
         signalSource: src,
         valueType: item.valueType || 'number',
+        useForMl,
+        useForForecast,
         updatedBy: 'ride_signal_capability.service',
       },
       mirroredAt: now,
     });
   }
-  if (rows.length) {
-    await RideSignalCapability.bulkCreate(rows);
+  if (!rows.length) {
+    throw new AppError('No valid capability rows to persist', 422, { code: 'VALIDATION_ERROR' });
   }
+
+  await sequelize.transaction(async (t) => {
+    await RideSignalCapability.destroy({
+      where: {
+        parkId: ctx.parkId,
+        assetId: ctx.assetId,
+        registrySource: REGISTRY_SOURCE_OPERATOR,
+      },
+      transaction: t,
+    });
+    await RideSignalCapability.bulkCreate(rows, { transaction: t });
+  });
+
   return getCapabilitiesForRide(rideAssetId);
 }
 
@@ -381,6 +412,12 @@ async function prepareUnsTopicsForRide(rideAssetId) {
  */
 async function prepareSparkplugMetricsForRide(rideAssetId) {
   const ctx = await resolveRideContext(rideAssetId);
+  const edgeRes = await resolveSparkplugEdgeNodeForAsset({
+    parkId: ctx.parkId,
+    parkSlug: ctx.parkSlug,
+    assetId: ctx.assetId,
+    assetSlug: ctx.assetSlug,
+  });
   const caps = await RideSignalCapability.findAll({
     where: {
       parkId: ctx.parkId,
@@ -391,7 +428,7 @@ async function prepareSparkplugMetricsForRide(rideAssetId) {
   const bySignal = mergeCapabilityRows(caps);
   let created = 0;
   let updated = 0;
-  const edgeNodeId = String(env.sparkplugEdgeNode || 'park_gateway').slice(0, 128);
+  const edgeNodeId = String(edgeRes.edgeNodeId || 'park_gateway').slice(0, 128);
   const deviceId = String(ctx.assetId).slice(0, 128);
 
   for (const cap of bySignal.values()) {
@@ -738,6 +775,7 @@ module.exports = {
   preparedUnsTopicsForRide,
   loadMergedCapabilityMap,
   capabilitySignalSource,
+  normalizeMlUsageFlags,
   REGISTRY_SOURCE_OPERATOR,
   SIGNAL_SOURCES: [...SIGNAL_SOURCES],
   TOPIC_SOURCES: [...TOPIC_SOURCES],

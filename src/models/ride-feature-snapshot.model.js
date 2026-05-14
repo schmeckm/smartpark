@@ -44,6 +44,27 @@ function defineRideFeatureSnapshot(sequelize) {
       staffDependencyScore: { type: DataTypes.DECIMAL(6, 4), allowNull: true, field: 'staff_dependency_score' },
       targetWaitTime15m: { type: DataTypes.DECIMAL(10, 4), allowNull: true, field: 'target_wait_time_15m' },
       targetWaitTime60m: { type: DataTypes.DECIMAL(10, 4), allowNull: true, field: 'target_wait_time_60m' },
+      parkIsOpen: { type: DataTypes.BOOLEAN, allowNull: true, field: 'park_is_open' },
+      rideIsOpen: { type: DataTypes.BOOLEAN, allowNull: true, field: 'ride_is_open' },
+      forecastEligible: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: true,
+        field: 'forecast_eligible',
+      },
+      trainingEligible: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: true,
+        field: 'training_eligible',
+      },
+      accuracyEligible: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: true,
+        field: 'accuracy_eligible',
+      },
+      dataQualityReason: { type: DataTypes.STRING(160), allowNull: true, field: 'data_quality_reason' },
     },
     {
       sequelize,

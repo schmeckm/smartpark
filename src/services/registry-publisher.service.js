@@ -17,7 +17,7 @@ const {
 const { publishMqtt } = require('./mqtt-connector.service');
 const {
   findLatestTpunsLiveRowForTopic,
-  findLatestSparkplugLiveMetricRow,
+  probeSparkplugLiveMetricForRide,
 } = require('./mqtt-sparkplug-live-buffer.service');
 const { parseTopic } = require('../modules/uns/uns-validator.service');
 const { slugifyName } = require('../modules/uns/uns-topic-generator.service');
@@ -31,8 +31,9 @@ const {
   deactivatePreparedUnsTopicsForRide,
   deactivatePreparedSparkplugMetricsForRide,
 } = require('./ride-signal-capability.service');
+const { resolveSparkplugEdgeNodeForAsset } = require('./sparkplug-edge-resolver.service');
 const { predictRideWaitTimes } = require('./ml/ride-prediction.service');
-const { buildSparkplugTopic, sparkplugDeviceTopicSegment } = require('../modules/uns/sparkplug-topic-builder.service');
+const { buildSparkplugTopic } = require('../modules/uns/sparkplug-topic-builder.service');
 const {
   buildJsonPayload,
   buildProtobufReadyPayload,
@@ -176,26 +177,11 @@ async function resolveTelemetryValue(args) {
         used: 'mqtt_live_tpuns',
       };
     }
-    const groupId = (env.sparkplugGroupId && String(env.sparkplugGroupId).trim()) || slugifyName(ctx.parkSlug);
-    const edgeNodeId = String(env.sparkplugEdgeNode || 'park_gateway');
-    const deviceSeg = sparkplugDeviceTopicSegment(ctx.assetId);
-    const sp =
-      findLatestSparkplugLiveMetricRow({
-        groupId,
-        edgeNodeId,
-        deviceId: deviceSeg,
-        metricName: signalCode,
-      }) ||
-      findLatestSparkplugLiveMetricRow({
-        groupId,
-        edgeNodeId,
-        deviceId: String(ctx.assetId),
-        metricName: signalCode,
-      });
-    if (sp && sp.value !== undefined && sp.value !== null) {
+    const hit = await probeSparkplugLiveMetricForRide(ctx, signalCode);
+    if (hit && hit.row.value !== undefined && hit.row.value !== null) {
       return {
-        value: sp.value,
-        quality: normalizeQuality(sp.quality, 'GOOD'),
+        value: hit.row.value,
+        quality: normalizeQuality(hit.row.quality, 'GOOD'),
         used: 'mqtt_live_sparkplug',
       };
     }
@@ -698,7 +684,15 @@ async function runRegistryPublishForRide(rideAssetId, opts = {}) {
       continue;
     }
 
-    const edgeNodeId = String(sdef.get('edgeNodeId') || env.sparkplugEdgeNode || 'park_gateway');
+    const metricDefEdge = String(sdef.get('edgeNodeId') || '').trim() || null;
+    const edgeRes = await resolveSparkplugEdgeNodeForAsset({
+      parkId: ctx.parkId,
+      parkSlug: ctx.parkSlug,
+      assetId: ctx.assetId,
+      assetSlug: ctx.assetSlug,
+      explicitEdgeNodeId: metricDefEdge,
+    });
+    const edgeNodeId = String(edgeRes.edgeNodeId || 'park_gateway');
     const deviceId = String(sdef.get('deviceId') || ctx.assetId);
     const metricName = `${SPARK_NAME_PREFIX}${slugifyName(ctx.assetSlug)}/${slugifyName(signalCode)}`;
     const cj = cap?.get?.('capabilityJson') || {};

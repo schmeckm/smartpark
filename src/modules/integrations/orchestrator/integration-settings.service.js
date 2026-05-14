@@ -21,7 +21,7 @@
  *     in the settings response is computed here, by reading the same
  *     setting key.
  *
- * The 9-key `INTEGRATION_SETTING_KEYS` map is exported so other
+ * The 10-key `INTEGRATION_SETTING_KEYS` map is exported so other
  * extracted modules can import a single source of truth instead of
  * inlining the strings.
  */
@@ -42,6 +42,7 @@ const INTEGRATION_SETTING_KEYS = Object.freeze({
   selectedProvider: 'externalParkData.selectedProvider',
   selectedDestination: 'externalParkData.selectedDestination',
   selectedPark: 'externalParkData.selectedPark',
+  dataSourceMode: 'externalParkData.dataSourceMode',
   autoApplyEnabled: 'externalParkData.autoApplyEnabled',
   pollingEnabled: 'externalParkData.pollingEnabled',
   pollingIntervalSeconds: 'externalParkData.pollingIntervalSeconds',
@@ -51,6 +52,26 @@ const INTEGRATION_SETTING_KEYS = Object.freeze({
 });
 
 const DEFAULT_PROVIDER = 'themeparks_wiki';
+const DEFAULT_DATA_SOURCE_MODE = 'MQTT_UNS';
+const DEFAULT_FACTOR_BY_CODE = new Map(DEFAULT_AI_FACTOR_CONFIGS.map((row) => [row.code, row]));
+
+function normalizeAiForecastFactors(rows) {
+  if (!Array.isArray(rows) || !rows.length) {
+    return DEFAULT_AI_FACTOR_CONFIGS.map((row) => ({ ...row }));
+  }
+  return rows.map((row) => {
+    if (!row || typeof row !== 'object') return row;
+    const code = typeof row.code === 'string' ? row.code : '';
+    const template = DEFAULT_FACTOR_BY_CODE.get(code);
+    if (!template) return row;
+    // For known factor codes, source/provider are canonical metadata and should not drift.
+    return {
+      ...row,
+      source: template.source,
+      provider: Object.hasOwn(template, 'provider') ? template.provider : null,
+    };
+  });
+}
 
 class IntegrationSettingsService {
   /**
@@ -84,6 +105,11 @@ class IntegrationSettingsService {
     await this.settingRepository.upsertValue(INTEGRATION_SETTING_KEYS.selectedProvider, {
       provider: await ps.getString('EXTERNAL_PARK_DATA_DEFAULT_PROVIDER', DEFAULT_PROVIDER),
     });
+    if (!(await this.settingRepository.findByKey(INTEGRATION_SETTING_KEYS.dataSourceMode))) {
+      await this.settingRepository.upsertValue(INTEGRATION_SETTING_KEYS.dataSourceMode, {
+        mode: DEFAULT_DATA_SOURCE_MODE,
+      });
+    }
     await this.settingRepository.upsertValue(INTEGRATION_SETTING_KEYS.autoApplyEnabled, { enabled: true });
     // Do not overwrite polling flags on every restart — users enable them in Integration settings.
     if (!(await this.settingRepository.findByKey(INTEGRATION_SETTING_KEYS.pollingEnabled))) {
@@ -93,7 +119,7 @@ class IntegrationSettingsService {
     }
     if (!(await this.settingRepository.findByKey(INTEGRATION_SETTING_KEYS.pollingIntervalSeconds))) {
       await this.settingRepository.upsertValue(INTEGRATION_SETTING_KEYS.pollingIntervalSeconds, {
-        seconds: await ps.getNumber('EXTERNAL_PARK_DATA_POLL_INTERVAL_SECONDS', 300),
+        seconds: await ps.getNumber('EXTERNAL_PARK_DATA_POLL_INTERVAL_SECONDS', 120),
       });
     }
     const existingFactors = await this.settingRepository.getValue(
@@ -105,6 +131,11 @@ class IntegrationSettingsService {
         INTEGRATION_SETTING_KEYS.aiForecastFactors,
         DEFAULT_AI_FACTOR_CONFIGS
       );
+    } else {
+      await this.settingRepository.upsertValue(
+        INTEGRATION_SETTING_KEYS.aiForecastFactors,
+        normalizeAiForecastFactors(existingFactors)
+      );
     }
     await this.entityDomainRegistryLoader(this.settingRepository);
   }
@@ -114,6 +145,7 @@ class IntegrationSettingsService {
    */
   async get() {
     const unsParkKey = await this.unsParkKeyResolver();
+    const ps = this.platformSettingsFactory();
     const selectedPark = await this.settingRepository.getValue(INTEGRATION_SETTING_KEYS.selectedPark, null);
     const overrideSnap = await this.settingRepository.getValue(
       INTEGRATION_SETTING_KEYS.unsSparkplugSchemaOverride,
@@ -135,6 +167,9 @@ class IntegrationSettingsService {
         null
       ),
       selectedPark,
+      dataSourceMode: await this.settingRepository.getValue(INTEGRATION_SETTING_KEYS.dataSourceMode, {
+        mode: DEFAULT_DATA_SOURCE_MODE,
+      }),
       unsParkKey,
       unsTopicSchemaOverrideSummary: {
         active: overrideActive,
@@ -149,11 +184,15 @@ class IntegrationSettingsService {
       }),
       pollingIntervalSeconds: await this.settingRepository.getValue(
         INTEGRATION_SETTING_KEYS.pollingIntervalSeconds,
-        { seconds: 300 }
+        {
+          seconds: await ps.getNumber('EXTERNAL_PARK_DATA_POLL_INTERVAL_SECONDS', 120),
+        }
       ),
-      aiForecastFactors: await this.settingRepository.getValue(
-        INTEGRATION_SETTING_KEYS.aiForecastFactors,
-        DEFAULT_AI_FACTOR_CONFIGS
+      aiForecastFactors: normalizeAiForecastFactors(
+        await this.settingRepository.getValue(
+          INTEGRATION_SETTING_KEYS.aiForecastFactors,
+          DEFAULT_AI_FACTOR_CONFIGS
+        )
       ),
     };
   }
@@ -187,6 +226,9 @@ class IntegrationSettingsService {
         await this.settingRepository.upsertValue(INTEGRATION_SETTING_KEYS.selectedPark, input.selectedPark);
       }
     }
+    if (Object.hasOwn(input, 'dataSourceMode')) {
+      await this.settingRepository.upsertValue(INTEGRATION_SETTING_KEYS.dataSourceMode, input.dataSourceMode);
+    }
     if (Object.hasOwn(input, 'autoApplyEnabled')) {
       await this.settingRepository.upsertValue(
         INTEGRATION_SETTING_KEYS.autoApplyEnabled,
@@ -208,7 +250,7 @@ class IntegrationSettingsService {
     if (Object.hasOwn(input, 'aiForecastFactors')) {
       await this.settingRepository.upsertValue(
         INTEGRATION_SETTING_KEYS.aiForecastFactors,
-        input.aiForecastFactors
+        normalizeAiForecastFactors(input.aiForecastFactors)
       );
     }
     return this.get();

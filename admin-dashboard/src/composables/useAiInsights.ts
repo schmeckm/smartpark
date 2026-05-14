@@ -10,6 +10,14 @@ type Opts = {
   onError?: (e: unknown) => void
 }
 
+/**
+ * Zone hotspot summary for Operations dashboard tiles.
+ *
+ * Calls `GET /api/v1/ai/insights/summary` — **persisted zone crowd forecasts** (60m horizon, baseline model),
+ * not the on-read ADR ride/park wait forecast used on the AI Insights page.
+ *
+ * @see docs/architecture/ai-insights-studio-forecast-consistency-assessment.md
+ */
 export function useAiInsights(opts: Opts = {}) {
   const { connectSocket = true, onError } = opts
   const auth = useAuthStore()

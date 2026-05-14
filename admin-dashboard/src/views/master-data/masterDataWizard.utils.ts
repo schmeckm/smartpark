@@ -14,6 +14,8 @@ export interface WizardFormState {
     zoneId: string
     activeFlag: boolean
     indoorOutdoor: string
+    /** `master_profile.ride_type` (ride templates, e.g. ROLLER_COASTER, DARK_RIDE). */
+    rideType: string
     notes: string
     timezone: string
     /** When set, `parks.enrichment.defaultOperatingHours` overrides ThemeParks calendar for operating-context / snapshots. */
@@ -44,6 +46,7 @@ export function emptyWizardState(tab: WizardEntityTab): WizardFormState {
       zoneId: '',
       activeFlag: true,
       indoorOutdoor: '',
+      rideType: '',
       notes: '',
       timezone: '',
       masterOperatingHoursEnabled: false,
@@ -215,7 +218,9 @@ export function hydrateWizardFromDetail(
     s.basic.indoorOutdoor = str(mp.indoor_outdoor)
     s.basic.notes = str(mp.notes)
     const doh = (p.enrichment as { defaultOperatingHours?: Record<string, unknown> } | undefined)?.defaultOperatingHours
-    s.basic.masterOperatingHoursEnabled = doh?.useMasterOperatingHours === true
+    const v = doh?.useMasterOperatingHours
+    s.basic.masterOperatingHoursEnabled =
+      v === true || v === 1 || v === '1' || String(v).toLowerCase() === 'true'
     s.basic.masterOperatingType =
       doh?.type != null && String(doh.type).toUpperCase() !== 'OPERATING' ? 'CLOSED' : 'OPERATING'
     s.basic.masterOpeningTime = str(doh?.openingTime)
@@ -255,6 +260,7 @@ export function hydrateWizardFromDetail(
   s.basic.zoneId = str(asset.zoneId ?? '')
   s.basic.activeFlag = asset.activeFlag !== false
   s.basic.indoorOutdoor = str(mp.indoor_outdoor)
+  s.basic.rideType = tab === 'rides' ? str(mp.ride_type ?? '') : ''
   s.basic.notes = str(mp.notes || asset.description)
   s.templateId = str(asset.templateId)
 
@@ -386,24 +392,58 @@ function restaurantDerived(cap: Record<string, unknown>) {
   return { calculatedServiceCapacityPerHour, calculatedSeatingThroughputPerHour }
 }
 
-export function computeWizardKpis(tab: WizardEntityTab, state: WizardFormState): { label: string; value: string }[] {
+export type WizardKpiRow = { label: string; value: string; requiredProfileKey?: string }
+
+export function computeWizardKpis(tab: WizardEntityTab, state: WizardFormState): WizardKpiRow[] {
   const { capacity, staffing, mlTargets } = state
   if (tab === 'rides') {
     const d = rideDerived(capacity)
     return [
-      { label: 'Calculated capacity / h', value: d.calculatedCapacityPerHour != null ? String(d.calculatedCapacityPerHour) : '—' },
-      { label: 'Target throughput / h', value: str(capacity.targetThroughputPerHour) || '—' },
-      { label: 'Employees peak', value: str(staffing.employeesRequiredPeak) || '—' },
-      { label: 'Max queue target (min)', value: str(mlTargets.maxQueueTimeTargetMin) || '—' },
+      {
+        label: 'Calculated capacity / h',
+        value: d.calculatedCapacityPerHour != null ? String(d.calculatedCapacityPerHour) : '—',
+        requiredProfileKey: 'theoretical_capacity_per_hour',
+      },
+      {
+        label: 'Target throughput / h',
+        value: str(capacity.targetThroughputPerHour) || '—',
+        requiredProfileKey: 'target_throughput_per_hour',
+      },
+      {
+        label: 'Employees peak',
+        value: str(staffing.employeesRequiredPeak) || '—',
+        requiredProfileKey: 'employees_required_peak',
+      },
+      {
+        label: 'Max queue target (min)',
+        value: str(mlTargets.maxQueueTimeTargetMin) || '—',
+        requiredProfileKey: 'max_queue_time_target_min',
+      },
     ]
   }
   if (tab === 'shows') {
     const d = showDerived(capacity)
     return [
-      { label: 'Guests per day', value: d.theoreticalGuestsPerDay != null ? String(d.theoreticalGuestsPerDay) : '—' },
-      { label: 'Target fill rate %', value: str(mlTargets.targetFillRatePercent) || '—' },
-      { label: 'Employees peak', value: str(staffing.employeesRequiredPeak) || '—' },
-      { label: 'No-show rate %', value: str(mlTargets.noShowRatePercent) || '—' },
+      {
+        label: 'Guests per day',
+        value: d.theoreticalGuestsPerDay != null ? String(d.theoreticalGuestsPerDay) : '—',
+        requiredProfileKey: 'venue_capacity',
+      },
+      {
+        label: 'Target fill rate %',
+        value: str(mlTargets.targetFillRatePercent) || '—',
+        requiredProfileKey: 'target_fill_rate_percent',
+      },
+      {
+        label: 'Employees peak',
+        value: str(staffing.employeesRequiredPeak) || '—',
+        requiredProfileKey: 'employees_required_peak',
+      },
+      {
+        label: 'No-show rate %',
+        value: str(mlTargets.noShowRatePercent) || '—',
+        requiredProfileKey: 'no_show_rate_percent',
+      },
     ]
   }
   if (tab === 'restaurants') {
@@ -412,21 +452,47 @@ export function computeWizardKpis(tab: WizardEntityTab, state: WizardFormState):
       {
         label: 'Service capacity / h',
         value: d.calculatedServiceCapacityPerHour != null ? String(Math.round(d.calculatedServiceCapacityPerHour)) : '—',
+        requiredProfileKey: 'service_capacity_per_hour',
       },
       {
         label: 'Seating throughput / h',
         value:
           d.calculatedSeatingThroughputPerHour != null ? String(Math.round(d.calculatedSeatingThroughputPerHour)) : '—',
+        requiredProfileKey: 'seating_capacity',
       },
-      { label: 'Employees peak', value: str(staffing.employeesRequiredPeak) || '—' },
-      { label: 'Revenue target / h', value: str(mlTargets.targetRevenuePerHour) || '—' },
+      {
+        label: 'Employees peak',
+        value: str(staffing.employeesRequiredPeak) || '—',
+        requiredProfileKey: 'employees_required_peak',
+      },
+      {
+        label: 'Revenue target / h',
+        value: str(mlTargets.targetRevenuePerHour) || '—',
+        requiredProfileKey: 'target_revenue_per_hour',
+      },
     ]
   }
   return [
-    { label: 'Max daily capacity', value: str(capacity.maxDailyCapacity) || '—' },
-    { label: 'Expected visitors', value: str(capacity.expectedDailyVisitors) || '—' },
-    { label: 'Ops staff target', value: str(staffing.operationsStaffTarget) || '—' },
-    { label: 'Queue target (min)', value: str(mlTargets.targetAvgQueueTimeMin) || '—' },
+    {
+      label: 'Max daily capacity',
+      value: str(capacity.maxDailyCapacity) || '—',
+      requiredProfileKey: 'max_daily_capacity',
+    },
+    {
+      label: 'Expected visitors',
+      value: str(capacity.expectedDailyVisitors) || '—',
+      requiredProfileKey: 'expected_daily_visitors',
+    },
+    {
+      label: 'Ops staff target',
+      value: str(staffing.operationsStaffTarget) || '—',
+      requiredProfileKey: 'operations_staff_target',
+    },
+    {
+      label: 'Queue target (min)',
+      value: str(mlTargets.targetAvgQueueTimeMin) || '—',
+      requiredProfileKey: 'target_avg_queue_time_min',
+    },
   ]
 }
 
@@ -491,6 +557,7 @@ export function buildPatchPayload(tab: WizardEntityTab, state: WizardFormState):
   }
 
   if (tab === 'rides') {
+    put('ride_type', basic.rideType || undefined)
     put('loading_stations', toNum(capacity.loadingStations))
     put('load_time_avg_sec', toNum(capacity.loadTimeAvgSec))
     put('unload_time_avg_sec', toNum(capacity.unloadTimeAvgSec))
@@ -642,6 +709,90 @@ function isPresent(v: unknown): boolean {
   if (typeof v === 'string' && v.trim() === '') return false
   return true
 }
+
+/** Flat snapshot for template completeness — mirrors backend `flattenTypedValues`. */
+export function flattenWizardProfileForTemplate(tab: WizardEntityTab, state: WizardFormState): Record<string, unknown> {
+  const patch = buildPatchPayload(tab, state) as Record<string, unknown>
+  const mp = { ...((patch.masterProfile || {}) as Record<string, unknown>) }
+  if (tab === 'parks') return mp
+  const rm = (patch.rideMaster || {}) as Record<string, unknown>
+  const sm = (patch.showMaster || {}) as Record<string, unknown>
+  const rtm = (patch.restaurantMaster || {}) as Record<string, unknown>
+  const rideAliases: Record<string, unknown> = {
+    dispatch_interval_sec: rm.dispatchIntervalSec,
+    theoretical_capacity_per_hour: rm.theoreticalCapacityPph,
+    target_throughput_per_hour: rm.capacityPph,
+    seats_per_vehicle: rm.seatsPerCycle,
+    vehicles_count: rm.trainsCount,
+  }
+  for (const [k, v] of Object.entries(rideAliases)) {
+    if (!isPresent(mp[k]) && v != null) mp[k] = v
+  }
+  return { ...mp, ...sm, ...rtm }
+}
+
+/** Same rules as backend `missingRequiredFieldKeys` (park row aliases for park templates). */
+/** Wizard „Capacity“ control keys (`state.capacity`) → `master_profile` snake_case keys used in templates. */
+export const WIZARD_CAPACITY_UI_TO_PROFILE_KEY: Record<string, string> = {
+  theoreticalCapacityPerHour: 'theoretical_capacity_per_hour',
+  targetThroughputPerHour: 'target_throughput_per_hour',
+  dispatchIntervalSec: 'dispatch_interval_sec',
+  seatsPerVehicle: 'seats_per_vehicle',
+  vehiclesCount: 'vehicles_count',
+  loadingStations: 'loading_stations',
+  loadTimeAvgSec: 'load_time_avg_sec',
+  unloadTimeAvgSec: 'unload_time_avg_sec',
+  venueCapacity: 'venue_capacity',
+  showDurationMin: 'show_duration_min',
+  turnoverTimeMin: 'turnover_time_min',
+  showsPerDayTarget: 'shows_per_day_target',
+  avgFillRatePercent: 'avg_fill_rate_percent',
+  seatingCapacity: 'seating_capacity',
+  serviceCapacityPerHour: 'service_capacity_per_hour',
+  avgServiceTimeMin: 'avg_service_time_min',
+  cashRegisters: 'cash_registers',
+  kitchenStations: 'kitchen_stations',
+  tableTurnoverTimeMin: 'table_turnover_time_min',
+  maxDailyCapacity: 'max_daily_capacity',
+  expectedDailyVisitors: 'expected_daily_visitors',
+  parkingCapacity: 'parking_capacity',
+  hotelRooms: 'hotel_rooms',
+}
+
+/** Wizard „Staffing“ control keys → profile snake_case. */
+export const WIZARD_STAFFING_UI_TO_PROFILE_KEY: Record<string, string> = {
+  employeesRequiredMin: 'employees_required_min',
+  employeesRequiredNormal: 'employees_required_normal',
+  employeesRequiredPeak: 'employees_required_peak',
+  operatorSkillLevel: 'operator_skill_level',
+  performersRequired: 'performers_required',
+  technicalStaffRequired: 'technical_staff_required',
+  kitchenStaffRequired: 'kitchen_staff_required',
+  serviceStaffRequired: 'service_staff_required',
+  cashierStaffRequired: 'cashier_staff_required',
+  operationsStaffTarget: 'operations_staff_target',
+  securityStaffTarget: 'security_staff_target',
+  cleaningStaffTarget: 'cleaning_staff_target',
+}
+
+export function missingTemplateRequiredKeys(
+  requiredKeys: string[],
+  flat: Record<string, unknown>,
+  parkRow: { name?: string; timezone?: string | null } | null
+): string[] {
+  if (!requiredKeys.length) return []
+  const missing: string[] = []
+  for (const key of requiredKeys) {
+    let v = flat[key]
+    if (key === 'park_name' && parkRow && !isPresent(v)) v = parkRow.name
+    if (key === 'timezone' && parkRow && !isPresent(v)) v = parkRow.timezone
+    if (!isPresent(v)) missing.push(key)
+  }
+  return missing
+}
+
+/** Seed-aligned `master_profile.ride_type` values; unknown persisted values still appear in the select via the wizard. */
+export const KNOWN_RIDE_PROFILE_RIDE_TYPES = ['ROLLER_COASTER', 'DARK_RIDE'] as const
 
 export function templateApplyPreview(
   template: EntityTypeTemplateRow | null,

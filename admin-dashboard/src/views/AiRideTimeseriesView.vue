@@ -141,7 +141,7 @@ watch(
   <div class="mx-auto max-w-5xl space-y-6 px-4 py-6 sm:px-6">
     <div class="flex flex-wrap gap-3 text-sm">
       <RouterLink to="/ai-insights" class="text-brand-400 hover:text-brand-300">← {{ t('aiTimeseries.back') }}</RouterLink>
-      <RouterLink to="/ai-insights/ride-waits" class="text-slate-500 hover:text-brand-300">{{ t('aiRideGrid.navLink') }}</RouterLink>
+      <RouterLink to="/ai-insights" class="text-slate-500 hover:text-brand-300">{{ t('aiRideGrid.navLink') }}</RouterLink>
     </div>
 
     <div>

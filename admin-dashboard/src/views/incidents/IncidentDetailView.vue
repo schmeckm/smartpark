@@ -230,17 +230,31 @@ async function assignToMe() {
     saving.value = false
   }
 }
+
+function closeDetail() {
+  router.push({ name: 'incidents' })
+}
 </script>
 
 <template>
   <div class="mx-auto max-w-2xl space-y-6 px-4 py-6 sm:px-6">
-    <button
-      type="button"
-      class="text-sm text-brand-400 hover:text-brand-300"
-      @click="router.push({ name: 'incidents' })"
-    >
-      ← {{ t('incidents.backList') }}
-    </button>
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <button
+        type="button"
+        class="text-sm text-brand-400 hover:text-brand-300"
+        @click="closeDetail"
+      >
+        ← {{ t('incidents.backList') }}
+      </button>
+      <button
+        v-if="!loading && row"
+        type="button"
+        class="rounded-md border border-slate-600 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
+        @click="closeDetail"
+      >
+        {{ t('incidents.close') }}
+      </button>
+    </div>
 
     <div v-if="loading" :class="ui.muted">{{ t('incidents.loading') }}</div>
 
@@ -306,7 +320,7 @@ async function assignToMe() {
         <RouterLink
           v-if="canOpenOeeForAsset"
           :to="{
-            name: 'platform-oee-mvp',
+            name: 'platform-oee',
             query: { parkId: parkCtx.activeParkId, assetId: selectedParkAssetId.trim() },
           }"
           class="inline-flex text-sm text-brand-400 hover:text-brand-300 hover:underline"
@@ -342,23 +356,36 @@ async function assignToMe() {
           {{ row.creator.displayName || `${row.creator.firstName} ${row.creator.lastName}` }}
         </div>
 
-        <div v-if="canEdit" :class="ui.footerRule">
-          <button
-            v-if="showAssignToMe"
-            type="button"
-            class="rounded-md border border-slate-600 px-3 py-2 text-xs text-slate-200 hover:bg-slate-800"
-            :disabled="saving"
-            @click="assignToMe"
-          >
-            {{ t('incidents.assignToMe') }}
-          </button>
-          <button
-            type="submit"
-            class="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-            :disabled="saving"
-          >
-            {{ t('btn.save') }}
-          </button>
+        <div v-if="row" :class="[ui.footerRule, 'items-center !justify-between']">
+          <div class="flex flex-wrap items-center gap-2">
+            <button
+              v-if="showAssignToMe && canEdit"
+              type="button"
+              class="rounded-md border border-slate-600 px-3 py-2 text-xs text-slate-200 hover:bg-slate-800"
+              :disabled="saving"
+              @click="assignToMe"
+            >
+              {{ t('incidents.assignToMe') }}
+            </button>
+          </div>
+          <div class="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              class="rounded-md border border-slate-600 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800"
+              :disabled="saving"
+              @click="closeDetail"
+            >
+              {{ t('incidents.close') }}
+            </button>
+            <button
+              v-if="canEdit"
+              type="submit"
+              class="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              :disabled="saving"
+            >
+              {{ t('btn.save') }}
+            </button>
+          </div>
         </div>
       </form>
     </template>

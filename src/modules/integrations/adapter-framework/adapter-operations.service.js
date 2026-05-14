@@ -114,11 +114,20 @@ function groupRunsByAdapter(rows) {
 function deriveOpsStatus({ installStatus, enabled, active, lastStatus, hadRecentRun }) {
   const st = String(installStatus || 'ACTIVE').toUpperCase();
   if (!enabled || st === 'DISABLED' || st === 'INSTALLED') return 'PAUSED';
-  if (st === 'PAUSED') return 'PAUSED';
-  if (!active) return 'PAUSED';
-  if (lastStatus === 'FAILED') return 'FAILED';
-  if (lastStatus === 'PARTIAL') return 'WARNING';
-  if (!hadRecentRun && lastStatus == null) return 'WARNING';
+
+  const lastUp = lastStatus != null ? String(lastStatus).toUpperCase() : null;
+  const schedulingInactive = st === 'PAUSED' || !active;
+
+  if (schedulingInactive) {
+    if (lastUp === 'FAILED') return 'FAILED';
+    if (lastUp === 'PARTIAL') return 'WARNING';
+    if (hadRecentRun && lastUp === 'SUCCESS') return 'MANUAL_OK';
+    return 'PAUSED';
+  }
+
+  if (lastUp === 'FAILED') return 'FAILED';
+  if (lastUp === 'PARTIAL') return 'WARNING';
+  if (!hadRecentRun && lastUp == null) return 'WARNING';
   return 'HEALTHY';
 }
 
@@ -219,7 +228,7 @@ class AdapterOperationsService {
       if (opsStatus === 'PAUSED') pausedAdapters += 1;
       else if (opsStatus === 'FAILED') failedAdapters += 1;
       else if (opsStatus === 'WARNING') warningAdapters += 1;
-      else healthyAdapters += 1;
+      else if (opsStatus === 'HEALTHY' || opsStatus === 'MANUAL_OK') healthyAdapters += 1;
 
       let runsOk = 0;
       let msgSum = 0;

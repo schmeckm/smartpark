@@ -8,7 +8,10 @@ const THEME_KEY = 'sp_theme'
 export const themePreference = ref<UiTheme>('dark')
 
 export function applyThemeClass(t: UiTheme) {
-  document.documentElement.classList.toggle('sp-theme-light', t === 'light')
+  const root = document.documentElement
+  root.classList.toggle('sp-theme-light', t === 'light')
+  /** Keeps Tailwind `dark:` variants in sync with app theme (not OS `prefers-color-scheme`). */
+  root.classList.toggle('dark', t === 'dark')
 }
 
 export function initThemeFromStorage() {

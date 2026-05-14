@@ -40,8 +40,8 @@ const docLinks = [
   { to: '/integrations', labelKey: 'menu.integrations' },
   { to: '/settings/devices-services', labelKey: 'menu.devicesServices' },
   { to: '/settings/adapter-pipeline-log', labelKey: 'menu.adapterOperations' },
-  { to: '/uns/tree', labelKey: 'menu.uns' },
-  { to: '/ai-insights', labelKey: 'menu.aiInsights' },
+  { to: '/realtime/topics', labelKey: 'menu.realtimeTopicExplorer' },
+  { to: '/ai-insights', labelKey: 'menu.aiForecasts' },
   { to: '/ai-insights/ride-waits', labelKey: 'aiRideGrid.navLink' },
   { to: '/ai-insights/timeseries', labelKey: 'aiTimeseries.navLink' },
   { to: '/ai-insights/accuracy', labelKey: 'aiAccuracy.navLink' },
@@ -50,7 +50,7 @@ const docLinks = [
   { to: '/ai-insights/ml-profiles', labelKey: 'aiMl.navProfiles' },
   { to: '/ai-insights/feature-store-monitor', labelKey: 'aiMl.navMonitor' },
   { to: '/ai-insights/data-quality', labelKey: 'aiDq.title' },
-  { to: '/ai-insights/studio', labelKey: 'menu.aiStudio' },
+  { to: '/ai-insights/studio', labelKey: 'menu.aiModelsTraining' },
 ] as const
 
 const factorTableRowKeys = ['baseline', 'snapshotX', 'mlL1', 'mlL2', 'mlL3'] as const

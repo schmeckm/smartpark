@@ -5,12 +5,6 @@ import { useI18n } from 'vue-i18n'
 import type { CanonicalInboundMessage, ExternalEntityMapping, ProviderAdapterInfo } from '@/types/api'
 import {
   getCanonicalMessages,
-  getUnsSuggestions,
-  createManualUnsNode,
-  deleteManualUnsNode,
-  downloadUnsSparkplugSchema,
-  uploadUnsSparkplugSchema,
-  deleteUnsSparkplugSchema,
   getExternalEntityMappings,
   getProviderDestinations,
   getProviderParks,
@@ -30,8 +24,6 @@ import {
   getIntegrationFeatureFlags,
   postThemeparksDiscoveryScanFromSettings,
   type IntegrationFeatureFlags,
-  type UnsSparkplugTopicSchema,
-  type UnsSuggestions,
 } from '@/api/client'
 import { useToast } from '@/composables/useToast'
 import { useRegionalDateTime } from '@/composables/useRegionalDateTime'
@@ -56,18 +48,8 @@ const selectedParkId = ref('')
 const pollingEnabled = ref(false)
 const pollingInterval = ref(300)
 const autoApplyEnabled = ref(true)
-const unsSuggestions = ref<UnsSuggestions | null>(null)
-const schemaFileInput = ref<HTMLInputElement | null>(null)
 const featureFlags = ref<IntegrationFeatureFlags | null>(null)
 const discoveryScanBusy = ref(false)
-
-const manualUnsForm = ref({
-  domain: 'rides',
-  assetName: '',
-  assetSlug: '',
-  metric: 'queue_time',
-  entityType: 'ATTRACTION',
-})
 
 /** Canonical orchestrator (DB, mappings, background sync) — separate from package adapters under Devices & Services. */
 const showCanonicalPipelinePanel = ref(false)
@@ -127,20 +109,11 @@ async function loadAll() {
     pollingEnabled.value = Boolean((s.pollingEnabled as { enabled?: boolean } | undefined)?.enabled)
     pollingInterval.value = Number((s.pollingIntervalSeconds as { seconds?: number } | undefined)?.seconds || 300)
     autoApplyEnabled.value = Boolean((s.autoApplyEnabled as { enabled?: boolean } | undefined)?.enabled ?? true)
-    unsSuggestions.value = await getUnsSuggestions()
     await refreshProviderSelectionData()
   } catch (e) {
     push(e instanceof Error ? e.message : 'Failed to load integration settings', 'error')
   } finally {
     loading.value = false
-  }
-}
-
-async function refreshUnsSuggestionTree() {
-  try {
-    unsSuggestions.value = await getUnsSuggestions()
-  } catch (e) {
-    push(e instanceof Error ? e.message : 'Failed to load UNS topic preview', 'error')
   }
 }
 
@@ -154,79 +127,6 @@ async function runDiscoveryScan() {
     push(e instanceof Error ? e.message : t('integrationSettings.discoveryScanFailed'), 'error')
   } finally {
     discoveryScanBusy.value = false
-  }
-}
-
-const schemaOverrideSummary = computed(() => {
-  const s = settings.value.unsTopicSchemaOverrideSummary as
-    | { active?: boolean; entryCount?: number; updatedAt?: string | null }
-    | undefined
-  return s || { active: false, entryCount: 0, updatedAt: null }
-})
-
-async function downloadUnsSchema(source: 'baseline' | 'active') {
-  try {
-    await downloadUnsSparkplugSchema({ source })
-    push(source === 'active' ? 'Active schema downloaded' : 'Baseline schema downloaded', 'success')
-  } catch (e) {
-    push(e instanceof Error ? e.message : 'Download failed', 'error')
-  }
-}
-
-async function onUnsSchemaFile(ev: Event) {
-  const input = ev.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
-  if (!file) return
-  try {
-    const text = await file.text()
-    const doc = JSON.parse(text) as UnsSparkplugTopicSchema
-    const { entryCount } = await uploadUnsSparkplugSchema(doc)
-    push(
-      `Schema uploaded (${entryCount} topics). In UNS → Namespace Tree use «Materialize UNS» to persist leaves to the database.`,
-      'success'
-    )
-    await loadAll()
-  } catch (e) {
-    push(e instanceof Error ? e.message : 'Upload failed', 'error')
-  }
-}
-
-async function clearUnsSchemaOverride() {
-  try {
-    await deleteUnsSparkplugSchema()
-    push('Schema override cleared', 'success')
-    await loadAll()
-  } catch (e) {
-    push(e instanceof Error ? e.message : 'Clear failed', 'error')
-  }
-}
-
-async function addManualUnsSuggestion() {
-  try {
-    await createManualUnsNode({
-      domain: manualUnsForm.value.domain,
-      assetName: manualUnsForm.value.assetName || null,
-      assetSlug: manualUnsForm.value.assetSlug || null,
-      metric: manualUnsForm.value.metric,
-      entityType: manualUnsForm.value.entityType || null,
-    })
-    manualUnsForm.value.assetName = ''
-    manualUnsForm.value.assetSlug = ''
-    await refreshUnsSuggestionTree()
-    push('Manual UNS topic added', 'success')
-  } catch (e) {
-    push(e instanceof Error ? e.message : 'Failed to add manual UNS topic', 'error')
-  }
-}
-
-async function removeManualUnsSuggestion(id: string) {
-  try {
-    await deleteManualUnsNode(id)
-    await refreshUnsSuggestionTree()
-    push('Manual UNS topic removed', 'success')
-  } catch (e) {
-    push(e instanceof Error ? e.message : 'Failed to remove manual UNS topic', 'error')
   }
 }
 
@@ -275,7 +175,7 @@ async function runSync(action: 'destinations' | 'parks' | 'entities' | 'live' | 
         | undefined
       if (pm?.error) {
         push(
-          `Master data (park_assets) ist fehlgeschlagen — Master data bleibt leer. API: ${String(pm.error)}`,
+          `Asset data (park_assets) ist fehlgeschlagen — Asset data bleibt leer. API: ${String(pm.error)}`,
           'error'
         )
       } else if (pm && typeof pm.assetsUpserted === 'number') {
@@ -397,16 +297,15 @@ watch(selectedDestinationId, async () => {
     <div>
       <h1 class="font-display text-xl font-semibold text-white">Integration settings</h1>
       <p class="mt-1 text-sm text-slate-400">
-        <strong class="font-medium text-slate-300">Orchestrator</strong> (this page): canonical messages, DB ingest, entity mappings, UNS materialization, and optional
-        <span class="font-mono text-slate-500">EXTERNAL_PARK_DATA</span> background polling.
+        Steuerzentrale für Datenquellen, Park-Auswahl, Sync und UNS-Vorschau.
       </p>
       <p class="mt-2 text-sm text-slate-500">
-        <strong class="text-slate-400">Adapter packages</strong> (MQTT, YAML install, per-adapter schedule):
+        Adapter-Runtime / Geräte-Installationen:
         <RouterLink class="text-brand-400 hover:text-brand-300" to="/settings/devices-services">Devices &amp; Services</RouterLink>
-        — the same park UUID can be set here (Save selection) and used as fallback for <span class="font-mono">themeparks_wiki</span> <span class="font-mono">parkId</span> when the adapter config is empty.
+        .
       </p>
       <p class="mt-2 text-sm text-slate-500">
-        <strong class="text-slate-400">Forecast model weights (X → Y)</strong> are configured under
+        Forecast-Faktoren:
         <RouterLink class="text-brand-400 hover:text-brand-300" to="/ai-insights">AI insights</RouterLink>.
       </p>
       <p class="mt-3 rounded-lg border border-slate-700/80 bg-slate-900/40 px-3 py-2 text-xs text-slate-300">
@@ -428,8 +327,8 @@ watch(selectedDestinationId, async () => {
         @click="showCanonicalPipelinePanel = !showCanonicalPipelinePanel"
       >
         <span class="text-slate-500">{{ showCanonicalPipelinePanel ? '▼' : '▶' }}</span>
-        <span class="ml-2 font-medium">Canonical pipeline</span>
-        <span class="ml-1 text-slate-500">— provider, destination/park, background polling, manual sync</span>
+        <span class="ml-2 font-medium">Pipeline-Einstellungen</span>
+        <span class="ml-1 text-slate-500">— Provider, Park-Auswahl, Polling, manueller Sync</span>
       </button>
     </div>
 
@@ -448,7 +347,6 @@ watch(selectedDestinationId, async () => {
         <div
           v-if="selectedProviderInfo && selectedProviderInfo.runtimePackageAvailable === false"
           class="mt-3 rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-xs text-amber-100/95"
-          role="status"
         >
           <span class="font-medium text-amber-200">Package runtime not found</span>
           for <span class="font-mono">{{ selectedProviderInfo.provider }}</span> — integration lists and sync still use the core adapter. Install or fix the matching folder under
@@ -549,131 +447,21 @@ watch(selectedDestinationId, async () => {
 
       <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
         <div class="flex flex-wrap items-center justify-between gap-3">
-          <h2 class="text-sm font-semibold text-white">UNS suggestion tree (selected park)</h2>
-          <div class="flex flex-wrap items-center gap-2">
-            <button class="rounded-md bg-brand-600 px-3 py-1.5 text-sm text-white" @click="refreshUnsSuggestionTree">
-              Refresh preview
-            </button>
-            <RouterLink
-              class="rounded-md border border-slate-600 bg-slate-800/60 px-3 py-1.5 text-sm text-slate-200 transition hover:border-slate-500 hover:text-white"
-              to="/uns/tree"
-            >
-              Write to DB in UNS → Explorer
-            </RouterLink>
-          </div>
+          <h2 class="text-sm font-semibold text-white">UNS &amp; Namespace</h2>
         </div>
-        <div class="mt-2 space-y-2 text-xs text-slate-400">
-          <p>
-            <strong class="text-slate-300">What this is:</strong> a <em>preview list</em> of UNS leaf topics for the
-            <strong class="text-slate-300">park saved in Integrations</strong> (destination + park + Save selection). The backend resolves the
-            park name to a slug and derives one MQTT-style topic path per mapped entity / metric (plus manual rows and optional uploaded
-            Sparkplug JSON override).
-          </p>
-          <p>
-            <strong class="text-slate-300">What it does not do by itself:</strong> it does not publish MQTT or update
-            <code class="text-brand-300">uns_nodes</code>. It helps you check topic paths; persisting leaves into the DB is done in
-            <RouterLink class="text-brand-400 hover:text-brand-300" to="/uns/tree">UNS → Namespace Tree</RouterLink> with
-            <strong class="text-slate-300">Materialize UNS</strong> (one place only — this page is preview + schema override + manual
-            rows). That keeps
-            <RouterLink class="text-brand-400 hover:text-brand-300" to="/uns/tree">Namespace Tree</RouterLink> /
-            <RouterLink class="text-brand-400 hover:text-brand-300" to="/uns/topics">Topic Preview</RouterLink> and live views aligned
-            (Sparkplug-style <code class="text-brand-300">DDATA</code> paths, same idea as <code class="text-brand-300">sparkplug_json</code>).
-          </p>
-          <p>
-            After changing mappings or entities, run <strong class="text-slate-300">Sync entities</strong> (canonical pipeline panel), then
-            <strong class="text-slate-300">Generate from Master Data</strong> here. Use <strong class="text-slate-300">Materialize UNS</strong> in Namespace Tree (or the shortcut link above) to apply leaves to the database. Download/upload the JSON schema here when you need a Sparkplug path override.
-          </p>
-        </div>
-        <div class="mt-3 flex flex-wrap items-center gap-2">
-          <button type="button" class="rounded-md bg-slate-700 px-3 py-1.5 text-xs text-white" @click="downloadUnsSchema('baseline')">
-            Download schema (from entities)
-          </button>
-          <button type="button" class="rounded-md bg-slate-700 px-3 py-1.5 text-xs text-white" @click="downloadUnsSchema('active')">
-            Download schema (active override)
-          </button>
-          <input ref="schemaFileInput" type="file" accept="application/json,.json" class="hidden" @change="onUnsSchemaFile" />
-          <button type="button" class="rounded-md bg-emerald-700 px-3 py-1.5 text-xs text-white" @click="schemaFileInput?.click()">
-            Upload schema (override)
-          </button>
-          <button
-            v-if="schemaOverrideSummary.active"
-            type="button"
-            class="rounded-md border border-rose-800 px-3 py-1.5 text-xs text-rose-300"
-            @click="clearUnsSchemaOverride"
+        <p class="mt-2 text-sm text-slate-400">
+          UNS-Themenstruktur, Materialisierung und Sparkplug-Overrides werden zentral im UNS-Bereich gepflegt.
+        </p>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <RouterLink class="rounded-md bg-brand-600 px-3 py-1.5 text-sm text-white" to="/realtime/topics">
+            UNS Explorer öffnen
+          </RouterLink>
+          <RouterLink
+            class="rounded-md border border-slate-600 bg-slate-800/60 px-3 py-1.5 text-sm text-slate-200 transition hover:border-slate-500 hover:text-white"
+            to="/realtime/topics?mode=list"
           >
-            Clear override
-          </button>
-          <span v-if="schemaOverrideSummary.active" class="text-xs text-amber-300">
-            Override active: {{ schemaOverrideSummary.entryCount }} topics
-            <span v-if="schemaOverrideSummary.updatedAt" class="text-slate-500">
-              · {{ formatDateTime(String(schemaOverrideSummary.updatedAt)) }}
-            </span>
-          </span>
-        </div>
-        <div class="mt-3 grid gap-3 md:grid-cols-2 lg:grid-cols-5">
-          <div class="rounded border border-slate-800 bg-slate-950/40 p-3 text-xs text-slate-300">
-            Total topics: <span class="text-white">{{ unsSuggestions?.totalTopics ?? 0 }}</span>
-          </div>
-          <div class="rounded border border-slate-800 bg-slate-950/40 p-3 text-xs text-slate-300">
-            Dynamic topics: <span class="text-white">{{ unsSuggestions?.dynamicTopics ?? 0 }}</span>
-          </div>
-          <div class="rounded border border-slate-800 bg-slate-950/40 p-3 text-xs text-slate-300">
-            Manual topics: <span class="text-white">{{ unsSuggestions?.manualTopics ?? 0 }}</span>
-          </div>
-          <div class="rounded border border-slate-800 bg-slate-950/40 p-3 text-xs text-slate-300">
-            Park slug: <span class="text-white">{{ unsSuggestions?.parkSlug || '—' }}</span>
-          </div>
-          <div class="rounded border border-slate-800 bg-slate-950/40 p-3 text-xs text-slate-300">
-            Sparkplug: <span class="font-mono text-[10px] text-white">{{ unsSuggestions?.sparkplug?.groupId }}/{{ unsSuggestions?.sparkplug?.edgeNodeId }}</span>
-          </div>
-        </div>
-        <div class="mt-3 grid gap-2 rounded border border-slate-800 bg-slate-950/40 p-3 md:grid-cols-6">
-          <input v-model="manualUnsForm.domain" class="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs" placeholder="domain (rides)" />
-          <input v-model="manualUnsForm.assetName" class="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs" placeholder="asset name" />
-          <input v-model="manualUnsForm.assetSlug" class="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs" placeholder="asset slug optional" />
-          <input v-model="manualUnsForm.metric" class="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs" placeholder="metric (queue_time)" />
-          <input v-model="manualUnsForm.entityType" class="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs" placeholder="entity type" />
-          <button class="rounded bg-emerald-600 px-2 py-1 text-xs text-white" @click="addManualUnsSuggestion">
-            Add manual topic
-          </button>
-        </div>
-        <div class="mt-3 space-y-3">
-          <div v-for="group in unsSuggestions?.tree || []" :key="group.domain" class="rounded border border-slate-800 bg-slate-950/30 p-3">
-            <p class="text-xs font-semibold uppercase tracking-wide text-brand-300">{{ group.domain }}</p>
-            <div class="mt-2 overflow-auto">
-              <table class="min-w-full text-xs">
-                <thead class="text-slate-500">
-                  <tr>
-                    <th class="px-2 py-1 text-left">Entity</th>
-                    <th class="px-2 py-1 text-left">Metric</th>
-                    <th class="px-2 py-1 text-left">Source</th>
-                    <th class="px-2 py-1 text-left">TP-UNS topic</th>
-                    <th class="px-2 py-1 text-left">Sparkplug topic (DDATA)</th>
-                    <th class="px-2 py-1 text-left">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="item in group.items" :key="`${item.topicPath}-${item.id || 'auto'}`" class="border-t border-slate-800">
-                    <td class="px-2 py-1">{{ item.entityName }}</td>
-                    <td class="px-2 py-1">{{ item.metric }}</td>
-                    <td class="px-2 py-1">{{ item.source }}</td>
-                    <td class="px-2 py-1 font-mono text-[11px] text-slate-300">{{ item.topicPath }}</td>
-                    <td class="px-2 py-1 font-mono text-[10px] text-slate-400">{{ item.sparkplugTopic || '—' }}</td>
-                    <td class="px-2 py-1">
-                      <button
-                        v-if="item.source === 'MANUAL' && item.id"
-                        class="rounded border border-rose-700 px-2 py-0.5 text-[11px] text-rose-300"
-                        @click="removeManualUnsSuggestion(String(item.id))"
-                      >
-                        Remove
-                      </button>
-                      <span v-else class="text-slate-500">auto</span>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
+            Topic-Vorschau öffnen
+          </RouterLink>
         </div>
       </section>
 

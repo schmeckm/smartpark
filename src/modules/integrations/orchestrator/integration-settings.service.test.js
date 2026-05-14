@@ -52,7 +52,7 @@ function makeMockPlatformSettings(values = {}) {
 
 /* ---------- INTEGRATION_SETTING_KEYS contract (data migration risk) ----------- */
 
-test('INTEGRATION_SETTING_KEYS: pins the 9 known app_settings keys', () => {
+test('INTEGRATION_SETTING_KEYS: pins the 10 known app_settings keys', () => {
   assert.equal(
     INTEGRATION_SETTING_KEYS.selectedProvider,
     'externalParkData.selectedProvider',
@@ -60,6 +60,7 @@ test('INTEGRATION_SETTING_KEYS: pins the 9 known app_settings keys', () => {
   );
   assert.equal(INTEGRATION_SETTING_KEYS.selectedDestination, 'externalParkData.selectedDestination');
   assert.equal(INTEGRATION_SETTING_KEYS.selectedPark, 'externalParkData.selectedPark');
+  assert.equal(INTEGRATION_SETTING_KEYS.dataSourceMode, 'externalParkData.dataSourceMode');
   assert.equal(INTEGRATION_SETTING_KEYS.autoApplyEnabled, 'externalParkData.autoApplyEnabled');
   assert.equal(INTEGRATION_SETTING_KEYS.pollingEnabled, 'externalParkData.pollingEnabled');
   assert.equal(INTEGRATION_SETTING_KEYS.pollingIntervalSeconds, 'externalParkData.pollingIntervalSeconds');
@@ -168,7 +169,7 @@ test('get: returns full settings document with sane fallbacks for empty store', 
   assert.equal(out.selectedPark, null);
   assert.deepEqual(out.autoApplyEnabled, { enabled: true });
   assert.deepEqual(out.pollingEnabled, { enabled: false });
-  assert.deepEqual(out.pollingIntervalSeconds, { seconds: 300 });
+  assert.deepEqual(out.pollingIntervalSeconds, { seconds: 120 });
   assert.equal(out.unsTopicSchemaOverrideSummary.active, false);
   assert.equal(out.unsTopicSchemaOverrideSummary.entryCount, 0);
 });

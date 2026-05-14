@@ -248,9 +248,13 @@ async function buildRideXLayer(opts) {
       rideMaster = await RideMasterData.findByPk(asset.assetId, { attributes: ['theoreticalCapacityPph', 'normalStaff'] });
     }
   }
-  const prev = previousRideSnapshotPlain?.waitTime != null ? num(previousRideSnapshotPlain.waitTime, null) : null;
+  const prevWt = previousRideSnapshotPlain?.waitTime != null ? num(previousRideSnapshotPlain.waitTime, null) : null;
+  const prevCur =
+    previousRideSnapshotPlain?.currentWaitTimeMin != null
+      ? num(previousRideSnapshotPlain.currentWaitTimeMin, null)
+      : null;
+  const prev = prevWt ?? prevCur;
   const cur = waitTime != null ? num(waitTime, null) : null;
-  const delta = cur != null && prev != null ? cur - prev : null;
   const staffingGap = park?.id ? await staffingGapApprox(park.id) : null;
 
   let roll15 = null;
@@ -264,9 +268,13 @@ async function buildRideXLayer(opts) {
     roll60 = a60;
   }
 
+  /** Prefer live bucket wait; else recent sample rollups (stabilizes ENTITY_STATUS-only buckets). */
+  const effectiveCur = cur ?? roll15 ?? roll60;
+  const delta = effectiveCur != null && prev != null ? effectiveCur - prev : null;
+
   const inherited = parkX || {};
   const fieldsPresent = [
-    cur != null,
+    effectiveCur != null,
     inherited.temperatureC != null || inherited.temperature_c != null,
     inherited.isPublicHoliday != null,
     asset != null,
@@ -276,7 +284,7 @@ async function buildRideXLayer(opts) {
   return {
     internalParkId: park?.id || null,
     internalAssetId: asset?.assetId || null,
-    currentWaitTimeMin: cur,
+    currentWaitTimeMin: effectiveCur,
     previousWaitTimeMin: prev,
     waitTimeDelta5m: delta,
     rollingAvgWait15m: roll15,

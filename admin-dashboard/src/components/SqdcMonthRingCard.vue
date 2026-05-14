@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { SqdcRingTone } from '@/api/client'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   letter: string
@@ -29,18 +32,37 @@ const colorMap: Record<SqdcRingTone, string> = {
   empty: 'rgb(51 65 85)',
 }
 
+/** Dark groove between day segments so 28–31 divisions stay visible even when adjacent days share the same tone. */
+const SEGMENT_DELIM = 'rgb(15 23 42)'
+
 const ringBackground = computed(() => {
   const n = Math.max(1, props.segments.length)
   const step = 360 / n
+  const g = Math.min(1.05, Math.max(0.28, step * 0.085))
   const parts: string[] = []
   for (let i = 0; i < n; i += 1) {
     const tone = props.segments[i] ?? 'empty'
     const a0 = i * step - 90
     const a1 = (i + 1) * step - 90
-    parts.push(`${colorMap[tone]} ${a0}deg ${a1}deg`)
+    const half = Math.min(g, (a1 - a0) / 2 - 0.04)
+    if (half <= 0) {
+      parts.push(`${colorMap[tone]} ${a0}deg ${a1}deg`)
+      continue
+    }
+    parts.push(
+      `${SEGMENT_DELIM} ${a0}deg ${a0 + half}deg`,
+      `${colorMap[tone]} ${a0 + half}deg ${a1 - half}deg`,
+      `${SEGMENT_DELIM} ${a1 - half}deg ${a1}deg`,
+    )
   }
   return `conic-gradient(from -90deg, ${parts.join(', ')})`
 })
+
+const segmentDayCount = computed(() => Math.max(0, props.segments.length))
+
+const ringDayDividerHint = computed(() =>
+  segmentDayCount.value > 1 ? t('sqdc.monthRingDayDividerHint', { n: segmentDayCount.value }) : undefined
+)
 
 const ringSizeClass = computed(() =>
   props.size === 'hero' ? 'h-[8.25rem] w-[8.25rem] sm:h-36 sm:w-36' : 'h-[7.5rem] w-[7.5rem] sm:h-32 sm:w-32'
@@ -114,6 +136,7 @@ const ringSubLabelMinHClass = computed(() =>
       <div
         class="absolute inset-0 rounded-full shadow-[inset_0_0_14px_rgba(0,0,0,0.4)] ring-1 ring-slate-800/80"
         :style="{ background: ringBackground }"
+        :title="ringDayDividerHint"
       />
       <div
         class="absolute flex flex-col items-center justify-center gap-0.5 rounded-full bg-slate-950 text-white shadow-inner ring-1 ring-slate-800/90"

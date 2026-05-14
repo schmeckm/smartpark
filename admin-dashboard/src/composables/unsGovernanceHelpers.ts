@@ -6,6 +6,12 @@ import type {
   UnsLatestState,
   UnsMqttLiveEvent,
 } from '@/api/client'
+import {
+  collectMatchingLiveEvents as collectMatchingLiveEventsCore,
+  type CollectMatchingLiveEventsOpts,
+} from '@/utils/unsMqttLiveSignalMatch'
+
+export type { CollectMatchingLiveEventsOpts }
 
 /** Mirrors backend `TOPIC_SOURCES` in ride-signal-capability.service.js */
 const TOPIC_SOURCES_NEED_PATH = new Set<RideSignalSource>([
@@ -103,25 +109,22 @@ export function kpiKeyForSignalCode(code: string): string | null {
   return map[n] || null
 }
 
+/** UNS Live events that belong to this capability row (canonical topic, metric name, or Sparkplug path). Newest first after sort. */
+export function collectMatchingLiveEvents(
+  signal: RideSignalCapabilitySignalRow,
+  events: UnsMqttLiveEvent[],
+  opts?: CollectMatchingLiveEventsOpts
+): UnsMqttLiveEvent[] {
+  return collectMatchingLiveEventsCore<UnsMqttLiveEvent>(signal, events, opts)
+}
+
 export function pickLatestLiveEvent(
   signal: RideSignalCapabilitySignalRow,
-  events: UnsMqttLiveEvent[]
+  events: UnsMqttLiveEvent[],
+  opts?: CollectMatchingLiveEventsOpts
 ): UnsMqttLiveEvent | null {
-  const preview = signal.unsTopicPreview?.trim()
-  const code = signal.signalCode.trim()
-  const spark = signal.sparkplugMetricPreview?.trim()
-  const sparkTail = spark ? spark.split('/').pop() || spark : ''
-
-  const candidates = events.filter((e) => {
-    if (preview && e.canonicalUnsTopic && e.canonicalUnsTopic === preview) return true
-    const m = (e.metric || '').trim()
-    if (code && m && m.toLowerCase() === code.toLowerCase()) return true
-    if (sparkTail && e.sparkplugTopic && e.sparkplugTopic.toLowerCase().includes(sparkTail.toLowerCase())) return true
-    return false
-  })
-  if (!candidates.length) return null
-  candidates.sort((a, b) => Date.parse(b.receivedAt) - Date.parse(a.receivedAt))
-  return candidates[0]
+  const candidates = collectMatchingLiveEvents(signal, events, opts)
+  return candidates.length ? candidates[0] : null
 }
 
 export function latestStateEventTimeForTopic(
@@ -175,6 +178,8 @@ export function computeRideReadiness(params: {
   staleMs: number
   latestStates: UnsLatestState[]
   liveEvents: UnsMqttLiveEvent[]
+  /** Limits MQTT buffer matching to this ride (same as asset slug in UNS paths). */
+  rideAssetSlug?: string | null
 }): {
   operationsFactsReady: boolean
   addonBoardReady: boolean
@@ -199,8 +204,12 @@ export function computeRideReadiness(params: {
     notes.push('Operations Facts: no ride payload returned (check park scope and ride id).')
   }
 
+  const liveOpts = params.rideAssetSlug?.trim()
+    ? { rideAssetSlug: params.rideAssetSlug.trim() }
+    : undefined
+
   const greenSignals = params.capabilities.filter((s) => {
-    const live = pickLatestLiveEvent(s, params.liveEvents)
+    const live = pickLatestLiveEvent(s, params.liveEvents, liveOpts)
     const st = latestStateEventTimeForTopic(params.latestStates, s.unsTopicPreview)
     return (
       governanceTierForSignal(s, {

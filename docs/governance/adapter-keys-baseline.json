@@ -3,6 +3,7 @@
   "description": "Closed, ordered list of adapter keys recognized by Smart Park OS. Every adapter package directory under `src/integrations/adapter-packages/<key>/` MUST appear here, and every entry here MUST have a directory + manifest.json + index.js on disk. Phase C0/C1 governance: changing this list (rename, add, remove) requires (a) updating every reference enumerated under `referencesByKey` AND (b) writing a Sequelize migration when DB rows for the renamed key exist (the `adapter_packages.adapter_key` column is unique).",
   "adapterKeys": [
     "calendar_school_holidays",
+    "macro_tourism_index",
     "opcua_edge",
     "themeparks_wiki",
     "wartezeiten_app",
@@ -16,6 +17,11 @@
     "calendar_school_holidays": {
       "manifest": "src/integrations/adapter-packages/calendar_school_holidays/manifest.json",
       "runtime": "src/integrations/adapter-packages/calendar_school_holidays/index.js"
+    },
+    "macro_tourism_index": {
+      "manifest": "src/integrations/adapter-packages/macro_tourism_index/manifest.json",
+      "runtime": "src/integrations/adapter-packages/macro_tourism_index/index.js",
+      "installConfig": "data/adapter-install-config/macro_tourism_index.install.yaml"
     },
     "opcua_edge": {
       "manifest": "src/integrations/adapter-packages/opcua_edge/manifest.json",

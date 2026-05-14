@@ -3,7 +3,7 @@
     tags:
       - AI
     summary: 'Add-on Board park summary (L0)'
-    description: 'Needs `ops.read` or `rides.read` and `X-Park-Id`'
+    description: "Needs `ops.read` or `rides.read` and `X-Park-Id`. **Phase 3:** `data.crossAssetContext` — active F&B / shop / show asset counts by park (master data only).\n"
     responses:
       '200':
         description: OK
@@ -16,7 +16,7 @@
     tags:
       - AI
     summary: 'Add-on Board ride cards with SWDEC + ML forecasts'
-    description: 'Needs `ops.read` or `rides.read` and `X-Park-Id`'
+    description: "Needs `ops.read` or `rides.read` and `X-Park-Id`. **Phase 3:** `data.crossAssetContext` (park roll-up); each ride `swdec.crossAssetContext` (zone venues + hint codes).\n"
     responses:
       '200':
         description: OK
@@ -29,6 +29,7 @@
     tags:
       - AI
     summary: 'Critical / watch-list rides for the board'
+    description: 'Same envelope as `GET /addon-board/rides` (includes optional `crossAssetContext` park roll-up).'
     parameters:
       -
         in: query
@@ -131,6 +132,7 @@
     tags:
       - AI
     summary: 'Zone-level Add-on Board summary (L1)'
+    description: '**Phase 3:** optional `data.crossAssetContext` with `zoneVenues` and park totals.'
     parameters:
       -
         in: path
@@ -151,6 +153,7 @@
     tags:
       - AI
     summary: 'Ride-level Add-on Board detail (L3)'
+    description: '**Phase 3:** `data.crossAssetContext` (park roll-up, same as list) and `data.swdec.crossAssetContext` (zone venues + hints).'
     parameters:
       -
         in: path

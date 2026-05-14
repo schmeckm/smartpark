@@ -1,7 +1,7 @@
 # Express route inventory (generated)
 
-- **Generated:** 2026-05-08T09:18:44.410Z
-- **Route count:** 336
+- **Generated:** 2026-05-13T05:31:13.852Z
+- **Route count:** 383
 
 | Method | Path | Mount origin | In OpenAPI |
 |--------|------|--------------|------------|
@@ -31,9 +31,19 @@
 | GET | `/api/v1/addon-board/zones` | src/routes/v1/index.js | yes |
 | PATCH | `/api/v1/admin/platform-settings/:settingKey` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/admin/platform-settings` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/agent/actions/:id/approve` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/agent/actions/:id/reject` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/agent/actions` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/agent/approval-metrics` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/agent/preflight` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/agent/runs/:id/replay` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/agent/runs/:id` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/agent/runs` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/agent/runs` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/ai/assets/:assetId/effective-ml-config` | src/routes/v1/index.js | yes |
 | PATCH | `/api/v1/ai/assets/:assetId/ml-overrides` | src/routes/v1/index.js | yes |
 | PUT | `/api/v1/ai/assets/:assetId/ml-profile` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/ai/entities/:externalEntityId/forecast/explanation` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/ai/entities/:externalEntityId/forecast/summary` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/ai/factors/config` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/ai/feature-data-quality` | src/routes/v1/index.js | yes |
@@ -55,8 +65,23 @@
 | GET | `/api/v1/ai/ml-profiles` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/ai/ml-profiles` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/ai/ml/dataset/rides` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/ai/ml/forecast-accuracy/:id` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/ai/ml/forecast-accuracy/kpis` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/ai/ml/forecast-accuracy` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/ai/ml/park-profiles/:id` | src/routes/v1/index.js | no |
+| PUT | `/api/v1/ai/ml/park-profiles/:id` | src/routes/v1/index.js | no |
+| GET | `/api/v1/ai/ml/park-profiles` | src/routes/v1/index.js | no |
+| POST | `/api/v1/ai/ml/park-profiles` | src/routes/v1/index.js | no |
 | GET | `/api/v1/ai/ml/predict/park-summary` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/ai/ml/predict/rides/:rideId` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/ai/ml/prediction-traces/:predictionId/coefficients` | src/routes/v1/index.js | no |
+| GET | `/api/v1/ai/ml/prediction-traces/:predictionId` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/ai/ml/prediction-traces/filter-options` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/ai/ml/prediction-traces` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/ai/ml/ride-profiles/:id` | src/routes/v1/index.js | no |
+| PUT | `/api/v1/ai/ml/ride-profiles/:id` | src/routes/v1/index.js | no |
+| GET | `/api/v1/ai/ml/ride-profiles` | src/routes/v1/index.js | no |
+| POST | `/api/v1/ai/ml/ride-profiles` | src/routes/v1/index.js | no |
 | POST | `/api/v1/ai/ml/train/wait-time/global` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/ai/ml/train/wait-time/rides/:rideId` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/ai/parks/:externalParkId/entities/forecast/summary` | src/routes/v1/index.js | yes |
@@ -93,6 +118,13 @@
 | PATCH | `/api/v1/assets/:assetId/extensions` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/assets/:assetId/oee/availability-summary` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/assets/:assetId/oee/downtime-reason-pareto` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/assets/:assetId/pdm-evaluation-logs` | src/routes/v1/index.js | yes |
+| DELETE | `/api/v1/assets/:assetId/pdm-rules/:ruleId` | src/routes/v1/index.js | yes |
+| PATCH | `/api/v1/assets/:assetId/pdm-rules/:ruleId` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/assets/:assetId/pdm-rules` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/assets/:assetId/pdm-rules` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/assets/:assetId/pdm-sparkplug-metrics` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/assets/:assetId/predictive-maintenance` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/assets/:assetId/ride-master/enrich-template` | src/routes/v1/index.js | yes |
 | PUT | `/api/v1/assets/:assetId/ride-master` | src/routes/v1/index.js | yes |
 | PATCH | `/api/v1/assets/:assetId/runtime-overrides/:overrideId` | src/routes/v1/index.js | yes |
@@ -100,6 +132,8 @@
 | POST | `/api/v1/assets/:assetId/runtime-overrides` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/assets/:assetId` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/assets/oee/reason-codes` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/assets/zone-normalization/apply` | src/routes/v1/index.js | no |
+| GET | `/api/v1/assets/zone-normalization/preview` | src/routes/v1/index.js | no |
 | GET | `/api/v1/assets` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/audit-logs` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/auth/login` | src/routes/v1/index.js | yes |
@@ -201,6 +235,10 @@
 | GET | `/api/v1/master-data/rides/:id/signal-capabilities` | src/app.js | yes |
 | PUT | `/api/v1/master-data/rides/:id/signal-capabilities` | src/app.js | yes |
 | GET | `/api/v1/master-data/rides/:id/topic-activation-status` | src/app.js | yes |
+| DELETE | `/api/v1/master-data/signal-catalog/:catalogId` | src/app.js | no |
+| PATCH | `/api/v1/master-data/signal-catalog/:catalogId` | src/app.js | no |
+| GET | `/api/v1/master-data/signal-catalog` | src/app.js | no |
+| POST | `/api/v1/master-data/signal-catalog` | src/app.js | no |
 | GET | `/api/v1/master-data/templates/:id` | src/app.js | yes |
 | GET | `/api/v1/master-data/templates` | src/app.js | yes |
 | GET | `/api/v1/mdm/parks/:parkId/zones` | src/routes/v1/index.js | yes |
@@ -239,9 +277,16 @@
 | GET | `/api/v1/operations-facts/rides/:id` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/operations-facts/rides` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/park-rides` | src/routes/v1/index.js | yes |
+| PATCH | `/api/v1/parks/:parkId/level0` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/parks/:parkId/operational-context` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/parks/:parkId/shift-handovers/:entryId/acknowledge` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/parks/:parkId/shift-handovers/:entryId/pdf` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/parks/:parkId/shift-handovers/:entryId/reminders/mark-sent` | src/routes/v1/index.js | yes |
+| PATCH | `/api/v1/parks/:parkId/shift-handovers/:entryId/tasks` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/parks/:parkId/shift-handovers/reminders/due` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/parks/:parkId/shift-handovers` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/parks/:parkId/shift-handovers` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/parks/:parkId/zones` | src/routes/v1/index.js | no |
 | GET | `/api/v1/parks/:parkSlug/geo/entities` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/parks/:parkSlug/geo/flow/events/batch` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/parks/:parkSlug/geo/flow/simulation` | src/routes/v1/index.js | yes |
@@ -299,6 +344,7 @@
 | GET | `/api/v1/templates/staffing` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/uns-registry/entities` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/uns-registry/mirror/summary` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/uns-registry/mirror/sync` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/uns-registry/topics` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/uns-spy/events/:id/approve` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/uns-spy/events/:id/ignore` | src/routes/v1/index.js | yes |
@@ -317,6 +363,7 @@
 | GET | `/api/v1/uns/parks/:parkId/mqtt-live/status` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/uns/parks/:parkId/mqtt-live/test-event` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/uns/parks/:parkId/nodes` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/uns/parks/:parkId/sparkplug-topic-preview` | src/routes/v1/index.js | no |
 | GET | `/api/v1/uns/parks/:parkId/topics` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/uns/parks/:parkId/tree` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/uns/test/publish` | src/routes/v1/index.js | yes |

@@ -1,5 +1,6 @@
 /**
- * Builds 5m UTC feature snapshots from canonical messages; SoR for ML/X rows at bucket granularity.
+ * Builds 5m UTC feature snapshots from canonical ride messages (all providers with
+ * WAIT_TIME_UPDATED / ENTITY_STATUS_UPDATED); SoR for ML/X rows at bucket granularity.
  * @see docs/adr/0001-forecast-architecture.md
  */
 const { Op, Sequelize, QueryTypes } = require('sequelize');
@@ -21,6 +22,8 @@ const { loadActiveProfileCodesByAssetIds } = require('./ml-effective-config.serv
 const { ParkOperatingSnapshotRepository } = require('../repositories/park-operating-snapshot.repository');
 const { evaluateScheduledOperatingHours } = require('../utils/operating-hours-eval.util');
 const { syntheticScheduleFromParkEnrichment } = require('../utils/master-operating-hours.util');
+const { snapshotEligibilityDefaultsForSchedule } = require('../utils/ride-snapshot-eligibility.util');
+const { coerceNumericWaitMinutes } = require('../utils/canonical-wait-payload.util');
 
 function toNum(v, d = 0) {
   const n = Number(v);
@@ -31,6 +34,13 @@ function bucket5m(dateValue) {
   const ts = new Date(dateValue).getTime();
   const floored = Math.floor(ts / (5 * 60 * 1000)) * 5 * 60 * 1000;
   return new Date(floored);
+}
+
+/** `themeparks_wiki:<parkId>` or `<provider>:<externalParkId>` where park id may contain ':' */
+function splitParkCompoundKey(parkKey) {
+  const idx = parkKey.indexOf(':');
+  if (idx <= 0) return { provider: parkKey, externalParkId: '' };
+  return { provider: parkKey.slice(0, idx), externalParkId: parkKey.slice(idx + 1) };
 }
 
 function percentile(values, p) {
@@ -76,6 +86,12 @@ const RIDE_SNAPSHOT_UPDATE_FIELDS = [
   'staffDependencyScore',
   'targetWaitTime15m',
   'targetWaitTime60m',
+  'parkIsOpen',
+  'rideIsOpen',
+  'forecastEligible',
+  'trainingEligible',
+  'accuracyEligible',
+  'dataQualityReason',
   'updatedAt',
 ];
 
@@ -126,6 +142,48 @@ const PARK_SNAPSHOT_UPDATE_FIELDS = [
   'updatedAt',
 ];
 
+/**
+ * @param {object} meta - parkXByKey entry with park, parkX, externalParkId, provider
+ * @param {Date} bucketUtc
+ * @param {import('../repositories/park-operating-snapshot.repository').ParkOperatingSnapshotRepository} operatingRepo
+ */
+async function computeParkScheduledOperatingForMeta(meta, bucketUtc, operatingRepo) {
+  let withinScheduledOperatingHours = null;
+  let scheduledOperatingSnapshotAt = null;
+  const { externalParkId, parkX } = meta;
+  if (parkX.localDate && meta.park) {
+    const parkPlain =
+      meta.park && typeof meta.park.get === 'function' ? meta.park.get({ plain: true }) : meta.park || {};
+    const masterSchedule = syntheticScheduleFromParkEnrichment(parkPlain.enrichment, parkX.localDate);
+    if (masterSchedule) {
+      const ev = evaluateScheduledOperatingHours(masterSchedule, bucketUtc, parkX.timezone);
+      withinScheduledOperatingHours = ev.within;
+      scheduledOperatingSnapshotAt = parkPlain.updatedAt ? new Date(parkPlain.updatedAt) : null;
+    } else {
+      const extCandidates = [
+        ...new Set(
+          [externalParkId, parkPlain.externalEntityId, parkPlain.slug]
+            .filter((x) => x != null && String(x).trim() !== '')
+            .map((x) => String(x).trim())
+        ),
+      ];
+      if (extCandidates.length) {
+        const opRow = await operatingRepo.findLatestOpeningRowForLocalDateFirstMatching(
+          meta.provider || 'themeparks_wiki',
+          extCandidates,
+          parkX.localDate
+        );
+        if (opRow) {
+          const ev = evaluateScheduledOperatingHours(opRow.openingTimes, bucketUtc, parkX.timezone);
+          withinScheduledOperatingHours = ev.within;
+          scheduledOperatingSnapshotAt = opRow.sampledAt || null;
+        }
+      }
+    }
+  }
+  return { withinScheduledOperatingHours, scheduledOperatingSnapshotAt };
+}
+
 class AiFeatureStoreService {
   async buildSnapshots({ now = new Date() } = {}) {
     const operatingRepo = new ParkOperatingSnapshotRepository();
@@ -135,7 +193,6 @@ class AiFeatureStoreService {
       where: {
         messageType: { [Op.in]: ['WAIT_TIME_UPDATED', 'ENTITY_STATUS_UPDATED'] },
         occurredAt: { [Op.gte]: since, [Op.lte]: now },
-        provider: 'themeparks_wiki',
         externalParkId: { [Op.ne]: null },
       },
       order: [['occurredAt', 'DESC']],
@@ -153,8 +210,7 @@ class AiFeatureStoreService {
     const byPark = new Map();
     for (const row of latestByEntity.values()) {
       const payload = row.payload || {};
-      const waitTime = typeof payload.waitTime === 'number' ? payload.waitTime : null;
-      const status = typeof payload.status === 'string' ? payload.status : null;
+      const waitTime = coerceNumericWaitMinutes(payload.waitTime);
       const isOpen = typeof payload.isOpen === 'boolean' ? payload.isOpen : null;
       const parkKey = `${row.provider}:${row.externalParkId}`;
       if (!byPark.has(parkKey)) byPark.set(parkKey, []);
@@ -165,7 +221,7 @@ class AiFeatureStoreService {
     const parkXByKey = new Map();
     const parkKeys = [...byPark.keys()];
     for (const parkKey of parkKeys) {
-      const [provider, externalParkId] = parkKey.split(':');
+      const { provider, externalParkId } = splitParkCompoundKey(parkKey);
       let park = parkModelByExt.get(externalParkId);
       if (!parkModelByExt.has(externalParkId)) {
         // eslint-disable-next-line no-await-in-loop
@@ -174,7 +230,7 @@ class AiFeatureStoreService {
       }
       const samples = byPark.get(parkKey);
       const ridesReporting = samples.length;
-      const waits = samples.map((s) => s.waitTime).filter((v) => typeof v === 'number');
+      const waits = samples.map((s) => s.waitTime).filter((v) => v != null);
       const avgWait = waits.length ? waits.reduce((a, b) => a + b, 0) / waits.length : null;
       // eslint-disable-next-line no-await-in-loop
       const parkX = await buildParkXLayer({
@@ -205,8 +261,10 @@ class AiFeatureStoreService {
       if (r && r.id) extraParkIds.add(String(r.id));
     }
     for (const pid of extraParkIds) {
+      // Must include enrichment (defaultOperatingHours) and masterProfile so scheduled-hours
+      // evaluation can prefer MASTER_DATA over ThemeParks snapshots (otherwise PARK_CLOSED drift).
       const park = await Park.findByPk(pid, {
-        attributes: ['id', 'externalEntityId', 'slug', 'timezone', 'name'],
+        attributes: ['id', 'externalEntityId', 'slug', 'timezone', 'name', 'enrichment', 'masterProfile', 'updatedAt'],
       });
       if (!park) continue;
       const ext =
@@ -234,10 +292,17 @@ class AiFeatureStoreService {
       });
     }
 
+    for (const meta of parkXByKey.values()) {
+      // eslint-disable-next-line no-await-in-loop
+      const sched = await computeParkScheduledOperatingForMeta(meta, bucket, operatingRepo);
+      meta.withinScheduledOperatingHours = sched.withinScheduledOperatingHours;
+      meta.scheduledOperatingSnapshotAt = sched.scheduledOperatingSnapshotAt;
+    }
+
     const rideItems = [];
     for (const row of latestByEntity.values()) {
       const payload = row.payload || {};
-      const waitTime = typeof payload.waitTime === 'number' ? payload.waitTime : null;
+      const waitTime = coerceNumericWaitMinutes(payload.waitTime);
       const status = typeof payload.status === 'string' ? payload.status : null;
       const isOpen = typeof payload.isOpen === 'boolean' ? payload.isOpen : null;
       const entityType =
@@ -248,6 +313,11 @@ class AiFeatureStoreService {
       const meta = parkXByKey.get(parkKey);
       const park = meta?.park || parkModelByExt.get(row.externalParkId) || null;
       const parkX = meta?.parkX || null;
+      const elig = snapshotEligibilityDefaultsForSchedule({
+        withinScheduledOperatingHours: meta?.withinScheduledOperatingHours ?? null,
+        rideIsOpen: isOpen,
+        ridePayloadWait: waitTime,
+      });
       // eslint-disable-next-line no-await-in-loop
       const prevRow = await findPreviousRideSnapshot(row.provider, row.externalParkId, row.externalEntityId, bucket);
       const prevPlain = prevRow ? prevRow.get({ plain: true }) : null;
@@ -272,7 +342,7 @@ class AiFeatureStoreService {
         waitTime,
         status,
         isOpen,
-        hasWaitSample: waitTime != null,
+        hasWaitSample: rideX.currentWaitTimeMin != null,
         internalParkId: rideX.internalParkId,
         internalAssetId: rideX.internalAssetId,
         currentWaitTimeMin: rideX.currentWaitTimeMin,
@@ -302,6 +372,12 @@ class AiFeatureStoreService {
         staffDependencyScore: null,
         targetWaitTime15m: null,
         targetWaitTime60m: null,
+        parkIsOpen: elig.parkIsOpen,
+        rideIsOpen: elig.rideIsOpen,
+        forecastEligible: elig.forecastEligible,
+        trainingEligible: elig.trainingEligible,
+        accuracyEligible: elig.accuracyEligible,
+        dataQualityReason: elig.dataQualityReason,
       });
     }
 
@@ -324,45 +400,14 @@ class AiFeatureStoreService {
     }
 
     const parkItems = [];
-    for (const [parkKey, meta] of parkXByKey.entries()) {
+    for (const [, meta] of parkXByKey.entries()) {
       const { provider, externalParkId, samples, avgWait, ridesReporting, parkX } = meta;
       const ridesOpen = samples.filter((s) => s.isOpen === true).length;
       const ridesClosed = samples.filter((s) => s.isOpen === false).length;
-      const waits = samples.map((s) => s.waitTime).filter((v) => typeof v === 'number');
+      const waits = samples.map((s) => s.waitTime).filter((v) => v != null);
 
-      let withinScheduledOperatingHours = null;
-      let scheduledOperatingSnapshotAt = null;
-      if (parkX.localDate && meta.park) {
-        const parkPlain =
-          meta.park && typeof meta.park.get === 'function' ? meta.park.get({ plain: true }) : meta.park || {};
-        const masterSchedule = syntheticScheduleFromParkEnrichment(parkPlain.enrichment, parkX.localDate);
-        if (masterSchedule) {
-          const ev = evaluateScheduledOperatingHours(masterSchedule, bucket, parkX.timezone);
-          withinScheduledOperatingHours = ev.within;
-          scheduledOperatingSnapshotAt = parkPlain.updatedAt ? new Date(parkPlain.updatedAt) : null;
-        } else {
-          const extCandidates = [
-            ...new Set(
-              [externalParkId, parkPlain.externalEntityId, parkPlain.slug]
-                .filter((x) => x != null && String(x).trim() !== '')
-                .map((x) => String(x).trim())
-            ),
-          ];
-          if (extCandidates.length) {
-            // eslint-disable-next-line no-await-in-loop
-            const opRow = await operatingRepo.findLatestOpeningRowForLocalDateFirstMatching(
-              provider,
-              extCandidates,
-              parkX.localDate
-            );
-            if (opRow) {
-              const ev = evaluateScheduledOperatingHours(opRow.openingTimes, bucket, parkX.timezone);
-              withinScheduledOperatingHours = ev.within;
-              scheduledOperatingSnapshotAt = opRow.sampledAt || null;
-            }
-          }
-        }
-      }
+      const withinScheduledOperatingHours = meta.withinScheduledOperatingHours ?? null;
+      const scheduledOperatingSnapshotAt = meta.scheduledOperatingSnapshotAt ?? null;
 
       parkItems.push({
         provider,

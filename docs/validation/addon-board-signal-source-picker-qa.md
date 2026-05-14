@@ -71,7 +71,7 @@
 
 ## Optional Playwright
 
-See **`admin-dashboard/e2e/addon-board-signal-picker.spec.ts`**.
+See **`admin-dashboard/tests/e2e/addon-board-signal-picker.spec.ts`**.
 
 - **Skipped** unless **`E2E_ADDON_BOARD_PARK_ID`** and **`E2E_ADDON_BOARD_RIDE_ID`** (platform asset id) are set.
 - The dev server must be built/run with **`VITE_ADDON_BOARD_SIGNAL_SOURCE_PICKER=true`** (rollback switch **on** for the test). If Playwright starts Vite for you, set **`PLAYWRIGHT_ADDON_BOARD_PICKER=1`** so `playwright.config.ts` injects that env into the web server command.
@@ -85,7 +85,7 @@ set E2E_ADDON_BOARD_RIDE_ID=<asset-uuid>
 set PLAYWRIGHT_START_WEB_SERVER=1
 set PLAYWRIGHT_ADDON_BOARD_PICKER=1
 npx playwright install
-npx playwright test e2e/addon-board-signal-picker.spec.ts
+npx playwright test tests/e2e/addon-board-signal-picker.spec.ts
 ```
 
 If the picker is off or the asset has no board-eligible signals, the test **skips** after a short wait (no failure).

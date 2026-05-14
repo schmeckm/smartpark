@@ -1381,6 +1381,143 @@ components:
             expectedBenefit:
               type: object
               nullable: true
+    AiExplainabilityContributionSource:
+      type: string
+      description: >
+        Pipeline layer tag for one row in `AiExplainabilityMvp.featureContributions` (MVP normalizer).
+        The API normalizes `featureContributions[].source` on emit via `finalizeExplainabilityMvpEnvelope`
+        (`prediction-explanation-normalizer.service.js`); responses use this enum only. Legacy labels
+        `x_context` / `x_layer` are mapped to `baseline_integration` / `x_layer_heuristic`. Clients may
+        still map those strings if displaying stale cached payloads. `capability_ml_policy` marks ridge ML
+        inputs zeroed because `ride_signal_capabilities.capability_json.use_for_ml` is explicitly `false`
+        for a mapped catalog signal. `ai_studio` is reserved for future structured AI Studio rows (today
+        `featureContributions` is often empty for Studio). `unknown` is a forward-compatible fallback for
+        unrecognized source strings.
+      enum:
+        - baseline_integration
+        - x_layer_heuristic
+        - enterprise_ml
+        - snapshot
+        - ridge_model
+        - baseline_rule
+        - capability_ml_policy
+        - ai_studio
+        - unknown
+    AiExplainabilityFeatureContribution:
+      type: object
+      required:
+        - feature
+        - impact
+        - direction
+        - source
+        - explanation
+      properties:
+        feature:
+          type: string
+        value:
+          nullable: true
+          description: 'Scalar feature value when available (number, string, boolean, or null).'
+        impact:
+          type: number
+        direction:
+          type: string
+          description: 'UI hint; ridge importance rows often use `NEUTRAL` when `impact` is magnitude-only.'
+        source:
+          $ref: '#/components/schemas/AiExplainabilityContributionSource'
+        explanation:
+          type: string
+    AiExplainabilityModelInfo:
+      type: object
+      required:
+        - track
+      properties:
+        track:
+          type: string
+          description: 'Discriminator for which pipeline produced this envelope.'
+          enum:
+            - ADR_FORECAST
+            - RIDGE_RIDE_WAIT
+            - AI_STUDIO
+        modelId:
+          type: string
+          nullable: true
+        modelVersion:
+          type: string
+          nullable: true
+        algorithm:
+          type: string
+          nullable: true
+        basis:
+          type: string
+          nullable: true
+          description: 'ADR forecast resolution basis when applicable (`ENTITY`, `ENTITY_TYPE`, `PARK`, `NONE`).'
+        scope:
+          type: string
+          nullable: true
+          description: 'ADR explainability scope when applicable (`park`, `entity`).'
+    AiExplainabilityMvp:
+      type: object
+      description: >
+        Normalized MVP explainability envelope. ADR forecast explanation routes return this as `data.explainability`
+        alongside legacy fields; ridge ride predict returns the same shape as `data.explanation` when `explain=1`.
+      required:
+        - target
+        - unit
+        - confidence
+        - featureContributions
+        - summary
+        - recommendation
+        - modelInfo
+      properties:
+        target:
+          type: string
+        prediction:
+          type: number
+          nullable: true
+        unit:
+          type: string
+        confidence:
+          type: number
+        baseline:
+          type: number
+          nullable: true
+        adjustedPrediction:
+          type: number
+          nullable: true
+        featureContributions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AiExplainabilityFeatureContribution'
+        summary:
+          type: string
+        recommendation:
+          type: string
+        modelInfo:
+          $ref: '#/components/schemas/AiExplainabilityModelInfo'
+        mlCapabilityMaskedFeatures:
+          type: array
+          description: >
+            Ridge track only: ML feature keys from `TRAINING_FEATURE_NAMES` sent as `0` because the operator
+            set explicit `use_for_ml: false` on a mapped `signal_catalog.signal_code`. Omitted or empty when
+            nothing was masked. Same keys may appear in `featureContributions` with `source: capability_ml_policy`.
+          items:
+            type: string
+    ForecastExplanationResponseData:
+      type: object
+      description: >
+        Legacy park/entity forecast explanation fields (`baseValue`, `finalPrediction`, `adjustments`, …)
+        plus MVP `explainability` (`AiExplainabilityMvp`, track `ADR_FORECAST`).
+      properties:
+        explainability:
+          $ref: '#/components/schemas/AiExplainabilityMvp'
+      additionalProperties: true
+    EnvelopeForecastExplanation:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/ForecastExplanationResponseData'
     EnvelopeMlRidePredict:
       type: object
       properties:
@@ -1388,6 +1525,13 @@ components:
           type: boolean
         data:
           type: object
+          description: >
+            Legacy ride wait prediction payload. With `?explain=1` or `?explain=true`, includes `explanation`
+            (`AiExplainabilityMvp`, track `RIDGE_RIDE_WAIT`) alongside `rideId`, `predictions`, `topFactors`, etc.
+          properties:
+            explanation:
+              $ref: '#/components/schemas/AiExplainabilityMvp'
+              nullable: true
           additionalProperties: true
     EnvelopeMlParkForecastSummary:
       type: object
@@ -1421,7 +1565,112 @@ components:
         data:
           type: object
           additionalProperties: true
-    AiStudioTrainRequest:
+    EnvelopeMlPredictionTraces:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+          description: 'Rows from `ml_prediction_traces` (Sequelize plain; includes `featureVectorJson`, etc.)'
+    MlPredictionTraceFilterOptions:
+      type: object
+      properties:
+        modelNames:
+          type: array
+          items:
+            type: string
+        targetNames:
+          type: array
+          items:
+            type: string
+      required:
+        - modelNames
+        - targetNames
+    EnvelopeMlPredictionTraceFilterOptions:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/MlPredictionTraceFilterOptions'
+    EnvelopeMlPredictionTraceDetail:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            trace:
+              type: object
+              nullable: true
+              additionalProperties: true
+            results:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+            learnedCoefficients:
+              type: object
+              nullable: true
+              description: 'Phase 5 — ridge_v1 standardized coefficients from ml_model_registry (read-only); null when unavailable.'
+              additionalProperties: true
+            manualBusinessWeights:
+              type: object
+              nullable: true
+              description: 'Phase 4/5 — merged manual feature weights when ML_FEATURE_WEIGHTS_ENABLED; null otherwise.'
+              additionalProperties: true
+    MlPredictionTraceCoefficientRow:
+      type: object
+      properties:
+        feature:
+          type: string
+        coefficient:
+          type: number
+        direction:
+          type: string
+          enum:
+            - positive
+            - negative
+            - neutral
+        absoluteRank:
+          type: integer
+          minimum: 1
+      required:
+        - feature
+        - coefficient
+        - direction
+        - absoluteRank
+    MlPredictionTraceCoefficientsPayload:
+      type: object
+      properties:
+        predictionId:
+          type: string
+          format: uuid
+        modelName:
+          type: string
+        modelVersion:
+          type: string
+          nullable: true
+        coefficients:
+          type: array
+          items:
+            $ref: '#/components/schemas/MlPredictionTraceCoefficientRow'
+      required:
+        - predictionId
+        - modelName
+        - coefficients
+    EnvelopeMlPredictionTraceCoefficients:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/MlPredictionTraceCoefficientsPayload'
       type: object
       description: 'Mirrors `trainBody` in `ai-studio.validators.js` (dataset FEATURE_STORE \| SANDBOX, entityType, features, targetVariable, strategy, algorithm, horizonMinutes rules). Additional server-side constraints apply.'
       additionalProperties: true
@@ -1788,6 +2037,86 @@ components:
           nullable: true
           type: object
           additionalProperties: true
+    AddonBoardVenueTriplet:
+      type: object
+      description: 'Counts of active `park_assets` by `AssetType` RESTAURANT, SHOP, SHOW (Phase 3 cross-asset context). No POS throughput.'
+      properties:
+        restaurants:
+          type: integer
+          minimum: 0
+        shops:
+          type: integer
+          minimum: 0
+        shows:
+          type: integer
+          minimum: 0
+    AddonBoardCrossAssetHint:
+      type: object
+      description: 'Rule-based operations hint; clients map `code` to i18n.'
+      properties:
+        code:
+          type: string
+          example: CROSS_QUEUE_NEAR_COMMERCE
+        severity:
+          type: string
+          enum:
+            - INFO
+    AddonBoardCrossAssetContextRideSwdec:
+      type: object
+      description: 'Nested under ride card `swdec` — venues in the ride zone plus hint codes.'
+      required:
+        - schemaVersion
+        - zoneVenues
+        - hints
+      properties:
+        schemaVersion:
+          type: integer
+          enum:
+            - 1
+        zoneVenues:
+          $ref: '#/components/schemas/AddonBoardVenueTriplet'
+        hints:
+          type: array
+          items:
+            $ref: '#/components/schemas/AddonBoardCrossAssetHint'
+    AddonBoardCrossAssetContextPark:
+      type: object
+      description: 'Park-level venue roll-up on L0 / ride-list / critical-list / ride-detail root. Omitted when there are no venue assets.'
+      required:
+        - schemaVersion
+        - parkVenues
+        - zonesWithVenues
+      properties:
+        schemaVersion:
+          type: integer
+          enum:
+            - 1
+        parkVenues:
+          $ref: '#/components/schemas/AddonBoardVenueTriplet'
+        zonesWithVenues:
+          type: integer
+          minimum: 0
+          description: 'Distinct zone keys (including unzoned bucket) with at least one venue asset.'
+    AddonBoardCrossAssetContextZoneResponse:
+      type: object
+      description: 'L1 zone summary — selected zone triplet plus park totals.'
+      required:
+        - schemaVersion
+        - parkVenues
+        - zoneVenues
+        - zonesWithVenues
+      properties:
+        schemaVersion:
+          type: integer
+          enum:
+            - 1
+        parkVenues:
+          $ref: '#/components/schemas/AddonBoardVenueTriplet'
+        zoneVenues:
+          $ref: '#/components/schemas/AddonBoardVenueTriplet'
+        zonesWithVenues:
+          type: integer
+          minimum: 0
     EnvelopeAddonBoardParkSummary:
       type: object
       properties:
@@ -1796,6 +2125,11 @@ components:
         data:
           type: object
           additionalProperties: true
+          properties:
+            crossAssetContext:
+              nullable: true
+              allOf:
+                - $ref: '#/components/schemas/AddonBoardCrossAssetContextPark'
     EnvelopeAddonBoardRides:
       type: object
       properties:
@@ -1804,6 +2138,20 @@ components:
         data:
           type: object
           additionalProperties: true
+          properties:
+            weatherContext:
+              type: object
+              nullable: true
+              additionalProperties: true
+            crossAssetContext:
+              nullable: true
+              allOf:
+                - $ref: '#/components/schemas/AddonBoardCrossAssetContextPark'
+            rides:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
     EnvelopeAddonBoardZone:
       type: object
       properties:
@@ -1812,6 +2160,15 @@ components:
         data:
           type: object
           additionalProperties: true
+          properties:
+            weatherContext:
+              type: object
+              nullable: true
+              additionalProperties: true
+            crossAssetContext:
+              nullable: true
+              allOf:
+                - $ref: '#/components/schemas/AddonBoardCrossAssetContextZoneResponse'
     EnvelopeAddonBoardRideDetail:
       type: object
       properties:
@@ -1820,6 +2177,17 @@ components:
         data:
           type: object
           additionalProperties: true
+          properties:
+            crossAssetContext:
+              nullable: true
+              allOf:
+                - $ref: '#/components/schemas/AddonBoardCrossAssetContextPark'
+            swdec:
+              type: object
+              additionalProperties: true
+              properties:
+                crossAssetContext:
+                  $ref: '#/components/schemas/AddonBoardCrossAssetContextRideSwdec'
     EnvelopeAddonBoardZoneList:
       type: object
       properties:
@@ -3662,6 +4030,17 @@ components:
       properties:
         success:
           type: boolean
+        data:
+          $ref: '#/components/schemas/UnsRegistryMirrorSummary'
+    EnvelopeUnsRegistryMirrorSyncPost:
+      type: object
+      properties:
+        success:
+          type: boolean
+        syncedAt:
+          type: string
+          format: date-time
+          description: ISO-8601 timestamp when the full mirror transaction completed
         data:
           $ref: '#/components/schemas/UnsRegistryMirrorSummary'
     UnsHierarchyImportBody:

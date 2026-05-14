@@ -1,0 +1,15 @@
+# Smart Park OS — adapter install config (YAML). Managed by PATCH/POST install-local only.
+schemaVersion: 1
+adapterKey: themeparks_wiki
+installedAt: '2026-05-08T10:29:37.879Z'
+updatedAt: '2026-05-13T19:29:28.125Z'
+configJson:
+  parkId: 639738d3-9574-4f60-ab5b-4c392901320b
+contextJson:
+  parkSlug: europapark
+outputProfiles:
+  - SPARKPLUG_JSON
+  - CANONICAL_HISTORIAN
+emitEnabled: true
+ingestCanonicalEnabled: true
+scheduleCron: null

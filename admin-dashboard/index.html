@@ -1,6 +1,19 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <script>
+      ;(function () {
+        try {
+          var light = localStorage.getItem('sp_theme') === 'light'
+          document.documentElement.classList.toggle('sp-theme-light', light)
+          document.documentElement.classList.toggle('dark', !light)
+        } catch (e) {
+          document.documentElement.classList.add('dark')
+        }
+      })()
+    </script>
+    <!-- Filled by `smartpark-login-hero-html` in vite.config.ts -->
+    <!--@SMARTPARK_LOGIN_HERO@-->
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />

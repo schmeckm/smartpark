@@ -60,6 +60,9 @@ const patchSettingsSchema = Joi.object({
     externalParkId: Joi.string().required(),
     parkName: Joi.string().allow(null, ''),
   }).allow(null),
+  dataSourceMode: Joi.object({
+    mode: Joi.string().valid('MQTT_UNS', 'THEMEPARKS_ADAPTER', 'HYBRID').required(),
+  }),
   autoApplyEnabled: Joi.object({ enabled: Joi.boolean().required() }),
   pollingEnabled: Joi.object({ enabled: Joi.boolean().required() }),
   pollingIntervalSeconds: Joi.object({ seconds: Joi.number().integer().min(30).max(86400).required() }),

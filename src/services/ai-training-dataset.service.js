@@ -36,7 +36,7 @@ async function buildRideQueueTrainingDataset(parkId, opts = {}) {
   }
 
   const snaps = await RideFeatureSnapshot.findAll({
-    where: { [Op.or]: whereOr },
+    where: { [Op.and]: [{ [Op.or]: whereOr }, { trainingEligible: true }] },
     order: [['snapshotAt', 'DESC']],
     limit,
   });
@@ -54,6 +54,7 @@ async function buildRideQueueTrainingDataset(parkId, opts = {}) {
         provider: cur.provider,
         externalParkId: cur.externalParkId,
         externalEntityId: cur.externalEntityId,
+        trainingEligible: true,
         snapshotAt: {
           [Op.between]: [
             new Date(targetAt.getTime() - 7.5 * 60 * 1000),

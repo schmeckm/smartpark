@@ -11,6 +11,27 @@ export function slugifyUnsParkKey(s: string): string {
     .replace(/^_+|_+$/g, '')
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+export function isLikelyUuid(s: string | null | undefined): boolean {
+  return UUID_RE.test(String(s || '').trim())
+}
+
+/**
+ * Raw Sparkplug group key before `slugifyUnsParkKey` (e.g. europa_park).
+ * Must match OEE MQTT Cockpit: never treat a park UUID as the group id — it slugifies to a different string than the broker group.
+ */
+export function resolveRawMqttSparkplugGroupKey(
+  parkSlug: string | null | undefined,
+  parkId: string | null | undefined
+): string {
+  const slug = parkSlug?.trim()
+  if (slug) return slug
+  const pid = parkId?.trim()
+  if (pid && !isLikelyUuid(pid)) return pid
+  return 'europa_park'
+}
+
 export type OeeDeviceSnapshot = {
   deviceId: string
   lastReceivedAt: string
@@ -25,9 +46,17 @@ function normGroupId(g: string | null | undefined): string {
 
 /**
  * Latest metric value per device from DDATA rows (chronological overwrite).
+ * @param resolvedGroupLower - optional lowercase Sparkplug group from {@link getUnsMqttLiveStatus} (SPARKPLUG_GROUP_ID)
  */
-export function aggregateDdataByDevice(events: UnsMqttLiveEvent[], groupKey: string): OeeDeviceSnapshot[] {
-  const want = normGroupId(slugifyUnsParkKey(groupKey))
+export function aggregateDdataByDevice(
+  events: UnsMqttLiveEvent[],
+  groupKey: string,
+  resolvedGroupLower?: string | null
+): OeeDeviceSnapshot[] {
+  const want =
+    resolvedGroupLower != null && String(resolvedGroupLower).trim() !== ''
+      ? normGroupId(resolvedGroupLower)
+      : normGroupId(slugifyUnsParkKey(groupKey))
   const filtered = events.filter((e) => {
     if (normGroupId(e.groupId) !== want) return false
     if (String(e.messageType || '').toUpperCase() !== 'DDATA') return false
@@ -61,10 +90,18 @@ export function useOeeMqttCockpit(groupKey: () => string) {
   const apiOrigin = import.meta.env.VITE_API_URL || undefined
   const events = ref<UnsMqttLiveEvent[]>([])
   const liveStatus = ref<UnsMqttLiveStatus | null>(null)
+  /** Lowercase Sparkplug group segment; set from mqtt-live status (aligns with API SPARKPLUG_GROUP_ID). */
+  const mqttGroupForFilter = ref<string | null>(null)
   const loadError = ref<string | null>(null)
   const socket = ref<Socket | null>(null)
 
-  const devices = computed(() => aggregateDdataByDevice(events.value, groupKey()))
+  const devices = computed(() => aggregateDdataByDevice(events.value, groupKey(), mqttGroupForFilter.value))
+
+  function syncMqttGroupFromStatus(st: UnsMqttLiveStatus | null) {
+    const mg = st?.mqttGroupId
+    mqttGroupForFilter.value =
+      mg != null && String(mg).trim() !== '' ? String(mg).toLowerCase().trim() : null
+  }
 
   async function loadEvents() {
     const key = groupKey().trim()
@@ -74,6 +111,7 @@ export function useOeeMqttCockpit(groupKey: () => string) {
     }
     loadError.value = null
     try {
+      await loadStatus()
       const list = await getUnsMqttLiveEvents(slugifyUnsParkKey(key), { limit: 2000 })
       events.value = list
     } catch (e) {
@@ -85,13 +123,16 @@ export function useOeeMqttCockpit(groupKey: () => string) {
   async function loadStatus() {
     try {
       liveStatus.value = await getUnsMqttLiveStatus(slugifyUnsParkKey(groupKey() || 'europa_park'))
+      syncMqttGroupFromStatus(liveStatus.value)
     } catch {
       liveStatus.value = null
+      mqttGroupForFilter.value = null
     }
   }
 
   function pushIncoming(rows: UnsMqttLiveEvent[]) {
-    const want = normGroupId(slugifyUnsParkKey(groupKey()))
+    const g = mqttGroupForFilter.value?.trim()
+    const want = g ? normGroupId(g) : normGroupId(slugifyUnsParkKey(groupKey()))
     const incoming = rows.filter((e) => normGroupId(e.groupId) === want)
     if (!incoming.length) return
     events.value = [...incoming, ...events.value].slice(0, 2000)
@@ -115,19 +156,17 @@ export function useOeeMqttCockpit(groupKey: () => string) {
 
   onMounted(() => {
     void loadEvents()
-    void loadStatus()
     connectSocket()
     pollTimer = setInterval(() => {
       void loadEvents()
-      void loadStatus()
     }, 5000)
   })
 
   watch(
     () => groupKey(),
     () => {
+      mqttGroupForFilter.value = null
       void loadEvents()
-      void loadStatus()
     }
   )
 

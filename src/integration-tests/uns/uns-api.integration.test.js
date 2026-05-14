@@ -62,6 +62,19 @@ test('UNS registry mirror: integrations user receives 200 summary', async (t) =>
   assert.equal(res.body.success, true);
 });
 
+test('UNS registry mirror: POST mirror/sync forces full sync', async (t) => {
+  if (!ENABLED || !dbOk) {
+    t.skip();
+    return;
+  }
+  const token = await loginAccessToken('admin@smartpark.com', 'Smartpark123!');
+  const res = await request(app).post('/api/v1/uns-registry/mirror/sync').set('Authorization', `Bearer ${token}`);
+  assert.equal(res.status, 200);
+  assert.equal(res.body.success, true);
+  assert.ok(res.body.syncedAt);
+  assert.ok(res.body.data?.counts && typeof res.body.data.counts.sparkplugMetricDefinitions === 'number');
+});
+
 test('UNS registry mirror: HR_MANAGER without integrations.read receives 403', async (t) => {
   if (!ENABLED || !dbOk) {
     t.skip();
@@ -70,6 +83,17 @@ test('UNS registry mirror: HR_MANAGER without integrations.read receives 403', a
   await ensureHrUserWithoutIntegrationsRead();
   const token = await loginAccessToken(HR_EMAIL, 'Smartpark123!');
   const res = await request(app).get('/api/v1/uns-registry/mirror/summary').set('Authorization', `Bearer ${token}`);
+  assert.equal(res.status, 403);
+});
+
+test('UNS registry mirror: POST mirror/sync forbidden for HR_MANAGER without integrations.read', async (t) => {
+  if (!ENABLED || !dbOk) {
+    t.skip();
+    return;
+  }
+  await ensureHrUserWithoutIntegrationsRead();
+  const token = await loginAccessToken(HR_EMAIL, 'Smartpark123!');
+  const res = await request(app).post('/api/v1/uns-registry/mirror/sync').set('Authorization', `Bearer ${token}`);
   assert.equal(res.status, 403);
 });
 
@@ -93,6 +117,54 @@ test('MQTT inbound unknown list returns structured payload', async (t) => {
   const res = await request(app).get('/api/v1/mqtt/inbound/unknown?limit=5').set('Authorization', `Bearer ${token}`);
   assert.equal(res.status, 200);
   assert.equal(res.body.success, true);
+});
+
+/** Asset „Signale“ panel and UNS Live share GET `/uns/parks/:parkId/mqtt-live/events` + client-side match (`uns-mqtt-live-signal-match.mjs`). */
+test('UNS mqtt-live events: GET returns events array for integration park id', async (t) => {
+  if (!ENABLED || !dbOk) {
+    t.skip();
+    return;
+  }
+  const park = await Park.findOne({ attributes: ['id'] });
+  if (!park) {
+    t.skip();
+    return;
+  }
+  const token = await loginAccessToken('admin@smartpark.com', 'Smartpark123!');
+  const res = await request(app)
+    .get(`/api/v1/uns/parks/${park.id}/mqtt-live/events?limit=20`)
+    .set('Authorization', `Bearer ${token}`);
+  assert.equal(res.status, 200);
+  assert.equal(res.body.success, true);
+  assert.ok(Array.isArray(res.body.data?.events));
+});
+
+test('UNS GET sparkplug-topic-preview returns spBv1 topic for asset', async (t) => {
+  if (!ENABLED || !dbOk) {
+    t.skip();
+    return;
+  }
+  const { ParkAsset } = require('../../models');
+  const park = await Park.findOne({ attributes: ['id'] });
+  if (!park) {
+    t.skip();
+    return;
+  }
+  const asset = await ParkAsset.findOne({ where: { parkId: park.id }, attributes: ['assetId'] });
+  if (!asset) {
+    t.skip();
+    return;
+  }
+  const token = await loginAccessToken('admin@smartpark.com', 'Smartpark123!');
+  const res = await request(app)
+    .get(`/api/v1/uns/parks/${park.id}/sparkplug-topic-preview`)
+    .query({ assetId: String(asset.assetId) })
+    .set('Authorization', `Bearer ${token}`);
+  assert.equal(res.status, 200);
+  assert.equal(res.body.success, true);
+  assert.match(res.body.data.topicPreview, /^spBv1\.0\//);
+  assert.ok(res.body.data.edgeNodeId && String(res.body.data.edgeNodeId).length > 0);
+  assert.ok(typeof res.body.data.source === 'string');
 });
 
 test('operations facts park route: X-Park-Id mismatch returns 403', async (t) => {

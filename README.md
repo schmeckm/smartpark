@@ -1,5 +1,15 @@
 # Smart Park OS (Backend MVP)
 
+> **Three entry points, depending on what you need:**
+>
+> - [`PRODUCT.md`](PRODUCT.md) — business / product overview (value
+>   proposition, modules, target markets, roadmap, pricing tiers).
+> - [`BUILD.md`](BUILD.md) — structured developer guide *("Wie baue ich es?")*:
+>   first integration, adapter contract, frontend cards, AI hooks,
+>   simulator, governance checks.
+> - This `README.md` — technical reference (architecture details, env
+>   variables, REST surface, MQTT topics, Docker Compose).
+
 Smart Park OS is an operations-oriented API for large venues (amusement parks, resorts, stadiums, zoos). This MVP focuses on **visitor flow signals** that drive **workforce and operations recommendations**, with **realtime** updates over **Socket.IO**.
 
 ## Architecture

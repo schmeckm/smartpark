@@ -42,6 +42,11 @@ function defineStaff(sequelize) {
         allowNull: true,
         field: 'current_zone_id',
       },
+      currentRideId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'current_ride_id',
+      },
       available: {
         type: DataTypes.BOOLEAN,
         allowNull: false,

@@ -11,6 +11,19 @@
           application/json:
             schema:
               $ref: '#/components/schemas/EnvelopeUnsRegistryMirrorSummary'
+/uns-registry/mirror/sync:
+  post:
+    tags:
+      - UNS
+    summary: 'UNS registry mirror — force full sync from legacy'
+    description: 'Requires **integrations.read**. Runs a full mirror rebuild (ignores stale TTL). Use after deploy or when canonical Sparkplug metrics / signal catalog must refresh immediately.'
+    responses:
+      '200':
+        description: 'Sync completed; mirror counts plus syncedAt'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeUnsRegistryMirrorSyncPost'
 /uns-registry/entities:
   get:
     tags:

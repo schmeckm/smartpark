@@ -3,7 +3,12 @@
     tags:
       - Admin
     summary: 'Read ride signal capability flags (master-data / registry prep)'
-    description: 'Requires **`integrations.read`** or **`rides.read`**.'
+    description: >
+      Requires **`integrations.read`** or **`rides.read`**. Response rows include `useForMl` / `useForForecast`
+      (from `ride_signal_capabilities.capability_json`): **`useForMl`** — explicit `false` zeroes mapped ridge
+      ML inputs (ride wait predictor + dataset); omitted boolean does not mask; explicit `true` wins over
+      `false` for the same ML feature key. **`useForForecast`** — readiness / governance only (resolver +
+      UI); does not change ADR forecast math.
     parameters:
       -
         in: path
@@ -27,7 +32,11 @@
     tags:
       - Admin
     summary: 'Replace ride signal capability document'
-    description: 'Requires **`integrations.manage`** or **`rides.update`**. Body validated server-side.'
+    description: >
+      Requires **`integrations.manage`** or **`rides.update`**. Body validated server-side. Per-signal
+      `useForMl` / `useForForecast` are stored in **`capability_json`** — semantics match GET description
+      (`useForMl` drives ridge feature zero-masking only when explicitly boolean; `useForForecast` is
+      readiness for forecast-quality gates, not ADR computation).
     parameters:
       -
         in: path
@@ -42,7 +51,45 @@
         application/json:
           schema:
             type: object
-            additionalProperties: true
+            required:
+              - capabilities
+            properties:
+              capabilities:
+                type: array
+                minItems: 1
+                maxItems: 500
+                items:
+                  type: object
+                  required:
+                    - signalCatalogId
+                    - signalSource
+                  additionalProperties: false
+                  properties:
+                    signalCatalogId:
+                      type: string
+                      format: uuid
+                    signalSource:
+                      type: string
+                      enum: [NOT_AVAILABLE, MASTER_DATA, MANUAL, ADAPTER, MQTT_EDGE, SIMULATION, ML]
+                    valueType:
+                      type: string
+                      maxLength: 64
+                    useForMl:
+                      type: boolean
+                      description: >
+                        Persisted as `capability_json.useForMl`. **Only an explicit JSON boolean `false`**
+                        (per mapped `signal_catalog.signal_code`) zeroes the corresponding ride **ridge** ML
+                        feature input and surfaces in explainability as `capability_ml_policy`. If the field
+                        is omitted or not a boolean, it does **not** trigger masking. If one capability maps
+                        to an ML key with `false` and another maps to the same key with `true`, **`true` wins**
+                        (feature stays active).
+                    useForForecast:
+                      type: boolean
+                      description: >
+                        Persisted as `capability_json.useForForecast`. Used for **forecast readiness**
+                        (e.g. `signal-availability-resolver` / admin live-stale checks when this row opts into
+                        forecast expectations). **Does not** alter ADR park/entity forecast formulas or
+                        snapshot column selection.
     responses:
       '200':
         description: OK

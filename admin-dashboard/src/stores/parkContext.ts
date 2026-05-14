@@ -18,6 +18,8 @@ function readStoredParkId(): string | null {
 export const useParkContextStore = defineStore('parkContext', () => {
   const parks = ref<PlatformPark[]>([])
   const activeParkId = ref<string | null>(readStoredParkId())
+  /** Align fetch helper with persisted park before async hydrate (PdM etc. need X-Park-Id; listAssets can use query-only). */
+  setApiParkContextId(activeParkId.value)
   const loaded = ref(false)
   const loadError = ref<string | null>(null)
 

@@ -247,3 +247,50 @@ test('mergeOperatorCapabilityForRide updates existing OPERATOR row', async () =>
   await s.mergeOperatorCapabilityForRide(RIDE_A, { signalCatalogId: CAT, signalSource: 'MANUAL', valueType: 'number' });
   assert.equal(updates, 1);
 });
+
+test('mergeOperatorCapabilityForRide persists explicit ML usage flags', async () => {
+  /** @type {Record<string, unknown> | null} */
+  let updateBody = null;
+  const s = svc({
+    SignalCatalog: {
+      findByPk: async (id) =>
+        id === CAT
+          ? {
+              id: CAT,
+              get(k) {
+                if (k === 'signalCode') return 'queue_time';
+                if (k === 'id') return CAT;
+                return undefined;
+              },
+            }
+          : null,
+    },
+    RideSignalCapability: {
+      findOrCreate: async () => [
+        {
+          get(k) {
+            if (k === 'capabilityJson') return { signalSource: 'ML', valueType: 'number', useForMl: true, useForForecast: true };
+            return null;
+          },
+          update: async (body) => {
+            updateBody = body;
+          },
+        },
+        false,
+      ],
+    },
+  });
+
+  await s.mergeOperatorCapabilityForRide(RIDE_A, {
+    signalCatalogId: CAT,
+    signalSource: 'MANUAL',
+    valueType: 'number',
+    useForMl: false,
+    useForForecast: true,
+  });
+
+  assert.ok(updateBody && typeof updateBody === 'object');
+  const capabilityJson = updateBody && typeof updateBody === 'object' ? updateBody.capabilityJson : null;
+  assert.equal(capabilityJson.useForMl, false);
+  assert.equal(capabilityJson.useForForecast, true);
+});

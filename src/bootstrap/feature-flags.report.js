@@ -77,6 +77,11 @@ function buildFeatureFlagReport(env) {
       samplingEnabled: Boolean(env.aiSamplingEnabled),
       samplingIntervalSeconds: env.aiSamplingIntervalSeconds,
     },
+    mlForecast: {
+      traceEnabled: Boolean(env.mlTraceEnabled),
+      profileEnabled: Boolean(env.mlProfileEnabled),
+      featureWeightsEnabled: Boolean(env.mlFeatureWeightsEnabled),
+    },
     weather: {
       openMeteoEnabled: Boolean(env.weatherOpenMeteoEnabled),
       openMeteoIntervalSeconds: env.weatherOpenMeteoIntervalSeconds,

@@ -324,6 +324,39 @@
                   additionalProperties: true
       '404':
         $ref: '#/components/responses/NotFound'
+'/parks/{parkId}/level0':
+  patch:
+    tags:
+      - Platform
+    summary: 'Patch park Level-0 master profile (hours baseline, Sparkplug routing block, identity)'
+    parameters:
+      -
+        in: path
+        name: parkId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            minProperties: 1
+            additionalProperties: true
+            description: 'Subset of park master profile — see `parkLevel0Body` validator'
+    responses:
+      '200':
+        description: OK
+      '400':
+        description: Validation error
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+      '404':
+        $ref: '#/components/responses/NotFound'
 '/parks/{parkId}/shift-handovers':
   parameters:
     -
@@ -394,3 +427,180 @@
     responses:
       '201':
         description: Created
+'/parks/{parkId}/shift-handovers/{entryId}/acknowledge':
+  post:
+    tags:
+      - Platform
+    summary: 'Acknowledge shift handover entry'
+    parameters:
+      -
+        in: path
+        name: parkId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      -
+        in: path
+        name: entryId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    requestBody:
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              note:
+                type: string
+                maxLength: 4000
+                nullable: true
+    responses:
+      '200':
+        description: OK
+      '404':
+        $ref: '#/components/responses/NotFound'
+'/parks/{parkId}/shift-handovers/{entryId}/tasks':
+  patch:
+    tags:
+      - Platform
+    summary: 'Replace follow-up task list on shift handover entry'
+    parameters:
+      -
+        in: path
+        name: parkId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      -
+        in: path
+        name: entryId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - tasks
+            properties:
+              tasks:
+                type: array
+                maxItems: 100
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      maxLength: 80
+                    title:
+                      type: string
+                      maxLength: 280
+                    ownerUserId:
+                      type: string
+                      format: uuid
+                      nullable: true
+                    dueAt:
+                      type: string
+                      maxLength: 64
+                      nullable: true
+                    status:
+                      type: string
+                      enum:
+                        - OPEN
+                        - DONE
+                        - CANCELLED
+                  required:
+                    - title
+    responses:
+      '200':
+        description: OK
+      '404':
+        $ref: '#/components/responses/NotFound'
+'/parks/{parkId}/shift-handovers/reminders/due':
+  get:
+    tags:
+      - Platform
+    summary: 'List shift handovers with reminders due'
+    parameters:
+      -
+        in: path
+        name: parkId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      -
+        in: query
+        name: limit
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+    responses:
+      '200':
+        description: OK
+      '404':
+        $ref: '#/components/responses/NotFound'
+'/parks/{parkId}/shift-handovers/{entryId}/reminders/mark-sent':
+  post:
+    tags:
+      - Platform
+    summary: 'Mark shift handover reminder as sent'
+    parameters:
+      -
+        in: path
+        name: parkId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      -
+        in: path
+        name: entryId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: OK
+      '404':
+        $ref: '#/components/responses/NotFound'
+'/parks/{parkId}/shift-handovers/{entryId}/pdf':
+  get:
+    tags:
+      - Platform
+    summary: 'Download shift handover PDF'
+    parameters:
+      -
+        in: path
+        name: parkId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      -
+        in: path
+        name: entryId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: PDF stream
+        content:
+          application/pdf:
+            schema:
+              type: string
+              format: binary
+      '404':
+        $ref: '#/components/responses/NotFound'

@@ -44,6 +44,12 @@ function defineMdmModels(sequelize, refs = {}) {
       code: { type: DataTypes.STRING(64), allowNull: false },
       name: { type: DataTypes.STRING(200), allowNull: false },
       sortOrder: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'sort_order' },
+      zoneContext: {
+        type: DataTypes.JSONB,
+        allowNull: false,
+        defaultValue: {},
+        field: 'zone_context',
+      },
       legacyZoneId: { type: DataTypes.UUID, allowNull: true, field: 'legacy_zone_id' },
       createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
       updatedBy: { type: DataTypes.UUID, allowNull: true, field: 'updated_by' },

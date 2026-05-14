@@ -17,8 +17,10 @@ const props = withDefaults(
     entityId: string | number
     /** Selected ML-eligible signal keys (multi-select). */
     modelValue?: string[]
+    /** When set, replaces the default empty-state copy (e.g. parent-specific wording). */
+    emptyHint?: string
   }>(),
-  { modelValue: () => [] }
+  { modelValue: () => [], emptyHint: undefined }
 )
 
 const emit = defineEmits<{
@@ -133,7 +135,7 @@ function toggle(signalKey: string) {
       v-else-if="!mlEligibleSources.length"
       class="rounded-md border border-slate-700 bg-slate-950/40 px-3 py-2 text-sm text-slate-400"
     >
-      {{ t('mlSignalPicker.empty') }}
+      {{ props.emptyHint && props.emptyHint.trim() ? props.emptyHint : t('mlSignalPicker.empty') }}
     </p>
 
     <template v-else>

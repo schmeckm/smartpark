@@ -6,7 +6,7 @@ This document is the **minimal validation layer** for editing **ride-level** UNS
 
 - API reachable from the browser (e.g. backend on `http://localhost:3000`, Vite dev server proxying `/api` — see root `README.md`).
 - Admin dashboard running (e.g. `cd admin-dashboard && npm run dev`).
-- A user with **`rides.update`** (default E2E admin matches `admin-dashboard/e2e/uns-hub.spec.ts` env overrides).
+- A user with **`rides.update`** (default E2E admin matches `admin-dashboard/tests/e2e/uns-hub.spec.ts` env overrides).
 - A valid **MDM ride UUID** that exists in the environment under test.
 
 ## Manual checklist
@@ -29,7 +29,7 @@ This document is the **minimal validation layer** for editing **ride-level** UNS
 
 ## Optional Playwright test
 
-The spec **`admin-dashboard/e2e/mdm-ride-extensions.spec.ts`** automates the same flow using a **unique** `queue.e2e_pw_<timestamp>` signal key (add → save → reload → expect text).
+The spec **`admin-dashboard/tests/e2e/mdm-ride-extensions.spec.ts`** automates the same flow using a **unique** `queue.e2e_pw_<timestamp>` signal key (add → save → reload → expect text).
 
 ### Environment variables
 
@@ -49,7 +49,7 @@ Install Playwright browsers once per machine (`npx playwright install` from `adm
 cd admin-dashboard
 set E2E_MDM_RIDE_ID=<your-uuid>   # Windows cmd
 # export E2E_MDM_RIDE_ID=<your-uuid>   # Unix
-npm run test:e2e -- e2e/mdm-ride-extensions.spec.ts
+npm run test:e2e -- tests/e2e/mdm-ride-extensions.spec.ts
 ```
 
 The test leaves a harmless `queue.e2e_pw_*` row in extensions until someone removes it; that is acceptable for smoke environments.

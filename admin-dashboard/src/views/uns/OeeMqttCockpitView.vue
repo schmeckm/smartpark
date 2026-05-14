@@ -1,10 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
-import OeeGaugeRing from '@/components/OeeGaugeRing.vue'
+import StandardPercentGaugeMini from '@/components/StandardPercentGaugeMini.vue'
 import { getAttractionOeeSimulatorCandidates, type AttractionOeeSimCandidate } from '@/api/client'
 import { useParkContextStore } from '@/stores/parkContext'
-import { numMetric, slugifyUnsParkKey, useOeeMqttCockpit, type OeeDeviceSnapshot } from '@/composables/useOeeMqttCockpit'
+import {
+  numMetric,
+  resolveRawMqttSparkplugGroupKey,
+  slugifyUnsParkKey,
+  useOeeMqttCockpit,
+  type OeeDeviceSnapshot,
+} from '@/composables/useOeeMqttCockpit'
 import { useRegionalDateTime } from '@/composables/useRegionalDateTime'
 import { loadPersistedMdAssetIds } from '@/utils/oeeMdSimSelection'
 import { useToast } from '@/composables/useToast'
@@ -26,7 +32,9 @@ watch(
   { immediate: true }
 )
 
-const groupKey = () => sparkplugGroupInput.value.trim() || parkContext.activePark?.slug || 'europa_park'
+const groupKey = () =>
+  sparkplugGroupInput.value.trim() ||
+  resolveRawMqttSparkplugGroupKey(parkContext.activePark?.slug, parkContext.activeParkId)
 
 const { devices, liveStatus, loadError } = useOeeMqttCockpit(groupKey)
 
@@ -335,7 +343,7 @@ function mqttConnectedFlag(): boolean {
           Auswahl aus Simulator (nur mit MQTT)
         </button>
         <p class="text-[10px] text-slate-500">
-          Auswahl und Sortierung wie Master data: Filter unten anwenden; Tabelle sortieren; Zeilen-Checkboxen/Radio steuern die Karten.
+          Auswahl und Sortierung wie in den Asset-Daten: Filter unten anwenden; Tabelle sortieren; Zeilen-Checkboxen/Radio steuern die Karten.
         </p>
       </div>
 
@@ -541,10 +549,10 @@ function mqttConnectedFlag(): boolean {
         </div>
 
         <div class="mb-4 grid grid-cols-4 gap-2">
-          <OeeGaugeRing label="OEE 5m" :value="numMetric(d.metrics, 'oee_5m')" :hue="45" />
-          <OeeGaugeRing label="A 5m" :value="numMetric(d.metrics, 'oee_availability_5m')" :hue="200" />
-          <OeeGaugeRing label="P 5m" :value="numMetric(d.metrics, 'oee_performance_5m')" :hue="280" />
-          <OeeGaugeRing label="Q 5m" :value="numMetric(d.metrics, 'oee_quality_5m')" :hue="130" />
+          <StandardPercentGaugeMini label="OEE 5m" :value="numMetric(d.metrics, 'oee_5m')" />
+          <StandardPercentGaugeMini label="A 5m" :value="numMetric(d.metrics, 'oee_availability_5m')" />
+          <StandardPercentGaugeMini label="P 5m" :value="numMetric(d.metrics, 'oee_performance_5m')" />
+          <StandardPercentGaugeMini label="Q 5m" :value="numMetric(d.metrics, 'oee_quality_5m')" />
         </div>
 
         <dl class="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-slate-400">

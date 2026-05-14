@@ -34,7 +34,7 @@ function fakeEnv(overrides = {}) {
     weatherOpenMeteoFetchRetries: 3,
     weatherOpenMeteoRebuildSnapshots: true,
     externalParkDataEnabled: false,
-    externalParkDataPollIntervalSeconds: 300,
+    externalParkDataPollIntervalSeconds: 120,
     externalParkDataDefaultProvider: 'themeparks_wiki',
     adapterSchedulerEnabled: false,
     outputProfiles: '',
@@ -53,6 +53,9 @@ function fakeEnv(overrides = {}) {
     registrySignalPublishMaxAgeMs: 86400000,
     registrySignalStabilityDays: 0,
     ingestionMaxAgeMs: 1200000,
+    mlTraceEnabled: false,
+    mlProfileEnabled: false,
+    mlFeatureWeightsEnabled: false,
   };
   return { ...base, ...overrides };
 }
@@ -108,11 +111,12 @@ test('buildFeatureFlagReport: counts CSV-encoded ride id allow-lists without lea
   assert.equal(JSON.stringify(r).includes('x,y'), false);
 });
 
-test('buildFeatureFlagReport: contains all 12 high-signal flag groups', () => {
+test('buildFeatureFlagReport: contains all high-signal flag groups including mlForecast', () => {
   const r = buildFeatureFlagReport(fakeEnv());
   for (const k of [
     'runtime', 'auth', 'db', 'cors',
     'mqtt', 'sparkplug', 'uns', 'ai',
+    'mlForecast',
     'weather', 'integrations', 'sim', 'registry', 'ingestion',
   ]) {
     assert.ok(Object.prototype.hasOwnProperty.call(r, k), `missing key: ${k}`);
@@ -128,6 +132,15 @@ test('buildFeatureFlagReport: coerces optional booleans defensively', () => {
   assert.equal(r.mqtt.enabled, false);
   assert.equal(r.uns.spyEnabled, true);
   assert.equal(r.registry.publishEnabled, true);
+});
+
+test('buildFeatureFlagReport: mlForecast booleans surface for boot log', () => {
+  const r = buildFeatureFlagReport(
+    fakeEnv({ mlTraceEnabled: true, mlProfileEnabled: false, mlFeatureWeightsEnabled: true })
+  );
+  assert.equal(r.mlForecast.traceEnabled, true);
+  assert.equal(r.mlForecast.profileEnabled, false);
+  assert.equal(r.mlForecast.featureWeightsEnabled, true);
 });
 
 test('buildFeatureFlagReport: empty outputProfiles becomes empty array, not falsy', () => {

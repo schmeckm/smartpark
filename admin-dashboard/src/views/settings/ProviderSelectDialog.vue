@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { getAdapterPackages, postInstallLocalAdapter } from '@/api/client'
+import { getAdapterOpsDashboard, getAdapterPackages, postInstallLocalAdapter } from '@/api/client'
 import AdapterUiBanner from '@/components/adapter/AdapterUiBanner.vue'
 import type { AdapterPackageDto, AdapterPackagesResponse } from '@/types/api'
 import { useToast } from '@/composables/useToast'
+import type { AdapterOpsGridRow } from '@/api/client'
 
 const props = defineProps<{
   open: boolean
@@ -20,6 +21,7 @@ const installing = ref<string | null>(null)
 const search = ref('')
 const catalog = ref<AdapterPackagesResponse | null>(null)
 const logoFailedByKey = ref<Record<string, boolean>>({})
+const opsByKey = ref<Record<string, AdapterOpsGridRow>>({})
 
 const packages = computed(() => catalog.value?.packages ?? [])
 
@@ -42,10 +44,24 @@ async function loadCatalog() {
   try {
     catalog.value = await getAdapterPackages()
     logoFailedByKey.value = {}
+    void loadOps()
   } catch (e) {
     push(e instanceof Error ? e.message : 'Failed to load adapters', 'error')
   } finally {
     loading.value = false
+  }
+}
+
+async function loadOps() {
+  try {
+    const dash = await getAdapterOpsDashboard()
+    const map: Record<string, AdapterOpsGridRow> = {}
+    for (const row of dash.adapters || []) {
+      if (row?.adapterKey) map[row.adapterKey] = row
+    }
+    opsByKey.value = map
+  } catch {
+    opsByKey.value = {}
   }
 }
 
@@ -87,6 +103,30 @@ function tierClass(t: string | null | undefined) {
   if (t === 'VERIFIED') return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
   if (t === 'COMMUNITY') return 'border-violet-500/40 bg-violet-500/10 text-violet-200'
   return 'border-slate-600 bg-slate-800 text-slate-300'
+}
+
+function adapterLiveLabel(pkg: AdapterPackageDto): string {
+  const row = opsByKey.value[pkg.adapterKey]
+  if (!row) return 'No signal'
+  if (!row.enabled) return 'Disabled'
+  if ((row.status || '').toLowerCase() === 'failed' || (row.errorsCount > 0 && (row.successRate ?? 1) < 0.5)) {
+    return 'Error'
+  }
+  if (!row.lastRun) return 'Awaiting run'
+  const ts = Date.parse(row.lastRun)
+  if (!Number.isFinite(ts)) return 'Idle'
+  const ageMs = Date.now() - ts
+  if (ageMs < 10 * 60_000 && row.active) return 'Live'
+  if (ageMs < 60 * 60_000) return 'Idle'
+  return 'Stale'
+}
+
+function adapterLiveClass(pkg: AdapterPackageDto): string {
+  const v = adapterLiveLabel(pkg)
+  if (v === 'Live') return 'text-emerald-300'
+  if (v === 'Error') return 'text-rose-300'
+  if (v === 'Stale') return 'text-amber-300'
+  return 'text-slate-500'
 }
 </script>
 
@@ -146,6 +186,9 @@ function tierClass(t: string | null | undefined) {
                   <p class="truncate font-medium text-white">{{ pkg.name }}</p>
                   <p class="truncate font-mono text-[11px] text-brand-300">{{ pkg.adapterKey }}</p>
                   <p v-if="pkg.ui?.category" class="truncate text-[11px] text-slate-500">{{ pkg.ui.category }}</p>
+                  <p class="truncate text-[11px]" :class="adapterLiveClass(pkg)">
+                    {{ adapterLiveLabel(pkg) }}
+                  </p>
                 </div>
                 <span
                   v-if="pkg.ui?.qualityTier"

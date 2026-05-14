@@ -42,7 +42,7 @@ Phases B–E are **metadata only**; Add-on Board, ML Studio, and Green KPI are n
 
 - **`BoardSignalSourcePicker.vue`:** Loads **`GET .../extensions`** (same as Phase C; no new backend). Lists only signals with **`enabled` and `boardEligible`**, grouped by domain, emits `signalKey` / `v-model`. Empty state when none qualify.
 - **Integration:** Add-on Board **L3 (Ride)** custom signal widgets block behind **`VITE_ADDON_BOARD_SIGNAL_SOURCE_PICKER=true`** (`addonBoardSignalSourcePickerEnabled`; build-time **rollback** only). Uses **`park_asset`** + board **`rideId`** (platform asset id). Picker selection alone is **not persisted** and does **not** change runtime KPIs, MQTT, or ML Studio.
-- **QA:** Manual checklist + optional Playwright (`admin-dashboard/e2e/addon-board-signal-picker.spec.ts`, `PLAYWRIGHT_ADDON_BOARD_PICKER` for Vite-injected flag) — [`docs/validation/addon-board-signal-source-picker-qa.md`](docs/validation/addon-board-signal-source-picker-qa.md).
+- **QA:** Manual checklist + optional Playwright (`admin-dashboard/tests/e2e/addon-board-signal-picker.spec.ts`, `PLAYWRIGHT_ADDON_BOARD_PICKER` for Vite-injected flag) — [`docs/validation/addon-board-signal-source-picker-qa.md`](docs/validation/addon-board-signal-source-picker-qa.md).
 
 ### Add-on Board — Phase G (widget source draft persistence)
 

@@ -5,11 +5,13 @@ import { getPlatformAsset, postPlatformRideEnrichTemplate, putPlatformRideMaster
 import type { PlatformAsset } from '@/types/api'
 import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/auth'
+import { useI18n } from 'vue-i18n'
 import SignalsCapabilitiesPanel from '@/components/masterdata/SignalsCapabilitiesPanel.vue'
 
 const route = useRoute()
 const { push } = useToast()
 const auth = useAuthStore()
+const { t } = useI18n()
 
 const assetId = computed(() => route.params.assetId as string)
 const asset = ref<PlatformAsset | null>(null)
@@ -180,9 +182,9 @@ async function enrich() {
     <nav class="text-xs text-slate-500">
       <RouterLink to="/platform" class="text-brand-400 hover:underline">Platform MDM</RouterLink>
       <span class="mx-1">/</span>
-      <RouterLink to="/platform/assets" class="text-brand-400 hover:underline">Assets</RouterLink>
+      <RouterLink to="/admin/master-data/rides" class="text-brand-400 hover:underline">{{ t('menu.masterData') }}</RouterLink>
       <span class="mx-1">/</span>
-      <span class="text-slate-400">Ride-Stammdaten</span>
+      <span class="text-slate-400">Ride-Asset-Daten</span>
     </nav>
     <h1 class="font-display text-xl font-semibold text-white">Ride master data</h1>
     <p v-if="asset" class="text-sm text-slate-400">{{ asset.name }}</p>
@@ -322,7 +324,7 @@ async function enrich() {
       >
         Enrich from RIDE_DEFAULT template
       </button>
-      <RouterLink to="/platform/assets" class="text-sm text-brand-400">← Assets</RouterLink>
+      <RouterLink to="/admin/master-data/rides" class="text-sm text-brand-400">← {{ t('menu.masterData') }}</RouterLink>
     </div>
   </div>
 </template>

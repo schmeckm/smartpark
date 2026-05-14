@@ -2,9 +2,22 @@ const { asyncHandler } = require('../utils/async-handler');
 const { AppError } = require('../utils/app-error');
 const { ParkAsset } = require('../models');
 const { predictRideWaitTimes } = require('../services/ml/ride-prediction.service');
+const {
+  buildRidgeRideWaitExplainability,
+  finalizeExplainabilityMvpEnvelope,
+} = require('../services/ai/prediction-explanation-normalizer.service');
 const { trainGlobalModel, trainRideModel } = require('../services/ml/ride-model-training.service');
 const { buildRideDataset } = require('../services/ml/ride-dataset.service');
 const { getParkBoardMlAggregates } = require('../services/ml/addon-board-ml-bridge.service');
+
+function isExplainRequested(value) {
+  if (value === true || value === 1) return true;
+  if (typeof value === 'string') {
+    const x = value.trim().toLowerCase();
+    return x === '1' || x === 'true';
+  }
+  return false;
+}
 
 const getPredictRide = asyncHandler(async (req, res) => {
   const parkId = req.parkContext.id;
@@ -25,6 +38,11 @@ const getPredictRide = asyncHandler(async (req, res) => {
   }
 
   const data = await predictRideWaitTimes({ parkId, rideId, horizons });
+  if (isExplainRequested(q.explain)) {
+    const explanation = finalizeExplainabilityMvpEnvelope(buildRidgeRideWaitExplainability(data));
+    res.json({ success: true, data: { ...data, explanation } });
+    return;
+  }
   res.json({ success: true, data });
 });
 

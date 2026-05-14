@@ -36,7 +36,10 @@ function buildDeps(overrides = {}) {
   };
 
   const platformSettings = {
-    getBoolean: async (_k, fallback) => fallback,
+    getBoolean: async (k, fallback) => {
+      if (k === 'EXTERNAL_PARK_DATA_POLL_NEAR_5M_UTC') return false;
+      return fallback;
+    },
     getNumber: async (_k, fallback) => fallback,
   };
   const platformSettingsFactory = () => platformSettings;
@@ -284,4 +287,23 @@ test('start() spawned twice yields two independent cancel functions', async () =
   await flush(20);
 
   assert.ok(calls.syncLive >= 1, 'at least one of the two loops should have run a tick');
+});
+
+test('EXTERNAL_PARK_DATA_POLL_NEAR_5M_UTC shortens sleep to next 5m boundary', async () => {
+  const { deps, calls, platformSettings } = buildDeps();
+  platformSettings.getBoolean = async (k, fb) => {
+    if (k === 'EXTERNAL_PARK_DATA_POLL_NEAR_5M_UTC') return true;
+    return fb;
+  };
+
+  const svc = new IntegrationPollingService({
+    ...deps,
+    nowFn: () => new Date('2026-01-01T00:02:00.000Z'),
+  });
+  const cancel = svc.start();
+  await flush(20);
+  cancel();
+  await flush(20);
+
+  assert.equal(calls.sleep[0], 181_500);
 });

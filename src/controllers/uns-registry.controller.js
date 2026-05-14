@@ -21,6 +21,13 @@ const getMirrorSummary = asyncHandler(async (req, res) => {
   res.json({ success: true, data });
 });
 
+/** Full mirror rebuild (not TTL-gated). Use after deploy or catalog changes (e.g. canonical Sparkplug metrics). */
+const postMirrorSync = asyncHandler(async (req, res) => {
+  await unsRegistryMirrorService.syncFromLegacy();
+  const data = await unsRegistryMirrorService.getSummaryCounts();
+  res.status(200).json({ success: true, data, syncedAt: new Date().toISOString() });
+});
+
 const listEntities = asyncHandler(async (req, res) => {
   await unsRegistryMirrorService.syncFromLegacyIfStale();
   const v = req.validated || {};
@@ -46,6 +53,7 @@ const listTopics = asyncHandler(async (req, res) => {
 
 module.exports = {
   getMirrorSummary,
+  postMirrorSync,
   listEntities,
   listTopics,
 };

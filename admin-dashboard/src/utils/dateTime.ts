@@ -65,7 +65,7 @@ function toDate(value: string | number | Date | null | undefined): Date | null {
   return Number.isNaN(d.getTime()) ? null : d
 }
 
-function zonedYmdParts(d: Date, timeZone: string): { y: number; m: number; day: number } {
+export function zonedYmdParts(d: Date, timeZone: string): { y: number; m: number; day: number } {
   const f = new Intl.DateTimeFormat('en-CA', {
     timeZone,
     year: 'numeric',

@@ -3,8 +3,37 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import * as echarts from 'echarts'
 import type { EChartsOption } from 'echarts'
+import { buildStandardPercentGaugeSeries } from '@/utils/echartsStandardGauge'
 
 export type SqdcScoreHistoryPoint = { snapshotDate: string; overallScore: number | null }
+
+/** Matches `sqdc-board.service.js` overall history window: `addCalendarDaysIso(date, -29) … date`. */
+const SCORE_HISTORY_LOOKBACK_DAYS = 29
+
+function addUtcCalendarDays(iso: string, deltaDays: number): string {
+  const parts = iso.split('-').map(Number)
+  const y = parts[0]
+  const m = parts[1]
+  const d = parts[2]
+  if (!y || !m || !d) return iso
+  const dt = new Date(Date.UTC(y, m - 1, d))
+  dt.setUTCDate(dt.getUTCDate() + deltaDays)
+  const yy = dt.getUTCFullYear()
+  const mm = String(dt.getUTCMonth() + 1).padStart(2, '0')
+  const dd = String(dt.getUTCDate()).padStart(2, '0')
+  return `${yy}-${mm}-${dd}`
+}
+
+function enumerateUtcDaysInclusive(fromIso: string, toIso: string): string[] {
+  if (fromIso > toIso) return []
+  const out: string[] = []
+  let cur = fromIso
+  while (cur <= toIso) {
+    out.push(cur)
+    cur = addUtcCalendarDays(cur, 1)
+  }
+  return out
+}
 
 const props = defineProps<{
   overallScore: number | null | undefined
@@ -67,68 +96,50 @@ const gaugeNumeric = computed(() => {
 
 const detailText = computed(() => {
   const n = gaugeNumeric.value
-  return n != null ? n.toFixed(1) : '—'
+  if (n == null) return '—'
+  return n.toFixed(1)
 })
+
+function gaugePointerColor(kind: 'up' | 'down' | 'flat'): string {
+  if (kind === 'up') return '#4ade80'
+  if (kind === 'down') return '#f87171'
+  return '#94a3b8'
+}
 
 function gaugeOption(): EChartsOption {
   const val = gaugeNumeric.value ?? 0
   const tk = trend.value.kind
-  const pointerColor = tk === 'up' ? '#4ade80' : tk === 'down' ? '#f87171' : '#94a3b8'
+  const pointerColor = gaugePointerColor(tk)
   return {
     backgroundColor: 'transparent',
     animationDuration: 420,
     series: [
-      {
-        type: 'gauge',
-        min: 0,
-        max: 100,
-        radius: '92%',
-        center: ['50%', '54%'],
-        startAngle: 200,
-        endAngle: -20,
-        splitNumber: 5,
-        pointer: {
-          length: '58%',
-          width: 5,
-          itemStyle: { color: pointerColor, shadowBlur: 6, shadowColor: 'rgba(0,0,0,0.35)' },
-        },
-        axisLine: {
-          lineStyle: {
-            width: 14,
-            color: [
-              [0.55, '#9f1239'],
-              [0.8, '#b45309'],
-              [1, '#166534'],
-            ],
-          },
-        },
-        axisTick: { distance: -10, length: 6, lineStyle: { color: '#475569' } },
-        splitLine: { distance: -12, length: 12, lineStyle: { color: '#475569' } },
-        axisLabel: { color: '#64748b', distance: 16, fontSize: 9 },
-        title: { show: false },
+      buildStandardPercentGaugeSeries({
+        value: val,
+        pointerColor,
         detail: {
-          valueAnimation: true,
-          offsetCenter: [0, '74%'],
-          fontSize: 24,
-          fontWeight: 700,
-          color: '#f8fafc',
           formatter: () => detailText.value,
         },
-        data: [{ value: val }],
-      },
+      }),
     ],
   }
 }
 
 function trendOption(): EChartsOption {
-  const xs = props.history.map((h) => h.snapshotDate)
-  const ys = props.history.map((h) =>
-    h.overallScore != null && Number.isFinite(h.overallScore) ? h.overallScore : null
-  )
+  const winStart = addUtcCalendarDays(props.selectedDate, -SCORE_HISTORY_LOOKBACK_DAYS)
+  const xs = enumerateUtcDaysInclusive(winStart, props.selectedDate)
+  const byDate = new Map<string, number | null>()
+  for (const h of props.history) {
+    byDate.set(h.snapshotDate, h.overallScore)
+  }
+  const ys = xs.map((d) => {
+    const v = byDate.get(d)
+    return v != null && Number.isFinite(Number(v)) ? Number(v) : null
+  })
   const markDay = xs.includes(props.selectedDate) ? props.selectedDate : null
   return {
     backgroundColor: 'transparent',
-    grid: { left: 8, right: 8, top: 10, bottom: 22 },
+    grid: { left: 8, right: 8, top: 10, bottom: xs.length > 16 ? 32 : 24 },
     tooltip: {
       trigger: 'axis',
       formatter: (params: unknown) => {
@@ -142,8 +153,15 @@ function trendOption(): EChartsOption {
     xAxis: {
       type: 'category',
       data: xs,
-      axisLabel: { color: '#64748b', fontSize: 9, rotate: xs.length > 14 ? 40 : 0 },
+      axisLabel: {
+        color: '#64748b',
+        fontSize: 9,
+        rotate: xs.length > 14 ? 40 : 0,
+        formatter: (v: string) => (v.length >= 10 ? `${v.slice(5, 7)}-${v.slice(8, 10)}` : v),
+      },
       axisLine: { lineStyle: { color: '#334155' } },
+      axisTick: { alignWithLabel: true },
+      splitLine: { show: true, lineStyle: { color: '#1e293b', type: 'solid', width: 1 } },
     },
     yAxis: {
       type: 'value',
@@ -241,7 +259,7 @@ onUnmounted(() => {
         {{ trendHint }}
       </p>
     </div>
-    <div ref="gaugeEl" class="mt-1 h-[200px] w-full" />
+    <div ref="gaugeEl" class="mt-1 h-[220px] w-full" />
     <p class="mt-1 text-center text-[10px] uppercase tracking-wide text-slate-500">{{ t('sqdc.overallGaugeSparkline') }}</p>
     <div ref="trendEl" class="h-[120px] w-full" />
   </div>

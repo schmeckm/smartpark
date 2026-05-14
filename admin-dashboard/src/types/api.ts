@@ -46,6 +46,16 @@ export interface Staff {
   }
   role: StaffRole
   currentZoneId: string | null
+  /**
+   * Optional direct assignment to a ride / show / attraction (`rides` table).
+   * When set, `currentZoneId` is auto-derived from the ride's zone server-side.
+   */
+  currentRideId?: string | null
+  currentRide?: {
+    id: string
+    name: string
+    zoneId: string
+  }
   available: boolean
   skillLevel: number
   currentZone?: Zone
@@ -350,6 +360,8 @@ export interface MdmParkZone {
   code: string
   name: string
   sortOrder?: number
+  /** Typ, Attraktionen, operative Sicht (MDM Themengebiete) */
+  zoneContext?: Record<string, unknown>
   legacyZoneId?: string | null
   createdAt?: string
   updatedAt?: string
@@ -360,18 +372,6 @@ export interface MdmRideType {
   code: string
   name: string
   description?: string | null
-}
-
-export interface MdmRideTemplate {
-  id: string
-  rideTypeId: string
-  code: string
-  displayName: string
-  defaultProfile: Record<string, unknown>
-  isSystem: boolean
-  rideType?: MdmRideType
-  createdAt?: string
-  updatedAt?: string
 }
 
 export type MdmRideProfile = {
@@ -389,8 +389,11 @@ export interface PlatformPark {
   name: string
   slug: string
   timezone?: string | null
+  latitude?: number | null
+  longitude?: number | null
   externalSource?: string
   externalEntityId?: string | null
+  masterProfile?: Record<string, unknown>
 }
 
 export type TrafficCorridorDirection = 'inbound' | 'outbound'
@@ -796,6 +799,33 @@ export interface ShiftHandoverStoredSnapshot {
   incidents?: ShiftHandoverIncidentSnapshot
 }
 
+export interface ShiftHandoverTask {
+  id: string
+  title: string
+  ownerUserId?: string | null
+  dueAt?: string | null
+  status: 'OPEN' | 'DONE' | 'CANCELLED'
+  doneAt?: string | null
+  createdAt?: string | null
+}
+
+export interface ShiftHandoverDiffSnapshot {
+  previousEntryId: string
+  previousWindowFrom?: string | null
+  previousWindowTo?: string | null
+  currentWindowFrom?: string | null
+  currentWindowTo?: string | null
+  delta?: {
+    downtimeEventCount?: number
+    openDowntimeCount?: number
+    plannedDowntimeMinutes?: number
+    unplannedDowntimeMinutes?: number
+    incidentsCreatedInWindow?: number
+    incidentsOpenActiveTotal?: number
+    incidentsOpenHighOrCritical?: number
+  }
+}
+
 /** GET|POST /api/v1/parks/:parkId/shift-handovers */
 export interface ShiftHandoverRow {
   id: string
@@ -807,11 +837,19 @@ export interface ShiftHandoverRow {
   linkedEntityType?: string | null
   linkedEntityId?: string | null
   downtimeSnapshot: ShiftHandoverStoredSnapshot | null
+  followUpTasks?: ShiftHandoverTask[]
+  diffSnapshot?: ShiftHandoverDiffSnapshot | null
+  acknowledgedAt?: string | null
+  acknowledgedByUserId?: string | null
+  acknowledgementNote?: string | null
+  reminderDueAt?: string | null
+  reminderSentAt?: string | null
   notes: string
   createdByUserId: string | null
   createdAt?: string
   updatedAt?: string
   createdBy?: { id: string; email: string; firstName: string; lastName: string } | null
+  acknowledgedBy?: { id: string; email: string; firstName: string; lastName: string } | null
 }
 
 export interface AssetRuntimeOverride {
@@ -967,4 +1005,165 @@ export interface VisitPlanForecastSummary {
   cellsFilled: number
   cellsSkippedExisting: number
   cellsSkippedNoSource: number
+}
+
+/** Agentic runs (`/api/v1/agent/...`), park-scoped via `X-Park-Id`. */
+export type AgentSkillId =
+  | 'daily_executive_brief'
+  | 'crowd_spike_triage'
+  | 'mapping_assistant'
+  | 'weather_pivot'
+  | 'ride_down_response'
+
+export interface AgentRunBrief {
+  id: string
+  skillId: string
+  mode?: string | null
+  status: string
+  startedAt: string | null
+}
+
+/** Phase C — persisted when proposal is applied/rejected (forecast bridge stub + resolution). */
+export type AgentActionOutcomeMetric = Record<string, unknown>
+
+export interface AgentPendingActionItem {
+  id: string
+  runId: string
+  stepId: string | null
+  actionType: string
+  status: string
+  payloadJson: Record<string, unknown> | null
+  outcomeMetric?: AgentActionOutcomeMetric | null
+  expiresAt: string | null
+  createdAt: string | null
+  run: AgentRunBrief | null
+}
+
+export interface AgentRunSummary {
+  id: string
+  parkId: string
+  skillId: string
+  mode: string
+  triggerType: string
+  triggerRef: string | null
+  status: string
+  startedAt: string | null
+  finishedAt: string | null
+  createdByUserId: string | null
+  errorMessage: string | null
+}
+
+export interface AgentStepRow {
+  id: string
+  runId: string
+  stepIndex: number
+  stepType: string
+  title: string | null
+  detailJson: Record<string, unknown> | null
+  createdAt: string | null
+  updatedAt: string | null
+}
+
+export interface AgentRunActionRow {
+  id: string
+  runId: string
+  stepId: string | null
+  actionType: string
+  status: string
+  payloadJson: Record<string, unknown> | null
+  resultJson: Record<string, unknown> | null
+  outcomeMetric?: AgentActionOutcomeMetric | null
+  expiresAt: string | null
+  targetType: string | null
+  targetId: string | null
+  approvedByUserId: string | null
+  approvedAt: string | null
+  rejectedReason: string | null
+  createdAt: string | null
+  updatedAt: string | null
+}
+
+export interface AgentRunDetail extends AgentRunSummary {
+  inputJson: Record<string, unknown> | null
+  outputSummary: string | null
+  metaJson: Record<string, unknown> | null
+  steps: AgentStepRow[]
+  actions: AgentRunActionRow[]
+}
+
+export interface AgentRunsListPayload {
+  items: AgentRunSummary[]
+  total: number
+  limit: number
+  offset: number
+}
+
+export interface AgentPendingActionsPayload {
+  items: AgentPendingActionItem[]
+  total: number
+  limit: number
+  offset: number
+}
+
+/** `POST /api/v1/agent/preflight` — Phase C simulator / regression checklist (stub). */
+export interface AgentPreflightChecklistItem {
+  id: string
+  ok: boolean
+  detail?: string | null
+}
+
+export interface AgentPreflightSourceRunSummary {
+  id: string
+  skillId: string
+  status: string
+  mode?: string | null
+  triggerType?: string | null
+  stepCount: number
+  actionCount: number
+  skillMismatch?: boolean
+}
+
+export interface AgentPreflightDryRunToolRow {
+  name: string
+  ok: boolean
+  ms: number
+  summary?: string
+  error?: string
+}
+
+/** Read-only tool chain executed during preflight (no persisted agent run). */
+export interface AgentPreflightDryRun {
+  allOk: boolean
+  skipped: boolean
+  tools: AgentPreflightDryRunToolRow[]
+}
+
+export interface AgentPreflightPayload {
+  ok: boolean
+  skillId: string
+  parkId: string
+  phase: string
+  contextHints: string[]
+  checklist: AgentPreflightChecklistItem[]
+  sourceRun: AgentPreflightSourceRunSummary | null
+  dryRun?: AgentPreflightDryRun | null
+  /** Present after server adds Phase C approval gate (rolling write metrics). */
+  approvalMetrics?: AgentApprovalMetricsPayload | null
+  approvalGateMin?: number | null
+}
+
+/** `GET /api/v1/agent/approval-metrics` — write proposal counts / approval rate for the park window. */
+export interface AgentApprovalMetricsPayload {
+  parkId: string
+  skillFilter: string | null
+  windowDays: number
+  since: string
+  applied: number
+  rejected: number
+  failed: number
+  expired: number
+  pending: number
+  decided: number
+  approvalRate: number | null
+  bySkill: Record<string, Record<string, number>>
 }

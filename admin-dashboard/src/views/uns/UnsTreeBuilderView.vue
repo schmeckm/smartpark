@@ -16,6 +16,7 @@ import {
   type UnsNode,
 } from '@/api/client'
 import { useToast } from '@/composables/useToast'
+import { askConfirm } from '@/composables/useConfirmDialog'
 
 const { push } = useToast()
 
@@ -122,6 +123,9 @@ const hierarchyPreview = ref<UnsHierarchyPreviewResult | null>(null)
 const tree = ref<UnsNode[]>([])
 const expandedIds = ref<Set<string>>(new Set())
 const selectedId = ref<string | null>(null)
+const showAdvancedSchema = ref(false)
+const showTreeTechHint = ref(false)
+const showNodeTechDetails = ref(false)
 
 const flatRows = computed(() => {
   const out: FlatRow[] = []
@@ -446,7 +450,13 @@ async function removeNode(node: UnsNode) {
     push('Structure locked: cannot delete', 'error')
     return
   }
-  if (!confirm(`Delete node "${node.name}"?`)) return
+  const ok = await askConfirm({
+    message: `Delete node "${node.name}"?`,
+    confirmLabel: 'Ja',
+    cancelLabel: 'Abbrechen',
+    variant: 'danger',
+  })
+  if (!ok) return
   try {
     await deleteUnsNode(node.id)
     if (selectedId.value === node.id) selectedId.value = null
@@ -478,11 +488,7 @@ onMounted(() => {
     </datalist>
     <div>
       <h1 class="font-display text-xl font-semibold text-white">UNS Explorer</h1>
-      <p class="mt-1 text-sm text-slate-400">
-        Edit hierarchy fields (<span class="text-slate-300">entityKind</span>, <span class="text-slate-300">sortOrder</span>, Sparkplug, structure lock) per park.
-        <strong class="text-slate-300">Materialize UNS</strong> writes generated metric leaves (Master Data + integration preview + schema) into
-        <code class="text-slate-500">uns_nodes</code>. Use Integrations for <strong class="text-slate-300">Generate from Master Data</strong> (topic preview only).
-      </p>
+      <p class="mt-1 text-sm text-slate-400">Bearbeite den Namespace-Baum pro Park. Basisaktionen sind oben, technische Import-/Schema-Tools optional.</p>
     </div>
 
     <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
@@ -517,66 +523,73 @@ onMounted(() => {
     </section>
 
     <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-      <h2 class="text-sm font-semibold text-white">Hierarchy schema (Phase 3)</h2>
-      <p class="mt-1 text-xs text-slate-500">
-        Export or import <span class="font-mono text-slate-400">smartpark.uns.hierarchy</span> JSON (nested <span class="font-mono">roots</span>, UUID <span class="font-mono">id</span> for merge round-trip). Leaf
-        <span class="font-mono">topicPath</span> must match <span class="font-mono">domain</span>, <span class="font-mono">metric</span>, and asset segment (from <span class="font-mono">slug</span>/<span class="font-mono">name</span> or optional <span class="font-mono">assetSlug</span>); exports include <span class="font-mono">assetSlug</span> for metrics when derivable.
-        <strong class="text-amber-200/90">Replace</strong> deletes every UNS node for this park before applying the file.
-      </p>
-      <div class="mt-3 flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          class="rounded-md border border-slate-600 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800"
-          @click="downloadHierarchySchema"
-        >
-          Download JSON
-        </button>
-        <input ref="hierarchyFileInput" type="file" accept="application/json,.json" class="hidden" @change="onHierarchyFile" />
-        <button
-          type="button"
-          class="rounded-md bg-slate-700 px-3 py-1.5 text-xs text-white hover:bg-slate-600"
-          @click="openHierarchyFilePicker"
-        >
-          Upload JSON…
-        </button>
-        <input
-          ref="hierarchyPreviewFileInput"
-          type="file"
-          accept="application/json,.json"
-          class="hidden"
-          @change="onHierarchyPreviewFile"
-        />
-        <button
-          type="button"
-          class="rounded-md border border-cyan-800/60 bg-cyan-950/40 px-3 py-1.5 text-xs text-cyan-200 hover:bg-cyan-950/70"
-          @click="openHierarchyPreviewPicker"
-        >
-          Preview JSON…
-        </button>
-        <div class="flex items-center gap-2 text-xs text-slate-400">
-          <label class="flex cursor-pointer items-center gap-1.5">
-            <input v-model="schemaImportMode" type="radio" value="merge" class="border-slate-600" />
-            Merge
-          </label>
-          <label class="flex cursor-pointer items-center gap-1.5">
-            <input v-model="schemaImportMode" type="radio" value="replace" class="border-slate-600" />
-            Replace
-          </label>
-        </div>
-      </div>
-      <div v-if="hierarchyPreview" class="mt-3 rounded-lg border border-slate-700 bg-slate-950/50 p-3">
-        <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
-          <span>Dry-run (no DB writes)</span>
-          <button type="button" class="text-slate-500 underline hover:text-slate-300" @click="hierarchyPreview = null">
-            Dismiss
-          </button>
-        </div>
-        <p class="mt-1 text-[11px] text-slate-500">
-          {{ hierarchyPreview.preview.length }} operation(s) — first 40 lines:
+      <button
+        type="button"
+        class="flex w-full items-center justify-between text-left"
+        @click="showAdvancedSchema = !showAdvancedSchema"
+      >
+        <span class="text-sm font-semibold text-white">Advanced: Hierarchy schema (Import/Export)</span>
+        <span class="text-xs text-slate-400">{{ showAdvancedSchema ? 'ausblenden' : 'einblenden' }}</span>
+      </button>
+      <div v-if="showAdvancedSchema" class="mt-3">
+        <p class="text-xs text-slate-500">
+          JSON-Schema fuer Massen-Import/Export. <span class="font-semibold text-amber-200/90">Replace</span> loescht zuerst alle Knoten dieses Parks.
         </p>
-        <pre class="mt-2 max-h-52 overflow-auto whitespace-pre-wrap break-all font-mono text-[10px] leading-relaxed text-slate-300">{{
-          hierarchyPreview.preview.slice(0, 40).map(formatPreviewLine).join('\n')
-        }}</pre>
+        <div class="mt-3 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            class="rounded-md border border-slate-600 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800"
+            @click="downloadHierarchySchema"
+          >
+            Download JSON
+          </button>
+          <input ref="hierarchyFileInput" type="file" accept="application/json,.json" class="hidden" @change="onHierarchyFile" />
+          <button
+            type="button"
+            class="rounded-md bg-slate-700 px-3 py-1.5 text-xs text-white hover:bg-slate-600"
+            @click="openHierarchyFilePicker"
+          >
+            Upload JSON…
+          </button>
+          <input
+            ref="hierarchyPreviewFileInput"
+            type="file"
+            accept="application/json,.json"
+            class="hidden"
+            @change="onHierarchyPreviewFile"
+          />
+          <button
+            type="button"
+            class="rounded-md border border-cyan-800/60 bg-cyan-950/40 px-3 py-1.5 text-xs text-cyan-200 hover:bg-cyan-950/70"
+            @click="openHierarchyPreviewPicker"
+          >
+            Preview JSON…
+          </button>
+          <div class="flex items-center gap-2 text-xs text-slate-400">
+            <label class="flex cursor-pointer items-center gap-1.5">
+              <input v-model="schemaImportMode" type="radio" value="merge" class="border-slate-600" />
+              Merge
+            </label>
+            <label class="flex cursor-pointer items-center gap-1.5">
+              <input v-model="schemaImportMode" type="radio" value="replace" class="border-slate-600" />
+              Replace
+            </label>
+          </div>
+        </div>
+        <div v-if="hierarchyPreview" class="mt-3 rounded-lg border border-slate-700 bg-slate-950/50 p-3">
+          <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
+            <span>Dry-run (no DB writes)</span>
+            <button type="button" class="text-slate-500 underline hover:text-slate-300" @click="hierarchyPreview = null">
+              Dismiss
+            </button>
+          </div>
+          <p class="mt-1 text-[11px] text-slate-500">
+            {{ hierarchyPreview.preview.length }} operation(s) — first 40 lines:
+          </p>
+          <pre class="mt-2 max-h-52 overflow-auto whitespace-pre-wrap break-all font-mono text-[10px] leading-relaxed text-slate-300">{{
+            hierarchyPreview.preview.slice(0, 40).map(formatPreviewLine).join('\n')
+          }}</pre>
+        </div>
       </div>
     </section>
 
@@ -585,12 +598,13 @@ onMounted(() => {
       <section class="rounded-xl border border-slate-800 bg-slate-900/60">
         <div class="border-b border-slate-800 px-3 py-2">
           <p class="text-xs font-medium uppercase tracking-wide text-slate-500">Namespace tree</p>
-          <p class="mt-1 text-[10px] leading-relaxed text-slate-500">
-            Leaves align with the topic preview (Master Data + integrations + Sparkplug) after <span class="text-slate-400">Materialize UNS</span>.
-            That step creates <strong class="text-slate-400">one ZONE root per domain</strong> (Rides, Restaurants, …) and
-            <strong class="text-slate-400">METRIC</strong> children; <strong class="text-slate-400">Organisation / Park</strong> are not
-            created as extra nodes here — the park slug lives in the topic path and in <span class="font-mono">Park key</span> above. Use
-            <strong class="text-slate-400">Context</strong> in the editor when a node is selected to see the full path of names.
+          <p class="mt-1 text-[10px] leading-relaxed text-slate-500">Baumansicht fuer Zonen, Assets und Metriken dieses Parks.</p>
+          <button type="button" class="mt-1 text-[10px] text-slate-400 underline hover:text-slate-200" @click="showTreeTechHint = !showTreeTechHint">
+            {{ showTreeTechHint ? 'Technische Hinweise ausblenden' : 'Technische Hinweise anzeigen' }}
+          </button>
+          <p v-if="showTreeTechHint" class="mt-1 text-[10px] leading-relaxed text-slate-500">
+            Nach <span class="text-slate-400">Materialize UNS</span> entstehen pro Domain ZONE-Wurzeln mit METRIC-Kindern.
+            Organisation/Park werden hier nicht als eigene Nodes angelegt; der Park steckt im Topic-Pfad.
           </p>
         </div>
         <div class="max-h-[min(70vh,720px)] overflow-auto p-2">
@@ -763,7 +777,10 @@ onMounted(() => {
               </button>
             </div>
           </div>
-          <div class="mt-2 space-y-1.5 rounded border border-slate-700/80 bg-slate-950/60 p-2 text-[11px]">
+          <button type="button" class="mt-2 text-[11px] text-slate-400 underline hover:text-slate-200" @click="showNodeTechDetails = !showNodeTechDetails">
+            {{ showNodeTechDetails ? 'Technische Details ausblenden' : 'Technische Details anzeigen' }}
+          </button>
+          <div v-if="showNodeTechDetails" class="mt-2 space-y-1.5 rounded border border-slate-700/80 bg-slate-950/60 p-2 text-[11px]">
             <div>
               <span class="text-slate-500">TP-UNS</span>
               <code class="mt-0.5 block break-all text-slate-300">{{ selectedNode.topicPath || '—' }}</code>

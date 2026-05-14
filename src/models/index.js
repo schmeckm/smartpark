@@ -55,11 +55,24 @@ const { defineSqdcDailySnapshot } = require('./sqdc-daily-snapshot.model');
 const { defineSqdcEvent } = require('./sqdc-event.model');
 const { defineSqdcMoodFeedback } = require('./sqdc-mood-feedback.model');
 const { defineMlModelRegistry } = require('./ml-model-registry.model');
+const { defineMlPredictionTrace } = require('./ml-prediction-trace.model');
+const { defineMlPredictionResult } = require('./ml-prediction-result.model');
+const { defineMlForecastAccuracyLog } = require('./ml-forecast-accuracy-log.model');
+const { defineMlParkProfile } = require('./ml-park-profile.model');
+const { defineMlRideProfile } = require('./ml-ride-profile.model');
+const { defineRegistryPublishEvent } = require('./registry-publish-event.model');
+const { defineRegistrySignalDeprecation } = require('./registry-signal-deprecation.model');
+const { defineParkAssetPdmRule, ParkAssetPdmRule } = require('./park-asset-pdm-rule.model');
+const {
+  defineParkAssetPdmEvaluationLog,
+  ParkAssetPdmEvaluationLog,
+} = require('./park-asset-pdm-evaluation-log.model');
+const { defineAgentRun } = require('./agent-run.model');
+const { defineAgentStep } = require('./agent-step.model');
+const { defineAgentAction } = require('./agent-action.model');
 const { defineTrafficCorridor } = require('./traffic-corridor.model');
 const { defineTrafficCorridorSnapshot5m } = require('./traffic-corridor-snapshot-5m.model');
 const { defineParkDemandForecast5m } = require('./park-demand-forecast-5m.model');
-const { defineRegistryPublishEvent } = require('./registry-publish-event.model');
-const { defineRegistrySignalDeprecation } = require('./registry-signal-deprecation.model');
 
 const Zone = defineZone(sequelize);
 const Ride = defineRide(sequelize);
@@ -132,6 +145,11 @@ const SqdcDailySnapshot = defineSqdcDailySnapshot(sequelize);
 const SqdcEvent = defineSqdcEvent(sequelize);
 const SqdcMoodFeedback = defineSqdcMoodFeedback(sequelize);
 const MlModelRegistry = defineMlModelRegistry(sequelize);
+const MlPredictionTrace = defineMlPredictionTrace(sequelize);
+const MlPredictionResult = defineMlPredictionResult(sequelize);
+const MlForecastAccuracyLog = defineMlForecastAccuracyLog(sequelize);
+const MlParkProfile = defineMlParkProfile(sequelize);
+const MlRideProfile = defineMlRideProfile(sequelize);
 const TrafficCorridor = defineTrafficCorridor(sequelize);
 const TrafficCorridorSnapshot5m = defineTrafficCorridorSnapshot5m(sequelize);
 const ParkDemandForecast5m = defineParkDemandForecast5m(sequelize);
@@ -158,6 +176,13 @@ const {
   ShiftHandoverEntry,
 } = definePlatformModels(sequelize);
 
+defineParkAssetPdmRule(sequelize);
+defineParkAssetPdmEvaluationLog(sequelize);
+
+const AgentRun = defineAgentRun(sequelize);
+const AgentStep = defineAgentStep(sequelize);
+const AgentAction = defineAgentAction(sequelize);
+
 const {
   UnsRegistryEntity,
   UnsRegistryMapping,
@@ -182,6 +207,8 @@ Ride.belongsTo(Zone, { foreignKey: 'zoneId', as: 'zone' });
 
 Zone.hasMany(Staff, { foreignKey: 'currentZoneId', as: 'staffMembers' });
 Staff.belongsTo(Zone, { foreignKey: 'currentZoneId', as: 'currentZone' });
+Ride.hasMany(Staff, { foreignKey: 'currentRideId', as: 'staffMembers' });
+Staff.belongsTo(Ride, { foreignKey: 'currentRideId', as: 'currentRide' });
 Staff.belongsTo(Staff, { foreignKey: 'supervisorId', as: 'supervisor' });
 Staff.hasMany(Staff, { foreignKey: 'supervisorId', as: 'directReports' });
 
@@ -242,6 +269,24 @@ AssetMlProfileAssignment.belongsTo(ParkAsset, { foreignKey: 'assetId', targetKey
 ParkAsset.hasMany(AssetMlOverride, { foreignKey: 'assetId', sourceKey: 'assetId', as: 'mlOverrides' });
 AssetMlOverride.belongsTo(ParkAsset, { foreignKey: 'assetId', targetKey: 'assetId', as: 'asset' });
 
+ParkAsset.hasMany(ParkAssetPdmRule, { foreignKey: 'assetId', sourceKey: 'assetId', as: 'pdmRules' });
+ParkAssetPdmRule.belongsTo(ParkAsset, { foreignKey: 'assetId', targetKey: 'assetId', as: 'asset' });
+Park.hasMany(ParkAssetPdmRule, { foreignKey: 'parkId', as: 'pdmRules' });
+ParkAssetPdmRule.belongsTo(Park, { foreignKey: 'parkId', as: 'park' });
+
+ParkAsset.hasMany(ParkAssetPdmEvaluationLog, {
+  foreignKey: 'assetId',
+  sourceKey: 'assetId',
+  as: 'pdmEvaluationLogs',
+});
+ParkAssetPdmEvaluationLog.belongsTo(ParkAsset, {
+  foreignKey: 'assetId',
+  targetKey: 'assetId',
+  as: 'asset',
+});
+Park.hasMany(ParkAssetPdmEvaluationLog, { foreignKey: 'parkId', as: 'pdmEvaluationLogs' });
+ParkAssetPdmEvaluationLog.belongsTo(Park, { foreignKey: 'parkId', as: 'park' });
+
 Park.hasMany(TrafficCorridor, { foreignKey: 'parkId', as: 'trafficCorridors' });
 TrafficCorridor.belongsTo(Park, { foreignKey: 'parkId', as: 'park' });
 TrafficCorridor.hasMany(TrafficCorridorSnapshot5m, { foreignKey: 'corridorId', as: 'snapshots' });
@@ -264,6 +309,20 @@ Park.hasMany(Incident, { foreignKey: 'parkId', as: 'incidents' });
 Incident.belongsTo(Park, { foreignKey: 'parkId', as: 'park' });
 Incident.belongsTo(User, { foreignKey: 'ownerUserId', as: 'owner' });
 Incident.belongsTo(User, { foreignKey: 'createdByUserId', as: 'creator' });
+
+Park.hasMany(AgentRun, { foreignKey: 'parkId', as: 'agentRuns' });
+AgentRun.belongsTo(Park, { foreignKey: 'parkId', as: 'park' });
+User.hasMany(AgentRun, { foreignKey: 'createdByUserId', as: 'agentRunsCreated' });
+AgentRun.belongsTo(User, { foreignKey: 'createdByUserId', as: 'createdByUser' });
+
+AgentRun.hasMany(AgentStep, { foreignKey: 'runId', as: 'steps' });
+AgentStep.belongsTo(AgentRun, { foreignKey: 'runId', as: 'run' });
+AgentRun.hasMany(AgentAction, { foreignKey: 'runId', as: 'actions' });
+AgentAction.belongsTo(AgentRun, { foreignKey: 'runId', as: 'run' });
+AgentStep.hasMany(AgentAction, { foreignKey: 'stepId', as: 'actions' });
+AgentAction.belongsTo(AgentStep, { foreignKey: 'stepId', as: 'step' });
+User.hasMany(AgentAction, { foreignKey: 'approvedByUserId', as: 'agentActionsApproved' });
+AgentAction.belongsTo(User, { foreignKey: 'approvedByUserId', as: 'approvedByUser' });
 
 Park.hasMany(SqdcMoodRating, { foreignKey: 'parkId', as: 'sqdcMoodRatings' });
 SqdcMoodRating.belongsTo(Park, { foreignKey: 'parkId', as: 'park' });
@@ -293,6 +352,7 @@ User.hasMany(SqdcMoodFeedback, { foreignKey: 'createdByUserId', as: 'sqdcMoodFee
 
 AssetDowntimeEvent.belongsTo(User, { foreignKey: 'createdByUserId', as: 'createdBy' });
 ShiftHandoverEntry.belongsTo(User, { foreignKey: 'createdByUserId', as: 'createdBy' });
+ShiftHandoverEntry.belongsTo(User, { foreignKey: 'acknowledgedByUserId', as: 'acknowledgedBy' });
 
 DataQualityIssue.belongsTo(IntegrationEventLog, { foreignKey: 'integrationEventId', as: 'integrationEvent' });
 IntegrationEventLog.hasMany(DataQualityIssue, { foreignKey: 'integrationEventId', as: 'dataQualityIssues' });
@@ -395,11 +455,18 @@ module.exports = {
   SqdcEvent,
   SqdcMoodFeedback,
   MlModelRegistry,
+  MlPredictionTrace,
+  MlPredictionResult,
+  MlForecastAccuracyLog,
+  MlParkProfile,
+  MlRideProfile,
   TrafficCorridor,
   TrafficCorridorSnapshot5m,
   ParkDemandForecast5m,
   RegistryPublishEvent,
   RegistrySignalDeprecation,
+  ParkAssetPdmRule,
+  ParkAssetPdmEvaluationLog,
   UnsRegistryEntity,
   UnsRegistryMapping,
   UnsRegistryTopic,
@@ -413,4 +480,7 @@ module.exports = {
   UnsDiscoveryEvent,
   UnsTopicProposal,
   SPY_CLASSIFICATION,
+  AgentRun,
+  AgentStep,
+  AgentAction,
 };

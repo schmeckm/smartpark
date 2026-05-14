@@ -100,6 +100,11 @@ function buildStructured(envObj) {
       samplingEnabled: Boolean(envObj.aiSamplingEnabled),
       samplingIntervalSeconds: envObj.aiSamplingIntervalSeconds,
     },
+    mlForecast: {
+      traceEnabled: Boolean(envObj.mlTraceEnabled),
+      profileEnabled: Boolean(envObj.mlProfileEnabled),
+      featureWeightsEnabled: Boolean(envObj.mlFeatureWeightsEnabled),
+    },
     weather: {
       openMeteoEnabled: Boolean(envObj.weatherOpenMeteoEnabled),
       openMeteoIntervalSeconds: envObj.weatherOpenMeteoIntervalSeconds,

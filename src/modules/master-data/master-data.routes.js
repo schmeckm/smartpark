@@ -4,6 +4,7 @@ const { requirePermission, requireAnyPermission } = require('../../middleware/rb
 const { validate } = require('../../middleware/validate.middleware');
 const ctrl = require('./master-data.controller');
 const rideSignalCtrl = require('../../controllers/ride-signal-capability.controller');
+const signalCatalogAdminCtrl = require('../../controllers/signal-catalog-admin.controller');
 const registrySignalDepCtrl = require('../../controllers/registry-signal-deprecation.controller');
 const registryPreviewCtrl = require('../../controllers/registry-preview.controller');
 
@@ -27,9 +28,37 @@ const {
   putRideSignalCapabilitiesBody,
   postRegistrySignalDeprecateBody,
   postRegistrySignalReactivateBody,
+  signalCatalogIdParam,
+  postSignalCatalogBody,
+  patchSignalCatalogBody,
 } = require('./master-data.validators');
 
 const masterDataRouter = Router();
+
+masterDataRouter.get(
+  '/signal-catalog',
+  requireAnyPermission(['integrations', 'read'], ['rides', 'read']),
+  signalCatalogAdminCtrl.getSignalCatalog
+);
+masterDataRouter.post(
+  '/signal-catalog',
+  requireAnyPermission(['integrations', 'manage'], ['rides', 'update']),
+  validate(postSignalCatalogBody),
+  signalCatalogAdminCtrl.postSignalCatalog
+);
+masterDataRouter.patch(
+  '/signal-catalog/:catalogId',
+  requireAnyPermission(['integrations', 'manage'], ['rides', 'update']),
+  validate(signalCatalogIdParam, 'params'),
+  validate(patchSignalCatalogBody),
+  signalCatalogAdminCtrl.patchSignalCatalog
+);
+masterDataRouter.delete(
+  '/signal-catalog/:catalogId',
+  requireAnyPermission(['integrations', 'manage'], ['rides', 'update']),
+  validate(signalCatalogIdParam, 'params'),
+  signalCatalogAdminCtrl.deleteSignalCatalog
+);
 
 masterDataRouter.get(
   '/rides/:id/signal-capabilities',

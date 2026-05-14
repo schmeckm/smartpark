@@ -10,6 +10,8 @@
       same `X-Park-Id` requirement, same response shape; the `/ml/*` mount remains live for
       backwards compatibility (admin-dashboard still calls it) and will be removed in a
       future major version.
+      Optional explainability is gated by `?explain=1` or `?explain=true`. When enabled, `data.explanation` matches
+      `AiExplainabilityMvp` (track `RIDGE_RIDE_WAIT`); each `featureContributions[].source` is an `AiExplainabilityContributionSource` enum value.
     parameters:
       -
         in: path
@@ -26,6 +28,21 @@
           type: string
           example: 1530
         description: 'Comma-separated horizons in minutes'
+      -
+        in: query
+        name: explain
+        schema:
+          oneOf:
+            -
+              type: boolean
+            -
+              type: string
+              enum:
+                - '1'
+                - '0'
+                - 'true'
+                - 'false'
+        description: 'Optional explainability gate. `1`/`true` includes `data.explanation` (`AiExplainabilityMvp`); omitted or `0`/`false` returns legacy prediction payload only.'
     responses:
       '200':
         description: OK

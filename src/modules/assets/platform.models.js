@@ -271,6 +271,13 @@ function definePlatformModels(sequelize) {
       /** Null = parkweit; sonst z. B. PARK_ASSET + UUID aus park_assets.asset_id */
       linkedEntityType: { type: DataTypes.STRING(40), allowNull: true, field: 'linked_entity_type' },
       linkedEntityId: { type: DataTypes.STRING(64), allowNull: true, field: 'linked_entity_id' },
+      acknowledgedAt: { type: DataTypes.DATE, allowNull: true, field: 'acknowledged_at' },
+      acknowledgedByUserId: { type: DataTypes.UUID, allowNull: true, field: 'acknowledged_by_user_id' },
+      acknowledgementNote: { type: DataTypes.TEXT, allowNull: true, field: 'acknowledgement_note' },
+      followUpTasks: { type: DataTypes.JSONB, allowNull: false, defaultValue: [], field: 'follow_up_tasks' },
+      diffSnapshot: { type: DataTypes.JSONB, allowNull: true, field: 'diff_snapshot' },
+      reminderDueAt: { type: DataTypes.DATE, allowNull: true, field: 'reminder_due_at' },
+      reminderSentAt: { type: DataTypes.DATE, allowNull: true, field: 'reminder_sent_at' },
     },
     {
       sequelize,

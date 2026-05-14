@@ -7,6 +7,11 @@ const parkIdParam = Joi.object({
   parkId: uuid.required(),
 });
 
+const handoverEntryParams = Joi.object({
+  parkId: uuid.required(),
+  entryId: uuid.required(),
+});
+
 const assetIdParam = Joi.object({
   assetId: uuid.required(),
 });
@@ -87,6 +92,25 @@ const runtimeOverridePatchBody = Joi.object({
   active: Joi.boolean().optional(),
 }).min(1);
 
+const zoneNormalizationPreviewQuery = Joi.object({
+  parkSlug: Joi.string().trim().min(1).max(128).required(),
+  type: Joi.string().trim().valid('RESTAURANT', 'SHOW').default('RESTAURANT'),
+});
+
+const zoneNormalizationApplyBody = Joi.object({
+  parkSlug: Joi.string().trim().min(1).max(128).required(),
+  type: Joi.string().trim().valid('RESTAURANT', 'SHOW').default('RESTAURANT'),
+  dryRun: Joi.boolean().default(true),
+  overrides: Joi.array()
+    .items(
+      Joi.object({
+        assetId: uuid.required(),
+        zoneSlug: Joi.string().trim().allow('', null).optional(),
+      })
+    )
+    .optional(),
+});
+
 const parkRidesQuery = Joi.object({
   parkId: uuid.optional(),
 });
@@ -95,6 +119,57 @@ const operationalContextQuery = Joi.object({
   /** ISO-8601 instant; omitted = now */
   at: Joi.string().trim().max(64).optional(),
 });
+
+const parkLevel0Body = Joi.object({
+  name: Joi.string().trim().max(200).optional(),
+  slug: Joi.string().trim().max(128).optional(),
+  timezone: Joi.string().trim().max(64).allow(null, '').optional(),
+  latitude: Joi.number().min(-90).max(90).allow(null).optional(),
+  longitude: Joi.number().min(-180).max(180).allow(null).optional(),
+  /**
+   * Manual baseline profile for park-wide defaults (L0),
+   * e.g. opening hours templates or seasonal assumptions.
+   */
+  level0: Joi.object({
+    openingHoursNotes: Joi.string().max(4000).allow('', null).optional(),
+    seasonNotes: Joi.string().max(4000).allow('', null).optional(),
+    baselineOpenTime: Joi.string().trim().max(10).allow('', null).optional(),
+    baselineCloseTime: Joi.string().trim().max(10).allow('', null).optional(),
+    annualOpenFrom: Joi.string().trim().max(10).allow('', null).optional(),
+    annualOpenUntil: Joi.string().trim().max(10).allow('', null).optional(),
+    keyFacts: Joi.object({
+      annualVisitorsTarget: Joi.number().integer().min(0).allow(null).optional(),
+      areaHectares: Joi.number().min(0).allow(null).optional(),
+      maxDailyCapacity: Joi.number().integer().min(0).allow(null).optional(),
+      parkingSpaces: Joi.number().integer().min(0).allow(null).optional(),
+      openingYear: Joi.number().integer().min(1800).max(2200).allow(null).optional(),
+      operatorName: Joi.string().trim().max(160).allow('', null).optional(),
+      emergencyPhone: Joi.string().trim().max(40).allow('', null).optional(),
+      websiteUrl: Joi.string().uri().max(500).allow('', null).optional(),
+    }).optional(),
+  }).optional(),
+  /**
+   * Sparkplug routing documentation per park (UNS/MQTT): logical edge nodes (gateways).
+   * Operational publish paths still come from adapter contextJson / env — this block is the maintained plan of record in MDM.
+   */
+  sparkplug: Joi.object({
+    documentationNotes: Joi.string().max(4000).allow('', null).optional(),
+    defaultEdgeNodeId: Joi.string().trim().max(120).allow('', null).optional(),
+    edges: Joi.array()
+      .items(
+        Joi.object({
+          id: Joi.string().trim().max(64).required(),
+          label: Joi.string().trim().max(160).allow('', null).optional(),
+          edgeNodeId: Joi.string().trim().max(120).required(),
+          zoneKey: Joi.string().trim().max(80).allow('', null).optional(),
+          role: Joi.string().valid('PRIMARY', 'ZONE', 'VIRTUAL_LAB', 'BACKUP', 'OTHER').optional(),
+          notes: Joi.string().max(2000).allow('', null).optional(),
+        })
+      )
+      .max(32)
+      .optional(),
+  }).optional(),
+}).min(1);
 
 const downtimeRangeQuery = Joi.object({
   from: Joi.string().trim().required(),
@@ -134,6 +209,50 @@ const assetEventParams = Joi.object({
   eventId: uuid.required(),
 });
 
+const pdmRuleParams = Joi.object({
+  assetId: uuid.required(),
+  ruleId: uuid.required(),
+});
+
+const pdmRuleCreateBody = Joi.object({
+  metricName: Joi.string().trim().max(160).required(),
+  label: Joi.string().trim().max(200).allow('', null),
+  warnAbove: Joi.number().allow(null),
+  criticalAbove: Joi.number().allow(null),
+  warnBelow: Joi.number().allow(null),
+  criticalBelow: Joi.number().allow(null),
+  unit: Joi.string().trim().max(32).allow('', null),
+  notes: Joi.string().max(4000).allow('', null),
+  enabled: Joi.boolean().optional(),
+  sortOrder: Joi.number().integer().min(-99999).max(99999).optional(),
+}).custom((v, helpers) => {
+  const keys = ['warnAbove', 'criticalAbove', 'warnBelow', 'criticalBelow'];
+  const any = keys.some((k) => v[k] !== null && v[k] !== undefined && Number.isFinite(Number(v[k])));
+  if (!any) {
+    return helpers.error('any.invalid', {
+      message: 'At least one numeric threshold (warn/critical above/below) is required',
+    });
+  }
+  return v;
+});
+
+const pdmRulePatchBody = Joi.object({
+  metricName: Joi.string().trim().max(160).optional(),
+  label: Joi.string().trim().max(200).allow('', null).optional(),
+  warnAbove: Joi.number().allow(null).optional(),
+  criticalAbove: Joi.number().allow(null).optional(),
+  warnBelow: Joi.number().allow(null).optional(),
+  criticalBelow: Joi.number().allow(null).optional(),
+  unit: Joi.string().trim().max(32).allow('', null).optional(),
+  notes: Joi.string().max(4000).allow('', null).optional(),
+  enabled: Joi.boolean().optional(),
+  sortOrder: Joi.number().integer().min(-99999).max(99999).optional(),
+}).min(1);
+
+const pdmEvaluationLogsQuery = Joi.object({
+  limit: Joi.number().integer().min(1).max(200).optional(),
+});
+
 const shiftHandoverListQuery = Joi.object({
   from: Joi.string().trim().optional(),
   to: Joi.string().trim().optional(),
@@ -154,6 +273,43 @@ const shiftHandoverCreateBody = Joi.object({
   includeIncidentSnapshot: Joi.boolean().optional(),
   /** Optional: Park-Objekt (UUID); Stillstands-/Vorfalls-Snapshots nur für dieses Asset */
   linkedParkAssetId: Joi.string().uuid().allow(null, '').optional(),
+  /** Optional: Aufgabenliste (MVP) */
+  followUpTasks: Joi.array()
+    .items(
+      Joi.object({
+        id: Joi.string().trim().max(80).optional(),
+        title: Joi.string().trim().max(280).required(),
+        ownerUserId: Joi.string().uuid().allow(null).optional(),
+        dueAt: Joi.string().trim().max(64).allow(null, '').optional(),
+        status: Joi.string().valid('OPEN', 'DONE', 'CANCELLED').optional(),
+      })
+    )
+    .max(100)
+    .optional(),
+  reminderDelayMin: Joi.number().integer().min(0).max(60 * 24 * 14).optional(),
+});
+
+const shiftHandoverAcknowledgeBody = Joi.object({
+  note: Joi.string().max(4000).allow('', null).optional(),
+});
+
+const shiftHandoverTasksPatchBody = Joi.object({
+  tasks: Joi.array()
+    .items(
+      Joi.object({
+        id: Joi.string().trim().max(80).optional(),
+        title: Joi.string().trim().max(280).required(),
+        ownerUserId: Joi.string().uuid().allow(null).optional(),
+        dueAt: Joi.string().trim().max(64).allow(null, '').optional(),
+        status: Joi.string().valid('OPEN', 'DONE', 'CANCELLED').optional(),
+      })
+    )
+    .max(100)
+    .required(),
+});
+
+const shiftHandoverReminderQuery = Joi.object({
+  limit: Joi.number().integer().min(1).max(200).optional(),
 });
 
 /** Park internal UUID, slug, or external entity id (same resolution as master-data). */
@@ -214,6 +370,7 @@ const geoFlowEventsBatchBody = Joi.object({
 
 module.exports = {
   parkIdParam,
+  handoverEntryParams,
   assetIdParam,
   listAssetsQuery,
   liveObservationsQuery,
@@ -221,16 +378,26 @@ module.exports = {
   enrichTemplateBody,
   parkRidesQuery,
   operationalContextQuery,
+  parkLevel0Body,
   downtimeRangeQuery,
   downtimeParetoQuery,
   downtimeEventCreateBody,
   downtimeEventPatchBody,
   assetEventParams,
+  pdmRuleParams,
+  pdmRuleCreateBody,
+  pdmRulePatchBody,
+  pdmEvaluationLogsQuery,
   shiftHandoverListQuery,
   shiftHandoverCreateBody,
+  shiftHandoverAcknowledgeBody,
+  shiftHandoverTasksPatchBody,
+  shiftHandoverReminderQuery,
   assetOverrideParams,
   runtimeOverrideCreateBody,
   runtimeOverridePatchBody,
+  zoneNormalizationPreviewQuery,
+  zoneNormalizationApplyBody,
   parkSlugParam,
   geoPressureQuery,
   geoHotspotsQuery,

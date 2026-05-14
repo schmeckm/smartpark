@@ -11,6 +11,7 @@ const staffImportItemSchema = Joi.object({
     .valid(...roles)
     .required(),
   currentZoneId: Joi.string().uuid().allow(null).optional(),
+  currentRideId: Joi.string().uuid().allow(null).optional(),
   supervisorId: Joi.string().uuid().allow(null).optional(),
   available: Joi.boolean().optional(),
   skillLevel: Joi.number().integer().min(1).max(5).optional(),
@@ -27,6 +28,7 @@ const createStaffSchema = Joi.object({
   employeeNumber: Joi.string().trim().max(64).allow(null, '').optional(),
   role: Joi.string().valid(...roles).required(),
   currentZoneId: Joi.string().uuid().allow(null).optional(),
+  currentRideId: Joi.string().uuid().allow(null).optional(),
   supervisorId: Joi.string().uuid().allow(null).optional(),
   available: Joi.boolean().optional(),
   skillLevel: Joi.number().integer().min(1).max(5).optional(),
@@ -38,6 +40,7 @@ const updateStaffSchema = Joi.object({
   employeeNumber: Joi.string().trim().max(64).allow(null, '').optional(),
   role: Joi.string().valid(...roles).optional(),
   currentZoneId: Joi.string().uuid().allow(null).optional(),
+  currentRideId: Joi.string().uuid().allow(null).optional(),
   supervisorId: Joi.string().uuid().allow(null).optional(),
   available: Joi.boolean().optional(),
   skillLevel: Joi.number().integer().min(1).max(5).optional(),

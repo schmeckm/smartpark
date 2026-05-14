@@ -12,7 +12,9 @@ import {
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { useRegionalDateTime } from '@/composables/useRegionalDateTime'
+import { useI18n } from 'vue-i18n'
 
+const { t } = useI18n()
 const auth = useAuthStore()
 const { push: pushToast } = useToast()
 const { formatTime, formatDateTime } = useRegionalDateTime()
@@ -37,6 +39,15 @@ const filterDeviceId = ref('')
 const filterMetric = ref('')
 const search = ref('')
 const viewMode = ref<'raw' | 'device' | 'metric'>('raw')
+
+const sourceOptions = computed(() => {
+  const seen = new Set<string>()
+  for (const e of parkEvents.value) {
+    const src = String(e.source || '').trim()
+    if (src) seen.add(src)
+  }
+  return [...seen].sort((a, b) => a.localeCompare(b))
+})
 
 function slugifyParkKey(s: string): string {
   return s
@@ -127,7 +138,7 @@ const filteredEvents = computed(() => {
   const fd = filterDeviceId.value.trim().toLowerCase()
   const fm = filterMetric.value.trim().toLowerCase()
   const q = search.value.trim().toLowerCase()
-  if (fs) list = list.filter((e) => (e.source || '').toLowerCase().includes(fs))
+  if (fs) list = list.filter((e) => String(e.source || '').toLowerCase() === fs)
   if (fmt) list = list.filter((e) => (e.messageType || '').toUpperCase().includes(fmt))
   if (fd) list = list.filter((e) => String(e.deviceId || '').toLowerCase().includes(fd))
   if (fm) list = list.filter((e) => String(e.metric || '').toLowerCase().includes(fm))
@@ -448,7 +459,7 @@ watch(parkId, async () => {
   <div class="mx-auto max-w-[1800px] space-y-6 px-4 py-6 sm:px-6">
     <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
       <div>
-        <h1 class="font-display text-xl font-semibold text-white">UNS Live View</h1>
+        <h1 class="font-display text-xl font-semibold text-white">{{ t('realtime.liveSignals.unsStreamTitle') }}</h1>
         <p class="mt-1 max-w-3xl text-sm text-slate-400">
           Zeigt ausschließlich eingehende Sparkplug-MQTT-Nachrichten vom Broker (kein Adapter- oder DB-Spiegel). Pro
           Metrik eine Zeile. Park-Key entspricht der Sparkplug-Gruppe (<span class="font-mono text-slate-300">groupId</span>).
@@ -578,12 +589,13 @@ watch(parkId, async () => {
         </div>
       </div>
       <div class="mb-3 flex flex-wrap gap-3">
-        <input
+        <select
           v-model="filterSource"
-          type="search"
-          placeholder="Filter source"
           class="min-w-[8rem] flex-1 rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 sm:max-w-[11rem]"
-        />
+        >
+          <option value="">All sources</option>
+          <option v-for="src in sourceOptions" :key="src" :value="src">{{ src }}</option>
+        </select>
         <input
           v-model="filterMessageType"
           type="search"

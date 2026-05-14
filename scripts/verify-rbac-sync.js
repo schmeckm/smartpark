@@ -62,12 +62,27 @@ function validateManifest(m) {
         throw new Error(`navigationGroups: invalid group ${JSON.stringify(g?.id)}`);
       }
       for (const it of g.items) {
-        if (!it.to || !it.labelKey || !it.permission?.resource || !it.permission?.action) {
+        if (!it.to || !it.labelKey) {
           throw new Error(`navigationGroups: invalid item in group "${g.id}"`);
         }
-        const pk = `${it.permission.resource}.${it.permission.action}`;
-        if (!permSet.has(pk)) {
-          throw new Error(`nav item ${it.to} uses permission "${pk}" not listed in permissions[]`);
+        const anyPerms = Array.isArray(it.permissionsAny) ? it.permissionsAny : null;
+        if (anyPerms?.length) {
+          for (const p of anyPerms) {
+            if (!p?.resource || !p?.action) {
+              throw new Error(`navigationGroups: invalid permissionsAny on nav item ${it.to}`);
+            }
+            const pk = `${p.resource}.${p.action}`;
+            if (!permSet.has(pk)) {
+              throw new Error(`nav item ${it.to} uses permission "${pk}" not listed in permissions[]`);
+            }
+          }
+        } else if (it.permission?.resource && it.permission?.action) {
+          const pk = `${it.permission.resource}.${it.permission.action}`;
+          if (!permSet.has(pk)) {
+            throw new Error(`nav item ${it.to} uses permission "${pk}" not listed in permissions[]`);
+          }
+        } else {
+          throw new Error(`navigationGroups: nav item ${it.to} needs permission or permissionsAny`);
         }
       }
     }

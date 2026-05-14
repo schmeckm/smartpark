@@ -78,13 +78,52 @@ const todayMoodAvg = computed(() => {
   return scores.reduce((a, b) => a + b, 0) / scores.length
 })
 
-const electricityEur = computed(() => {
+const electricityEurDisplay = computed(() => {
   if (props.mode === 'park') {
     const e = parkBoard.value?.electricityCostEurPerDay
     return e != null && Number.isFinite(Number(e)) ? Number(e) : null
   }
   const e = assetBoard.value?.delivery?.electricityCostEurPerDay
   return e != null && Number.isFinite(Number(e)) ? Number(e) : null
+})
+
+const maintenanceEurDisplay = computed(() => {
+  if (props.mode === 'park') {
+    const e = parkBoard.value?.maintenanceCostEurPerDay
+    return e != null && Number.isFinite(Number(e)) ? Number(e) : null
+  }
+  const e = assetBoard.value?.delivery?.maintenanceCostEurPerDay
+  return e != null && Number.isFinite(Number(e)) ? Number(e) : null
+})
+
+/** Same EUR basis as API C-ring: total or fallback sum of positive electricity + maintenance. */
+const costEurForRing = computed(() => {
+  if (props.mode === 'park') {
+    const t = parkBoard.value?.totalCostEurPerDay
+    if (t != null && Number.isFinite(Number(t))) return Number(t)
+  } else {
+    const t = assetBoard.value?.delivery?.totalCostEurPerDay
+    if (t != null && Number.isFinite(Number(t))) return Number(t)
+  }
+  const elec = electricityEurDisplay.value
+  const maint = maintenanceEurDisplay.value
+  let sum = 0
+  let any = false
+  if (elec != null && elec > 0) {
+    sum += elec
+    any = true
+  }
+  if (maint != null && maint > 0) {
+    sum += maint
+    any = true
+  }
+  return any ? Math.round(sum * 100) / 100 : null
+})
+
+/** kWh/day from asset daily snapshot delivery_json — delivery may be absent on partial API payloads. */
+const assetElectricityKwhDay = computed(() => {
+  const v = assetBoard.value?.delivery?.electricityKwhPerDay
+  return v != null && Number.isFinite(Number(v)) ? Number(v) : null
 })
 
 const monthRingDays = computed(() => {
@@ -100,7 +139,7 @@ const monthRingDays = computed(() => {
     scores: b.scores,
     costEurGreenMax: u?.ringCostEur.greenAtMost ?? 200,
     costEurAmberMax: u?.ringCostEur.amberAtMost ?? 500,
-    electricityCostEurPerDay: electricityEur.value,
+    costEurPerDayForRing: costEurForRing.value,
     peopleMoodGreenMin: u?.ringPeopleMood.greenAtLeast ?? 4,
     peopleMoodAmberMin: u?.ringPeopleMood.amberAtLeast ?? 3,
     moodAvgSelectedDay: todayMoodAvg.value,
@@ -161,7 +200,7 @@ const ringHeroC = computed(() => {
   const days = monthRingDays.value
   const tr = ringToneTrendLabel(days, props.selectedDate, 'cost', ringTrendBundle())
   const tone = selectedDayRingRow.value?.cost
-  const eur = electricityEur.value
+  const eur = costEurForRing.value
   const has = eur != null
   return {
     centerValue: has ? String(Math.round(eur as number)) : null,
@@ -202,7 +241,7 @@ function todayPillarSub(key: 'safety' | 'quality' | 'delivery' | 'customer'): st
 }
 
 const todayCostSub = computed(() => {
-  const e = electricityEur.value
+  const e = costEurForRing.value
   if (e == null) return ''
   return `${t('sqdc.todayShort')}: ${e} €`
 })
@@ -332,25 +371,19 @@ const overallHistory = computed(() => props.board.overallScoreHistory ?? [])
           <template v-if="mode === 'asset' && assetBoard">
             <div class="flex justify-between gap-2 border-b border-slate-800/80 pb-2">
               <dt class="text-slate-500">{{ t('sqdc.electricityKwhDay') }}</dt>
-              <dd class="font-mono text-white">
-                {{
-                  assetBoard.delivery.electricityKwhPerDay != null &&
-                  Number.isFinite(assetBoard.delivery.electricityKwhPerDay)
-                    ? assetBoard.delivery.electricityKwhPerDay
-                    : '—'
-                }}
-              </dd>
+              <dd class="font-mono text-white">{{ assetElectricityKwhDay != null ? assetElectricityKwhDay : '—' }}</dd>
             </div>
             <div class="flex justify-between gap-2">
               <dt class="text-slate-500">{{ t('sqdc.electricityCostEurDay') }}</dt>
-              <dd class="font-mono text-white">
-                {{
-                  assetBoard.delivery.electricityCostEurPerDay != null &&
-                  Number.isFinite(assetBoard.delivery.electricityCostEurPerDay)
-                    ? `${assetBoard.delivery.electricityCostEurPerDay} €`
-                    : '—'
-                }}
-              </dd>
+              <dd class="font-mono text-white">{{ electricityEurDisplay != null ? `${electricityEurDisplay} €` : '—' }}</dd>
+            </div>
+            <div class="flex justify-between gap-2">
+              <dt class="text-slate-500">{{ t('sqdc.maintenanceCostEurDay') }}</dt>
+              <dd class="font-mono text-white">{{ maintenanceEurDisplay != null ? `${maintenanceEurDisplay} €` : '—' }}</dd>
+            </div>
+            <div class="flex justify-between gap-2 border-t border-slate-800/80 pt-2">
+              <dt class="text-slate-500">{{ t('sqdc.operatingCostTotalCringEurDay') }}</dt>
+              <dd class="font-mono text-white">{{ costEurForRing != null ? `${costEurForRing} €` : '—' }}</dd>
             </div>
           </template>
           <template v-else>
@@ -359,6 +392,16 @@ const overallHistory = computed(() => props.board.overallScoreHistory ?? [])
               <dd class="font-mono text-white">
                 {{ parkBoard?.electricityCostEurPerDay != null && Number.isFinite(parkBoard.electricityCostEurPerDay) ? `${parkBoard.electricityCostEurPerDay} €` : '—' }}
               </dd>
+            </div>
+            <div class="flex justify-between gap-2">
+              <dt class="text-slate-500">{{ t('sqdc.maintenanceCostEurDay') }}</dt>
+              <dd class="font-mono text-white">
+                {{ parkBoard?.maintenanceCostEurPerDay != null && Number.isFinite(parkBoard.maintenanceCostEurPerDay) ? `${parkBoard.maintenanceCostEurPerDay} €` : '—' }}
+              </dd>
+            </div>
+            <div class="flex justify-between gap-2 border-t border-slate-800/80 pt-2">
+              <dt class="text-slate-500">{{ t('sqdc.operatingCostTotalCringEurDay') }}</dt>
+              <dd class="font-mono text-white">{{ costEurForRing != null ? `${costEurForRing} €` : '—' }}</dd>
             </div>
           </template>
         </dl>

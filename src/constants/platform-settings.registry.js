@@ -20,6 +20,14 @@ const PLATFORM_SETTING_REGISTRY = Object.freeze({
     description: 'Seconds between AI pipeline ticks (minimum 30).',
     clamp: { min: 30, max: 86400 },
   },
+  AI_SAMPLING_ALIGN_TO_5M_UTC: {
+    category: 'AI',
+    valueType: 'boolean',
+    envVar: 'AI_SAMPLING_ALIGN_TO_5M_UTC',
+    codeDefault: true,
+    description:
+      'When true, schedule the next AI pipeline tick just after each 5-minute UTC wall boundary (matches 5m ride_feature_snapshots_5m buckets). When false, sleeps AI_SAMPLING_INTERVAL_SECONDS only.',
+  },
   WEATHER_OPEN_METEO_ENABLED: {
     category: 'WEATHER',
     valueType: 'boolean',
@@ -77,9 +85,18 @@ const PLATFORM_SETTING_REGISTRY = Object.freeze({
     category: 'ADAPTERS',
     valueType: 'number',
     envVar: 'EXTERNAL_PARK_DATA_POLL_INTERVAL_SECONDS',
-    codeDefault: 300,
-    description: 'Default polling interval (seconds) seeded into Integration settings when unset.',
+    codeDefault: 120,
+    description:
+      'Default polling interval (seconds) seeded into Integration settings when unset. Shorter intervals ingest fresher waits; feature-store buckets remain 5m.',
     clamp: { min: 30, max: 86400 },
+  },
+  EXTERNAL_PARK_DATA_POLL_NEAR_5M_UTC: {
+    category: 'ADAPTERS',
+    valueType: 'boolean',
+    envVar: 'EXTERNAL_PARK_DATA_POLL_NEAR_5M_UTC',
+    codeDefault: true,
+    description:
+      'When true, shorten a sleep when the next 5-minute UTC boundary is sooner than the poll interval (optional phase alignment with snapshot buckets).',
   },
   EXTERNAL_PARK_DATA_DEFAULT_PROVIDER: {
     category: 'ADAPTERS',
@@ -139,7 +156,7 @@ const PLATFORM_SETTING_REGISTRY = Object.freeze({
     envVar: 'SQDC_RING_COST_EUR_GREEN_MAX',
     codeDefault: 200,
     description:
-      'Cost ring (C): daily electricityCostEurPerDay in snapshot delivery_json — ≤ this EUR → green segment.',
+      'Cost ring (C): sum of positive electricityCostEurPerDay + maintenanceCostEurPerDay in snapshot delivery_json — ≤ this EUR → green segment.',
     clamp: { min: 1, max: 50_000 },
   },
   SQDC_RING_COST_EUR_AMBER_MAX: {
@@ -147,7 +164,8 @@ const PLATFORM_SETTING_REGISTRY = Object.freeze({
     valueType: 'number',
     envVar: 'SQDC_RING_COST_EUR_AMBER_MAX',
     codeDefault: 500,
-    description: 'Cost ring (C): ≤ this EUR (and > green max) → amber; above → red.',
+    description:
+      'Cost ring (C): ≤ this total daily EUR (electricity + maintenance, delivery_json) and > green max → amber; above → red.',
     clamp: { min: 2, max: 100_000 },
   },
   SQDC_RING_PEOPLE_MOOD_GREEN_MIN: {

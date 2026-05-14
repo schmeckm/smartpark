@@ -41,7 +41,7 @@ function fakeEnv(overrides = {}) {
     weatherOpenMeteoForecastUrl: 'https://api.open-meteo.com/v1/forecast',
     weatherOpenMeteoRebuildSnapshots: true,
     externalParkDataEnabled: false,
-    externalParkDataPollIntervalSeconds: 300,
+    externalParkDataPollIntervalSeconds: 120,
     externalParkDataDefaultProvider: 'themeparks_wiki',
     adapterSchedulerEnabled: false,
     outputProfiles: '',
@@ -62,11 +62,14 @@ function fakeEnv(overrides = {}) {
     registrySignalPublishMaxAgeMs: 86_400_000,
     registrySignalStabilityDays: 0,
     ingestionMaxAgeMs: 1_200_000,
+    mlTraceEnabled: false,
+    mlProfileEnabled: false,
+    mlFeatureWeightsEnabled: false,
   };
   return { ...base, ...overrides };
 }
 
-test('buildStructured: groups all current env keys into 13 sections', () => {
+test('buildStructured: groups all current env keys into 14 sections', () => {
   const s = buildStructured(fakeEnv());
   for (const k of [
     'runtime',
@@ -77,6 +80,7 @@ test('buildStructured: groups all current env keys into 13 sections', () => {
     'sparkplug',
     'uns',
     'ai',
+    'mlForecast',
     'weather',
     'integrations',
     'sim',
@@ -89,6 +93,9 @@ test('buildStructured: groups all current env keys into 13 sections', () => {
   assert.equal(s.db.host, '127.0.0.1');
   assert.equal(s.mqtt.brokerUrl, 'mqtt://127.0.0.1:1883');
   assert.equal(s.sim.oee.parkSlug, 'europa_park');
+  assert.equal(s.mlForecast.traceEnabled, false);
+  assert.equal(s.mlForecast.profileEnabled, false);
+  assert.equal(s.mlForecast.featureWeightsEnabled, false);
 });
 
 test('buildStructured: coerces optional booleans defensively', () => {
@@ -133,6 +140,7 @@ test('validateStructured: applies Joi defaults for missing leaves', () => {
     sparkplug: {},
     uns: {},
     ai: {},
+    mlForecast: {},
     weather: {},
     integrations: {},
     sim: { oee: {} },
@@ -179,6 +187,7 @@ test('Flags.toLogPayload(): masks secrets and matches the QW2 boot-log shape', (
     'sparkplug',
     'uns',
     'ai',
+    'mlForecast',
     'weather',
     'integrations',
     'sim',
@@ -222,6 +231,19 @@ test('clearFlagsCache: forces re-build after env override changes', (t) => {
   clearFlagsCache();
   const b = getFlags();
   assert.notStrictEqual(a, b, 'expected fresh instance after cache clear');
+});
+
+test('Flags: mlForecast flags map from env overrides', () => {
+  const f = getFlags({
+    envOverride: fakeEnv({
+      mlTraceEnabled: true,
+      mlProfileEnabled: false,
+      mlFeatureWeightsEnabled: 1,
+    }),
+  });
+  assert.equal(f.mlForecast.traceEnabled, true);
+  assert.equal(f.mlForecast.profileEnabled, false);
+  assert.equal(f.mlForecast.featureWeightsEnabled, true);
 });
 
 test('Flags: ride-id allow-list CSVs are preserved in the typed shape (parsing happens elsewhere)', () => {

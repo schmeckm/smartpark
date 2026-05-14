@@ -14,6 +14,9 @@ tags:
   -
     name: Health
   -
+    name: Agent
+    description: 'Phase A agentic co-pilot runs (read-only tools; persisted trace).'
+  -
     name: Audit
   -
     name: Zones
@@ -1450,6 +1453,127 @@ components:
             expectedBenefit:
               type: object
               nullable: true
+    AiExplainabilityContributionSource:
+      type: string
+      description: "Pipeline layer tag for one row in `AiExplainabilityMvp.featureContributions` (MVP normalizer). The API normalizes `featureContributions[].source` on emit via `finalizeExplainabilityMvpEnvelope` (`prediction-explanation-normalizer.service.js`); responses use this enum only. Legacy labels `x_context` / `x_layer` are mapped to `baseline_integration` / `x_layer_heuristic`. Clients may still map those strings if displaying stale cached payloads. `capability_ml_policy` marks ridge ML inputs zeroed because `ride_signal_capabilities.capability_json.use_for_ml` is explicitly `false` for a mapped catalog signal. `ai_studio` is reserved for future structured AI Studio rows (today `featureContributions` is often empty for Studio). `unknown` is a forward-compatible fallback for unrecognized source strings.\n"
+      enum:
+        - baseline_integration
+        - x_layer_heuristic
+        - enterprise_ml
+        - snapshot
+        - ridge_model
+        - baseline_rule
+        - capability_ml_policy
+        - ai_studio
+        - unknown
+    AiExplainabilityFeatureContribution:
+      type: object
+      required:
+        - feature
+        - impact
+        - direction
+        - source
+        - explanation
+      properties:
+        feature:
+          type: string
+        value:
+          nullable: true
+          description: 'Scalar feature value when available (number, string, boolean, or null).'
+        impact:
+          type: number
+        direction:
+          type: string
+          description: 'UI hint; ridge importance rows often use `NEUTRAL` when `impact` is magnitude-only.'
+        source:
+          $ref: '#/components/schemas/AiExplainabilityContributionSource'
+        explanation:
+          type: string
+    AiExplainabilityModelInfo:
+      type: object
+      required:
+        - track
+      properties:
+        track:
+          type: string
+          description: 'Discriminator for which pipeline produced this envelope.'
+          enum:
+            - ADR_FORECAST
+            - RIDGE_RIDE_WAIT
+            - AI_STUDIO
+        modelId:
+          type: string
+          nullable: true
+        modelVersion:
+          type: string
+          nullable: true
+        algorithm:
+          type: string
+          nullable: true
+        basis:
+          type: string
+          nullable: true
+          description: 'ADR forecast resolution basis when applicable (`ENTITY`, `ENTITY_TYPE`, `PARK`, `NONE`).'
+        scope:
+          type: string
+          nullable: true
+          description: 'ADR explainability scope when applicable (`park`, `entity`).'
+    AiExplainabilityMvp:
+      type: object
+      description: "Normalized MVP explainability envelope. ADR forecast explanation routes return this as `data.explainability` alongside legacy fields; ridge ride predict returns the same shape as `data.explanation` when `explain=1`.\n"
+      required:
+        - target
+        - unit
+        - confidence
+        - featureContributions
+        - summary
+        - recommendation
+        - modelInfo
+      properties:
+        target:
+          type: string
+        prediction:
+          type: number
+          nullable: true
+        unit:
+          type: string
+        confidence:
+          type: number
+        baseline:
+          type: number
+          nullable: true
+        adjustedPrediction:
+          type: number
+          nullable: true
+        featureContributions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AiExplainabilityFeatureContribution'
+        summary:
+          type: string
+        recommendation:
+          type: string
+        modelInfo:
+          $ref: '#/components/schemas/AiExplainabilityModelInfo'
+        mlCapabilityMaskedFeatures:
+          type: array
+          description: "Ridge track only: ML feature keys from `TRAINING_FEATURE_NAMES` sent as `0` because the operator set explicit `use_for_ml: false` on a mapped `signal_catalog.signal_code`. Omitted or empty when nothing was masked. Same keys may appear in `featureContributions` with `source: capability_ml_policy`.\n"
+          items:
+            type: string
+    ForecastExplanationResponseData:
+      type: object
+      description: "Legacy park/entity forecast explanation fields (`baseValue`, `finalPrediction`, `adjustments`, …) plus MVP `explainability` (`AiExplainabilityMvp`, track `ADR_FORECAST`).\n"
+      properties:
+        explainability:
+          $ref: '#/components/schemas/AiExplainabilityMvp'
+      additionalProperties: true
+    EnvelopeForecastExplanation:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/ForecastExplanationResponseData'
     EnvelopeMlRidePredict:
       type: object
       properties:
@@ -1457,6 +1581,11 @@ components:
           type: boolean
         data:
           type: object
+          description: "Legacy ride wait prediction payload. With `?explain=1` or `?explain=true`, includes `explanation` (`AiExplainabilityMvp`, track `RIDGE_RIDE_WAIT`) alongside `rideId`, `predictions`, `topFactors`, etc.\n"
+          properties:
+            explanation:
+              $ref: '#/components/schemas/AiExplainabilityMvp'
+              nullable: true
           additionalProperties: true
     EnvelopeMlParkForecastSummary:
       type: object
@@ -1490,40 +1619,114 @@ components:
         data:
           type: object
           additionalProperties: true
-    AiStudioTrainRequest:
+    EnvelopeMlPredictionTraces:
       type: object
-      description: 'Mirrors `trainBody` in `ai-studio.validators.js` (dataset FEATURE_STORE \| SANDBOX, entityType, features, targetVariable, strategy, algorithm, horizonMinutes rules). Additional server-side constraints apply.'
-      additionalProperties: true
       properties:
-        dataset:
-          type: string
-          enum:
-            - FEATURE_STORE
-            - SANDBOX
-          default: SANDBOX
-        entityType:
-          type: string
-        entityId:
-          type: string
-          format: uuid
-          nullable: true
-        targetVariable:
-          type: string
-        features:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+          description: 'Rows from `ml_prediction_traces` (Sequelize plain; includes `featureVectorJson`, etc.)'
+    MlPredictionTraceFilterOptions:
+      type: object
+      properties:
+        modelNames:
           type: array
           items:
             type: string
-        strategy:
+        targetNames:
+          type: array
+          items:
+            type: string
+      required:
+        - modelNames
+        - targetNames
+    EnvelopeMlPredictionTraceFilterOptions:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/MlPredictionTraceFilterOptions'
+    EnvelopeMlPredictionTraceDetail:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            trace:
+              type: object
+              nullable: true
+              additionalProperties: true
+            results:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+            learnedCoefficients:
+              type: object
+              nullable: true
+              description: 'Phase 5 — ridge_v1 standardized coefficients from ml_model_registry (read-only); null when unavailable.'
+              additionalProperties: true
+            manualBusinessWeights:
+              type: object
+              nullable: true
+              description: 'Phase 4/5 — merged manual feature weights when ML_FEATURE_WEIGHTS_ENABLED; null otherwise.'
+              additionalProperties: true
+    MlPredictionTraceCoefficientRow:
+      type: object
+      properties:
+        feature:
+          type: string
+        coefficient:
+          type: number
+        direction:
           type: string
           enum:
-            - AUTO
-            - MANUAL
-          default: MANUAL
-        algorithm:
+            - positive
+            - negative
+            - neutral
+        absoluteRank:
+          type: integer
+          minimum: 1
+      required:
+        - feature
+        - coefficient
+        - direction
+        - absoluteRank
+    MlPredictionTraceCoefficientsPayload:
+      type: object
+      properties:
+        predictionId:
+          type: string
+          format: uuid
+        modelName:
+          type: string
+        modelVersion:
           type: string
           nullable: true
-        horizonMinutes:
-          type: integer
+        coefficients:
+          type: array
+          items:
+            $ref: '#/components/schemas/MlPredictionTraceCoefficientRow'
+      required:
+        - predictionId
+        - modelName
+        - coefficients
+    EnvelopeMlPredictionTraceCoefficients:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/MlPredictionTraceCoefficientsPayload'
+      description: 'Mirrors `trainBody` in `ai-studio.validators.js` (dataset FEATURE_STORE \| SANDBOX, entityType, features, targetVariable, strategy, algorithm, horizonMinutes rules). Additional server-side constraints apply.'
+      additionalProperties: true
     AiStudioPredictRequest:
       type: object
       description: 'Mirrors `predictBody` — entityType, targetVariable, featureSource, optional entityId, features map.'
@@ -1857,6 +2060,86 @@ components:
           nullable: true
           type: object
           additionalProperties: true
+    AddonBoardVenueTriplet:
+      type: object
+      description: 'Counts of active `park_assets` by `AssetType` RESTAURANT, SHOP, SHOW (Phase 3 cross-asset context). No POS throughput.'
+      properties:
+        restaurants:
+          type: integer
+          minimum: 0
+        shops:
+          type: integer
+          minimum: 0
+        shows:
+          type: integer
+          minimum: 0
+    AddonBoardCrossAssetHint:
+      type: object
+      description: 'Rule-based operations hint; clients map `code` to i18n.'
+      properties:
+        code:
+          type: string
+          example: CROSS_QUEUE_NEAR_COMMERCE
+        severity:
+          type: string
+          enum:
+            - INFO
+    AddonBoardCrossAssetContextRideSwdec:
+      type: object
+      description: 'Nested under ride card `swdec` — venues in the ride zone plus hint codes.'
+      required:
+        - schemaVersion
+        - zoneVenues
+        - hints
+      properties:
+        schemaVersion:
+          type: integer
+          enum:
+            - 1
+        zoneVenues:
+          $ref: '#/components/schemas/AddonBoardVenueTriplet'
+        hints:
+          type: array
+          items:
+            $ref: '#/components/schemas/AddonBoardCrossAssetHint'
+    AddonBoardCrossAssetContextPark:
+      type: object
+      description: 'Park-level venue roll-up on L0 / ride-list / critical-list / ride-detail root. Omitted when there are no venue assets.'
+      required:
+        - schemaVersion
+        - parkVenues
+        - zonesWithVenues
+      properties:
+        schemaVersion:
+          type: integer
+          enum:
+            - 1
+        parkVenues:
+          $ref: '#/components/schemas/AddonBoardVenueTriplet'
+        zonesWithVenues:
+          type: integer
+          minimum: 0
+          description: 'Distinct zone keys (including unzoned bucket) with at least one venue asset.'
+    AddonBoardCrossAssetContextZoneResponse:
+      type: object
+      description: 'L1 zone summary — selected zone triplet plus park totals.'
+      required:
+        - schemaVersion
+        - parkVenues
+        - zoneVenues
+        - zonesWithVenues
+      properties:
+        schemaVersion:
+          type: integer
+          enum:
+            - 1
+        parkVenues:
+          $ref: '#/components/schemas/AddonBoardVenueTriplet'
+        zoneVenues:
+          $ref: '#/components/schemas/AddonBoardVenueTriplet'
+        zonesWithVenues:
+          type: integer
+          minimum: 0
     EnvelopeAddonBoardParkSummary:
       type: object
       properties:
@@ -1865,6 +2148,12 @@ components:
         data:
           type: object
           additionalProperties: true
+          properties:
+            crossAssetContext:
+              nullable: true
+              allOf:
+                -
+                  $ref: '#/components/schemas/AddonBoardCrossAssetContextPark'
     EnvelopeAddonBoardRides:
       type: object
       properties:
@@ -1873,6 +2162,21 @@ components:
         data:
           type: object
           additionalProperties: true
+          properties:
+            weatherContext:
+              type: object
+              nullable: true
+              additionalProperties: true
+            crossAssetContext:
+              nullable: true
+              allOf:
+                -
+                  $ref: '#/components/schemas/AddonBoardCrossAssetContextPark'
+            rides:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
     EnvelopeAddonBoardZone:
       type: object
       properties:
@@ -1881,6 +2185,16 @@ components:
         data:
           type: object
           additionalProperties: true
+          properties:
+            weatherContext:
+              type: object
+              nullable: true
+              additionalProperties: true
+            crossAssetContext:
+              nullable: true
+              allOf:
+                -
+                  $ref: '#/components/schemas/AddonBoardCrossAssetContextZoneResponse'
     EnvelopeAddonBoardRideDetail:
       type: object
       properties:
@@ -1889,6 +2203,18 @@ components:
         data:
           type: object
           additionalProperties: true
+          properties:
+            crossAssetContext:
+              nullable: true
+              allOf:
+                -
+                  $ref: '#/components/schemas/AddonBoardCrossAssetContextPark'
+            swdec:
+              type: object
+              additionalProperties: true
+              properties:
+                crossAssetContext:
+                  $ref: '#/components/schemas/AddonBoardCrossAssetContextRideSwdec'
     EnvelopeAddonBoardZoneList:
       type: object
       properties:
@@ -3733,6 +4059,17 @@ components:
           type: boolean
         data:
           $ref: '#/components/schemas/UnsRegistryMirrorSummary'
+    EnvelopeUnsRegistryMirrorSyncPost:
+      type: object
+      properties:
+        success:
+          type: boolean
+        syncedAt:
+          type: string
+          format: date-time
+          description: 'ISO-8601 timestamp when the full mirror transaction completed'
+        data:
+          $ref: '#/components/schemas/UnsRegistryMirrorSummary'
     UnsHierarchyImportBody:
       type: object
       required:
@@ -4502,7 +4839,7 @@ paths:
       tags:
         - AI
       summary: 'Add-on Board park summary (L0)'
-      description: 'Needs `ops.read` or `rides.read` and `X-Park-Id`'
+      description: "Needs `ops.read` or `rides.read` and `X-Park-Id`. **Phase 3:** `data.crossAssetContext` — active F&B / shop / show asset counts by park (master data only).\n"
       responses:
         '200':
           description: OK
@@ -4515,7 +4852,7 @@ paths:
       tags:
         - AI
       summary: 'Add-on Board ride cards with SWDEC + ML forecasts'
-      description: 'Needs `ops.read` or `rides.read` and `X-Park-Id`'
+      description: "Needs `ops.read` or `rides.read` and `X-Park-Id`. **Phase 3:** `data.crossAssetContext` (park roll-up); each ride `swdec.crossAssetContext` (zone venues + hint codes).\n"
       responses:
         '200':
           description: OK
@@ -4528,6 +4865,7 @@ paths:
       tags:
         - AI
       summary: 'Critical / watch-list rides for the board'
+      description: 'Same envelope as `GET /addon-board/rides` (includes optional `crossAssetContext` park roll-up).'
       parameters:
         -
           in: query
@@ -4630,6 +4968,7 @@ paths:
       tags:
         - AI
       summary: 'Zone-level Add-on Board summary (L1)'
+      description: '**Phase 3:** optional `data.crossAssetContext` with `zoneVenues` and park totals.'
       parameters:
         -
           in: path
@@ -4650,6 +4989,7 @@ paths:
       tags:
         - AI
       summary: 'Ride-level Add-on Board detail (L3)'
+      description: '**Phase 3:** `data.crossAssetContext` (park roll-up, same as list) and `data.swdec.crossAssetContext` (zone venues + hints).'
       parameters:
         -
           in: path
@@ -4860,6 +5200,390 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EnvelopeGenericData'
+  /agent/actions:
+    get:
+      tags:
+        - Agent
+      summary: 'List pending proposed agent actions for scoped park'
+      description: 'Needs **`agent.review`** and **`X-Park-Id`**. Returns proposals awaiting approve/reject (`status=proposed`).'
+      parameters:
+        -
+          in: header
+          name: X-Park-Id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        -
+          in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        -
+          in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+  '/agent/actions/{id}/approve':
+    parameters:
+      -
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      -
+        in: header
+        name: X-Park-Id
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags:
+        - Agent
+      summary: 'Approve and apply a proposed agent action'
+      description: "Needs **`agent.approve`** and **`X-Park-Id`**. Executes the whitelisted write tool (e.g. batch recommendation scoring, notify audit stub, incident create).\nOn success the action row stores **`outcome_metric`** (Phase C JSON: forecast-vs-actual bridge stub + `resolution: applied`).\n"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '404':
+          description: 'Not found'
+        '410':
+          description: 'Proposal expired'
+  '/agent/actions/{id}/reject':
+    parameters:
+      -
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      -
+        in: header
+        name: X-Park-Id
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags:
+        - Agent
+      summary: 'Reject a proposed agent action'
+      description: "Needs **`agent.review`** and **`X-Park-Id`**. Stores **`outcome_metric`** with `resolution: rejected` and the same forecast snapshot stub as approve (for later analytics).\n"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  maxLength: 2000
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+  /agent/approval-metrics:
+    get:
+      tags:
+        - Agent
+      summary: 'Rolling approval metrics for write proposals (Phase C)'
+      description: "Needs **`agent.read`** and **`X-Park-Id`**. Counts `agent_actions` with `action_type` like `write.%` joined to runs in the park, over **`sinceDays`** (default 30). Optional **`skillId`** scopes to one skill’s runs.\nUsed by preflight **`approval_rate_gate`** vs env **`AGENT_APPROVAL_GATE_MIN`** (default `0.6`).\n"
+      parameters:
+        -
+          in: header
+          name: X-Park-Id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        -
+          in: query
+          name: skillId
+          required: false
+          schema:
+            type: string
+            enum:
+              - daily_executive_brief
+              - crowd_spike_triage
+              - mapping_assistant
+              - weather_pivot
+              - ride_down_response
+          description: 'When set, only actions from runs with this `skill_id` are counted.'
+        -
+          in: query
+          name: sinceDays
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 365
+            default: 30
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+  /agent/preflight:
+    post:
+      tags:
+        - Agent
+      summary: 'Phase C pre-flight checklist for an agent skill'
+      description: "Needs **`agent.run`**, **`X-Park-Id`**, and body **`parkId`** matching park context.\nReturns a checklist including a **read-path dry-run** (executes the same read tools as the target skill with small limits — no new `agent_runs` row), optional comparison to **`sourceRunId`**, then **`approval_rate_gate`** vs **`AGENT_APPROVAL_GATE_MIN`** (see `GET /agent/approval-metrics`). Response includes **`dryRun`** (`tools[]`, `allOk`, `skipped`). Attraction OEE / scenario simulators remain future work.\n"
+      parameters:
+        -
+          in: header
+          name: X-Park-Id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - skillId
+                - parkId
+              properties:
+                parkId:
+                  type: string
+                  format: uuid
+                skillId:
+                  type: string
+                  enum:
+                    - daily_executive_brief
+                    - crowd_spike_triage
+                    - mapping_assistant
+                    - weather_pivot
+                    - ride_down_response
+                sourceRunId:
+                  type: string
+                  format: uuid
+                  nullable: true
+                  description: 'Optional prior `agent_runs.id` in the same park for regression comparison.'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: 'Source run not found (when `sourceRunId` set)'
+  '/agent/runs/{id}/replay':
+    post:
+      tags:
+        - Agent
+      summary: 'Replay a completed agent run (creates a new run)'
+      description: "Needs **`agent.run`** and **`X-Park-Id`**. Loads the source run's **`skillId`** and **`input_json`** (`crowdEventId`, `rideId`), then executes the skill again with **`triggerType: replay`** and **`meta_json.replayOfRunId`**.\n"
+      parameters:
+        -
+          in: header
+          name: X-Park-Id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        -
+          in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: 'Source run not found'
+  /agent/runs:
+    get:
+      tags:
+        - Agent
+      summary: 'List agent runs for scoped park'
+      description: 'Needs **`agent.read`**, **`X-Park-Id`**, and optional filters (`limit`, `offset`, `skillId`, `status`).'
+      parameters:
+        -
+          in: header
+          name: X-Park-Id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        -
+          in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        -
+          in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        -
+          in: query
+          name: skillId
+          schema:
+            type: string
+        -
+          in: query
+          name: status
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+    post:
+      tags:
+        - Agent
+      summary: 'Trigger an agent skill run (manual)'
+      description: "Needs **`agent.run`** and **`X-Park-Id`**. Body **`parkId`** must match the active park context.\nSupports **`daily_executive_brief`**, **`crowd_spike_triage`**, **`mapping_assistant`**, **`weather_pivot`**, and **`ride_down_response`** (suggest skills propose actions for approval).\n"
+      parameters:
+        -
+          in: header
+          name: X-Park-Id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - skillId
+                - parkId
+              properties:
+                skillId:
+                  type: string
+                  enum:
+                    - daily_executive_brief
+                    - crowd_spike_triage
+                    - mapping_assistant
+                    - weather_pivot
+                    - ride_down_response
+                parkId:
+                  type: string
+                  format: uuid
+                triggerType:
+                  type: string
+                  default: manual
+                crowdEventId:
+                  type: string
+                  format: uuid
+                  nullable: true
+                  description: 'Optional crowd event (`crowd_events.id`) for `crowd_spike_triage` context.'
+                rideId:
+                  type: string
+                  format: uuid
+                  nullable: true
+                  description: 'Optional ride / park asset id (`park_assets.asset_id`) for `ride_down_response` focus context.'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '422':
+          description: 'Validation error'
+  '/agent/runs/{id}':
+    parameters:
+      -
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      -
+        in: header
+        name: X-Park-Id
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - Agent
+      summary: 'Get agent run detail with steps and actions'
+      description: 'Needs **`agent.read`** and **`X-Park-Id`**. Returns ordered **`steps`** and **`actions`** for audit trace.'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: 'Not found'
   /ai/health:
     get:
       tags:
@@ -6068,7 +6792,7 @@ paths:
       tags:
         - AI
       summary: 'Short textual explanation of park forecast delta'
-      description: 'Needs `ai.read`. Does not return `mlFactorCurrents`.'
+      description: "Needs `ai.read`. Does not return `mlFactorCurrents`. Adds `data.explainability` (`AiExplainabilityMvp`, track `ADR_FORECAST`)\nalongside legacy fields. Each `featureContributions[].source` is one of the canonical contribution-source enum values\n(`baseline_integration`, `x_layer_heuristic`, `enterprise_ml`, `snapshot`, `ridge_model`, `baseline_rule`, `ai_studio`, `unknown`).\n"
       parameters:
         -
           in: path
@@ -6093,13 +6817,49 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                  data:
-                    type: object
-                    additionalProperties: true
+                $ref: '#/components/schemas/EnvelopeForecastExplanation'
+  '/ai/entities/{externalEntityId}/forecast/explanation':
+    get:
+      tags:
+        - AI
+      summary: 'Entity (ride) forecast explanation + normalized explainability'
+      description: "Needs `ai.read`. Same query params as entity forecast summary. Returns legacy explanation fields plus `data.explainability`\n(`AiExplainabilityMvp`). `featureContributions[].source` uses the canonical contribution-source enum (`AiExplainabilityContributionSource`).\n"
+      parameters:
+        -
+          in: path
+          name: externalEntityId
+          required: true
+          schema:
+            type: string
+        -
+          in: query
+          name: externalParkId
+          required: true
+          schema:
+            type: string
+        -
+          in: query
+          name: provider
+          schema:
+            type: string
+        -
+          in: query
+          name: entityType
+          schema:
+            type: string
+        -
+          in: query
+          name: horizon
+          schema:
+            type: integer
+            default: 60
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeForecastExplanation'
   '/ai/entities/{externalEntityId}/forecast/summary':
     get:
       tags:
@@ -6342,7 +7102,7 @@ paths:
       tags:
         - AI
       summary: 'Predict ride wait times (15/30/60 min) from feature store + optional ridge models'
-      description: "Canonical mount under `/ai/ml/*` (Phase B5). Needs `ai.read` and `X-Park-Id`. Falls back to\nbaseline when no model is trained. Identical handler to the deprecated `/ml/predict/rides/{rideId}`.\n"
+      description: "Canonical mount under `/ai/ml/*` (Phase B5). Needs `ai.read` and `X-Park-Id`. Falls back to\nbaseline when no model is trained. Identical handler to the deprecated `/ml/predict/rides/{rideId}`.\nBy default, response `data` is the legacy prediction payload. Add `?explain=1` (or `?explain=true`)\nto include optional `data.explanation` (`AiExplainabilityMvp`, track `RIDGE_RIDE_WAIT`). Each\n`featureContributions[].source` is an `AiExplainabilityContributionSource` enum value.\n"
       parameters:
         -
           in: path
@@ -6359,6 +7119,21 @@ paths:
             type: string
             example: 1530
           description: 'Comma-separated horizons in minutes'
+        -
+          in: query
+          name: explain
+          schema:
+            oneOf:
+              -
+                type: boolean
+              -
+                type: string
+                enum:
+                  - '1'
+                  - '0'
+                  - 'true'
+                  - 'false'
+          description: 'Optional explainability gate. `1`/`true` includes `data.explanation`; omitted or `0`/`false` returns legacy prediction payload only.'
       responses:
         '200':
           description: OK
@@ -6498,6 +7273,278 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EnvelopeMlTrainRideResult'
+  /ai/ml/prediction-traces:
+    get:
+      tags:
+        - AI
+      summary: 'List ML prediction traces for the current park (Phase 1 observability)'
+      description: "**Read-only.** Governed feature snapshots only; requires `ai.read` and `X-Park-Id`. Results are limited to the\nauthenticated park. Populated only when `ML_TRACE_ENABLED=true` on the API process; does not affect predictions.\n"
+      parameters:
+        -
+          in: query
+          name: rideId
+          schema:
+            type: string
+            format: uuid
+          description: 'Filter by ride asset_id'
+        -
+          in: query
+          name: modelName
+          schema:
+            type: string
+        -
+          in: query
+          name: targetName
+          schema:
+            type: string
+        -
+          in: query
+          name: from
+          schema:
+            type: string
+            format: date-time
+        -
+          in: query
+          name: to
+          schema:
+            type: string
+            format: date-time
+        -
+          in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeMlPredictionTraces'
+  /ai/ml/prediction-traces/filter-options:
+    get:
+      tags:
+        - AI
+      summary: 'Distinct model_name and target_name values for trace list filters (current park)'
+      description: "**Read-only.** Alphabetically sorted distinct values from `ml_prediction_traces` for the authenticated park\n(`X-Park-Id`). Omits null/empty names. Does not depend on `ML_TRACE_ENABLED` for reads (returns empty arrays when\nno rows exist).\n"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeMlPredictionTraceFilterOptions'
+  '/ai/ml/prediction-traces/{predictionId}':
+    get:
+      tags:
+        - AI
+      summary: 'Get one prediction trace and per-horizon results by prediction_id UUID'
+      description: "**Read-only.** Includes `trace` and `results` (per horizon). Requires `ai.read` and `X-Park-Id`; 404 if missing or not in current park.\n"
+      parameters:
+        -
+          in: path
+          name: predictionId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeMlPredictionTraceDetail'
+        '404':
+          description: 'Not found'
+  /ai/ml/forecast-accuracy/kpis:
+    get:
+      tags:
+        - AI
+      summary: 'Forecast accuracy KPIs (observational)'
+      description: "**Read-only.** Aggregates `ml_forecast_accuracy_logs` for the current park; compares past `ml_prediction_results`\nto governed `ride_feature_snapshots_5m` at prediction time + horizon. Does not alter forecasts or training.\n"
+      parameters:
+        -
+          in: query
+          name: rideId
+          schema:
+            type: string
+            format: uuid
+        -
+          in: query
+          name: modelName
+          schema:
+            type: string
+        -
+          in: query
+          name: targetName
+          schema:
+            type: string
+        -
+          in: query
+          name: horizonMinutes
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 1440
+        -
+          in: query
+          name: from
+          schema:
+            type: string
+            format: date-time
+        -
+          in: query
+          name: to
+          schema:
+            type: string
+            format: date-time
+        -
+          in: query
+          name: comparableOnly
+          schema:
+            type: boolean
+          description: 'When true, restrict aggregates to rows with a usable actual (OK/WARNING/CRITICAL only).'
+      responses:
+        '200':
+          description: OK
+  '/ai/ml/forecast-accuracy/{id}':
+    get:
+      tags:
+        - AI
+      summary: 'Get one forecast accuracy log row'
+      description: '**Read-only.** Scoped to current park (`X-Park-Id`).'
+      parameters:
+        -
+          in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+        '404':
+          description: 'Not found'
+  /ai/ml/forecast-accuracy:
+    get:
+      tags:
+        - AI
+      summary: 'List forecast accuracy evaluation logs'
+      description: "**Read-only.** Observational accuracy rows derived from prediction traces and governed snapshots only.\n"
+      parameters:
+        -
+          in: query
+          name: rideId
+          schema:
+            type: string
+            format: uuid
+        -
+          in: query
+          name: modelName
+          schema:
+            type: string
+        -
+          in: query
+          name: targetName
+          schema:
+            type: string
+        -
+          in: query
+          name: horizonMinutes
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 1440
+        -
+          in: query
+          name: from
+          schema:
+            type: string
+            format: date-time
+        -
+          in: query
+          name: to
+          schema:
+            type: string
+            format: date-time
+        -
+          in: query
+          name: comparableOnly
+          schema:
+            type: boolean
+          description: 'When true, only list rows that have comparable predicted vs actual (excludes UNKNOWN).'
+        -
+          in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+      responses:
+        '200':
+          description: OK
+  /ai/ml/feature-store-readiness:
+    get:
+      tags:
+        - AI
+      summary: 'Feature store readiness (ride_feature_snapshots_5m)'
+      description: "**Read-only.** Aggregates AI sampling / pipeline health and ride snapshot aggregates for `X-Park-Id`.\nOptional `from` / `to` (ISO-8601) default to the trailing 7 days; optional `rideId` scopes to one ride.\nDoes **not** mutate forecasts or snapshots.\n"
+      parameters:
+        -
+          in: query
+          name: rideId
+          schema:
+            type: string
+            format: uuid
+        -
+          in: query
+          name: from
+          schema:
+            type: string
+            format: date-time
+        -
+          in: query
+          name: to
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: OK
+        '422':
+          description: 'Invalid date range'
+  /ai/ml/feature-store-snapshot-debug:
+    get:
+      tags:
+        - AI
+      summary: 'Ride snapshot SQL-style debug (counts + latest rows)'
+      description: "**Read-only.** For the active park and **required** `rideId`, returns rolling-window counts on `ride_feature_snapshots_5m`\nand the latest snapshot rows (bounded). Does not change data.\n"
+      parameters:
+        -
+          in: query
+          name: rideId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        -
+          in: query
+          name: windowHours
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 72
+            default: 2
+      responses:
+        '200':
+          description: OK
+        '422':
+          description: 'Missing or invalid rideId / window'
   /assets:
     get:
       tags:
@@ -8865,7 +9912,7 @@ paths:
       tags:
         - Admin
       summary: 'Read ride signal capability flags (master-data / registry prep)'
-      description: 'Requires **`integrations.read`** or **`rides.read`**.'
+      description: "Requires **`integrations.read`** or **`rides.read`**. Response rows include `useForMl` / `useForForecast` (from `ride_signal_capabilities.capability_json`): **`useForMl`** — explicit `false` zeroes mapped ridge ML inputs (ride wait predictor + dataset); omitted boolean does not mask; explicit `true` wins over `false` for the same ML feature key. **`useForForecast`** — readiness / governance only (resolver + UI); does not change ADR forecast math.\n"
       parameters:
         -
           in: path
@@ -8889,7 +9936,7 @@ paths:
       tags:
         - Admin
       summary: 'Replace ride signal capability document'
-      description: 'Requires **`integrations.manage`** or **`rides.update`**. Body validated server-side.'
+      description: "Requires **`integrations.manage`** or **`rides.update`**. Body validated server-side. Per-signal `useForMl` / `useForForecast` are stored in **`capability_json`** — semantics match GET description (`useForMl` drives ridge feature zero-masking only when explicitly boolean; `useForForecast` is readiness for forecast-quality gates, not ADR computation).\n"
       parameters:
         -
           in: path
@@ -8904,7 +9951,42 @@ paths:
           application/json:
             schema:
               type: object
-              additionalProperties: true
+              required:
+                - capabilities
+              properties:
+                capabilities:
+                  type: array
+                  minItems: 1
+                  maxItems: 500
+                  items:
+                    type: object
+                    required:
+                      - signalCatalogId
+                      - signalSource
+                    additionalProperties: false
+                    properties:
+                      signalCatalogId:
+                        type: string
+                        format: uuid
+                      signalSource:
+                        type: string
+                        enum:
+                          - NOT_AVAILABLE
+                          - MASTER_DATA
+                          - MANUAL
+                          - ADAPTER
+                          - MQTT_EDGE
+                          - SIMULATION
+                          - ML
+                      valueType:
+                        type: string
+                        maxLength: 64
+                      useForMl:
+                        type: boolean
+                        description: "Persisted as `capability_json.useForMl`. **Only an explicit JSON boolean `false`** (per mapped `signal_catalog.signal_code`) zeroes the corresponding ride **ridge** ML feature input and surfaces in explainability as `capability_ml_policy`. If the field is omitted or not a boolean, it does **not** trigger masking. If one capability maps to an ML key with `false` and another maps to the same key with `true`, **`true` wins** (feature stays active).\n"
+                      useForForecast:
+                        type: boolean
+                        description: "Persisted as `capability_json.useForForecast`. Used for **forecast readiness** (e.g. `signal-availability-resolver` / admin live-stale checks when this row opts into forecast expectations). **Does not** alter ADR park/entity forecast formulas or snapshot column selection.\n"
       responses:
         '200':
           description: OK
@@ -10135,7 +11217,7 @@ paths:
         - AI
       summary: 'Predict ride wait times (15/30/60 min) from feature store + optional ridge models'
       deprecated: true
-      description: "**Deprecated (Phase B5)** — every other AI endpoint lives under `/ai/*`. Use the canonical\n`GET /ai/ml/predict/rides/{rideId}` instead. Same handler, same RBAC (`ai.read`),\nsame `X-Park-Id` requirement, same response shape; the `/ml/*` mount remains live for\nbackwards compatibility (admin-dashboard still calls it) and will be removed in a\nfuture major version.\n"
+      description: "**Deprecated (Phase B5)** — every other AI endpoint lives under `/ai/*`. Use the canonical\n`GET /ai/ml/predict/rides/{rideId}` instead. Same handler, same RBAC (`ai.read`),\nsame `X-Park-Id` requirement, same response shape; the `/ml/*` mount remains live for\nbackwards compatibility (admin-dashboard still calls it) and will be removed in a\nfuture major version.\nOptional explainability is gated by `?explain=1` or `?explain=true`. When enabled, `data.explanation` matches\n`AiExplainabilityMvp` (track `RIDGE_RIDE_WAIT`); each `featureContributions[].source` is an `AiExplainabilityContributionSource` enum value.\n"
       parameters:
         -
           in: path
@@ -10152,6 +11234,21 @@ paths:
             type: string
             example: 1530
           description: 'Comma-separated horizons in minutes'
+        -
+          in: query
+          name: explain
+          schema:
+            oneOf:
+              -
+                type: boolean
+              -
+                type: string
+                enum:
+                  - '1'
+                  - '0'
+                  - 'true'
+                  - 'false'
+          description: 'Optional explainability gate. `1`/`true` includes `data.explanation` (`AiExplainabilityMvp`); omitted or `0`/`false` returns legacy prediction payload only.'
       responses:
         '200':
           description: OK
@@ -10965,6 +12062,39 @@ paths:
                     additionalProperties: true
         '404':
           $ref: '#/components/responses/NotFound'
+  '/parks/{parkId}/level0':
+    patch:
+      tags:
+        - Platform
+      summary: 'Patch park Level-0 master profile (hours baseline, Sparkplug routing block, identity)'
+      parameters:
+        -
+          in: path
+          name: parkId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              additionalProperties: true
+              description: 'Subset of park master profile — see `parkLevel0Body` validator'
+      responses:
+        '200':
+          description: OK
+        '400':
+          description: 'Validation error'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '404':
+          $ref: '#/components/responses/NotFound'
   '/parks/{parkId}/shift-handovers':
     parameters:
       -
@@ -11035,6 +12165,183 @@ paths:
       responses:
         '201':
           description: Created
+  '/parks/{parkId}/shift-handovers/{entryId}/acknowledge':
+    post:
+      tags:
+        - Platform
+      summary: 'Acknowledge shift handover entry'
+      parameters:
+        -
+          in: path
+          name: parkId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        -
+          in: path
+          name: entryId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note:
+                  type: string
+                  maxLength: 4000
+                  nullable: true
+      responses:
+        '200':
+          description: OK
+        '404':
+          $ref: '#/components/responses/NotFound'
+  '/parks/{parkId}/shift-handovers/{entryId}/tasks':
+    patch:
+      tags:
+        - Platform
+      summary: 'Replace follow-up task list on shift handover entry'
+      parameters:
+        -
+          in: path
+          name: parkId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        -
+          in: path
+          name: entryId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - tasks
+              properties:
+                tasks:
+                  type: array
+                  maxItems: 100
+                  items:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        maxLength: 80
+                      title:
+                        type: string
+                        maxLength: 280
+                      ownerUserId:
+                        type: string
+                        format: uuid
+                        nullable: true
+                      dueAt:
+                        type: string
+                        maxLength: 64
+                        nullable: true
+                      status:
+                        type: string
+                        enum:
+                          - OPEN
+                          - DONE
+                          - CANCELLED
+                    required:
+                      - title
+      responses:
+        '200':
+          description: OK
+        '404':
+          $ref: '#/components/responses/NotFound'
+  '/parks/{parkId}/shift-handovers/reminders/due':
+    get:
+      tags:
+        - Platform
+      summary: 'List shift handovers with reminders due'
+      parameters:
+        -
+          in: path
+          name: parkId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        -
+          in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+      responses:
+        '200':
+          description: OK
+        '404':
+          $ref: '#/components/responses/NotFound'
+  '/parks/{parkId}/shift-handovers/{entryId}/reminders/mark-sent':
+    post:
+      tags:
+        - Platform
+      summary: 'Mark shift handover reminder as sent'
+      parameters:
+        -
+          in: path
+          name: parkId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        -
+          in: path
+          name: entryId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+        '404':
+          $ref: '#/components/responses/NotFound'
+  '/parks/{parkId}/shift-handovers/{entryId}/pdf':
+    get:
+      tags:
+        - Platform
+      summary: 'Download shift handover PDF'
+      parameters:
+        -
+          in: path
+          name: parkId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        -
+          in: path
+          name: entryId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 'PDF stream'
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '404':
+          $ref: '#/components/responses/NotFound'
   /recommendations:
     get:
       tags:
@@ -11902,6 +13209,19 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EnvelopeUnsRegistryMirrorSummary'
+  /uns-registry/mirror/sync:
+    post:
+      tags:
+        - UNS
+      summary: 'UNS registry mirror — force full sync from legacy'
+      description: 'Requires **integrations.read**. Runs a full mirror rebuild (ignores stale TTL). Use after deploy or when canonical Sparkplug metrics / signal catalog must refresh immediately.'
+      responses:
+        '200':
+          description: 'Sync completed; mirror counts plus syncedAt'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeUnsRegistryMirrorSyncPost'
   /uns-registry/entities:
     get:
       tags:

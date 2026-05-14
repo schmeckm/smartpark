@@ -34,6 +34,8 @@ const listMasterDataQuery = Joi.object({
 const patchMasterBody = Joi.object({
   name: Joi.string().max(200).optional(),
   slug: Joi.string().max(160).optional(),
+  /** Park zone hierarchy (`park_zones.parent_zone_id`). */
+  parentZoneId: Joi.string().uuid().allow(null).optional(),
   timezone: Joi.string().max(64).allow(null).optional(),
   active: Joi.boolean().optional(),
   templateId: Joi.string().uuid().allow(null).optional(),
@@ -112,6 +114,8 @@ const rideSignalCapabilityItem = Joi.object({
   signalCatalogId: Joi.string().uuid().required(),
   signalSource: Joi.string().valid(...RIDE_SIGNAL_SOURCES).required(),
   valueType: Joi.string().trim().max(64).optional(),
+  useForMl: Joi.boolean().optional(),
+  useForForecast: Joi.boolean().optional(),
 });
 
 const putRideSignalCapabilitiesBody = Joi.object({
@@ -133,6 +137,26 @@ const postRegistrySignalReactivateBody = Joi.object({
   signalKey: registrySignalDeprecationSignalKey,
 }).unknown(false);
 
+const signalCatalogIdParam = Joi.object({
+  catalogId: Joi.string().uuid().required(),
+});
+
+const postSignalCatalogBody = Joi.object({
+  signalCode: Joi.string().trim().min(1).max(128).required(),
+  label: Joi.string().trim().max(255).allow('', null).optional(),
+  description: Joi.string().trim().max(5000).allow('', null).optional(),
+  unit: Joi.string().trim().max(64).allow('', null).optional(),
+  category: Joi.string().trim().max(64).allow('', null).optional(),
+}).unknown(false);
+
+const patchSignalCatalogBody = Joi.object({
+  signalCode: Joi.string().trim().min(1).max(128).optional(),
+  label: Joi.string().trim().max(255).allow('', null).optional(),
+  description: Joi.string().trim().max(5000).allow('', null).optional(),
+  unit: Joi.string().trim().max(64).allow('', null).optional(),
+  category: Joi.string().trim().max(64).allow('', null).optional(),
+}).unknown(false);
+
 module.exports = {
   entityTypeParam,
   entityIdParam,
@@ -149,4 +173,7 @@ module.exports = {
   putRideSignalCapabilitiesBody,
   postRegistrySignalDeprecateBody,
   postRegistrySignalReactivateBody,
+  signalCatalogIdParam,
+  postSignalCatalogBody,
+  patchSignalCatalogBody,
 };

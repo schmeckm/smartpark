@@ -96,13 +96,17 @@ AI Insights ◄── forecasts / zones (existing)     OT risk panel ──► [
 UNS / canonical ◄── integration domain            ◄── optional join keys for unified analytics
 ```
 
+### Optional runtime: InfluxDB 2 (OSS)
+
+Docker Compose includes an **`influxdb`** service (port **8086**, bucket **`ot_metrics`**, org **`smartpark`**). When **`INFLUX_ENABLED=true`**, the API writes **numeric Sparkplug `DDATA`** rows from the live MQTT ingest path into measurement **`sparkplug_metric`** (tags: `group_id`, `edge_node_id`, `device_id`, `metric`, `quality`; field: `value`). Writes are **delta-gated** (`INFLUX_FLOAT_EPSILON`, optional `INFLUX_MIN_WRITE_INTERVAL_MS` for heartbeats). Implementation: `src/services/influx-ot-metrics.service.js`; lifecycle flush on shutdown: `influx:ot-metrics-flush`. Env template: `.env.example`.
+
 ---
 
 ## Required data model
 
 | Piece | Purpose |
 |-------|---------|
-| **Append-only OT samples** | `(park_id, asset_id, device_id?, metric_name, observed_at, value, quality?, …)` — partitioned by time; retention policy. |
+| **Append-only OT samples** | Postgres tables **or** external TS (e.g. **InfluxDB** — see optional runtime above): `(park_id, asset_id, device_id?, metric_name, observed_at, value, quality?, …)`; retention policy. |
 | **Rollups (optional)** | Minute/hour aggregates for UI and training scale. |
 | **Pattern / anomaly outputs** | Events: window, score, type, explanation JSON, model id — separate from threshold **evaluation logs**. |
 | **Existing** | `park_asset_pdm_rules`, `park_asset_pdm_evaluation_logs`, `asset_downtime_events` (labels). |

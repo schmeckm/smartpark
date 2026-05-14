@@ -34,6 +34,7 @@ const edits = ref<Record<string, string | number | boolean>>({})
 const friendlyLabels: Record<string, string> = {
   AI_SAMPLING_ENABLED: 'Enable AI sampling pipeline',
   AI_SAMPLING_INTERVAL_SECONDS: 'AI sampling interval (seconds)',
+  AI_SAMPLING_ALIGN_TO_5M_UTC: 'Align AI pipeline ticks to 5-minute UTC buckets',
   WEATHER_OPEN_METEO_ENABLED: 'Enable Open-Meteo weather scheduler',
   WEATHER_OPEN_METEO_INTERVAL_SECONDS: 'Weather poll interval (seconds)',
   WEATHER_OPEN_METEO_REBUILD_SNAPSHOTS: 'Rebuild feature snapshots after weather ingest',
@@ -42,6 +43,7 @@ const friendlyLabels: Record<string, string> = {
   ADAPTER_SCHEDULER_ENABLED: 'Run adapter cron scheduler (API)',
   EXTERNAL_PARK_DATA_ENABLED: 'Allow external park live polling (platform master)',
   EXTERNAL_PARK_DATA_POLL_INTERVAL_SECONDS: 'Bootstrap default poll interval (seconds)',
+  EXTERNAL_PARK_DATA_POLL_NEAR_5M_UTC: 'Nudge polls toward 5-minute UTC boundaries',
   EXTERNAL_PARK_DATA_DEFAULT_PROVIDER: 'Bootstrap default provider key',
   SQDC_SCORE_RING_PARK_GREEN_MIN: 'Park board — month rings S/Q/D: green from score ≥',
   SQDC_SCORE_RING_PARK_AMBER_MIN: 'Park board — month rings S/Q/D: amber from score ≥',
@@ -57,7 +59,11 @@ const friendlyLabels: Record<string, string> = {
 const ADAPTER_CRON_KEYS = ['ADAPTER_SCHEDULER_ENABLED'] as const
 const ADAPTER_EXTERNAL_KEYS = ['EXTERNAL_PARK_DATA_ENABLED'] as const
 /** Shown only under Advanced (seed / emergency; normal ops use Integrations). */
-const ADAPTER_ADVANCED_KEYS = ['EXTERNAL_PARK_DATA_POLL_INTERVAL_SECONDS', 'EXTERNAL_PARK_DATA_DEFAULT_PROVIDER'] as const
+const ADAPTER_ADVANCED_KEYS = [
+  'EXTERNAL_PARK_DATA_POLL_INTERVAL_SECONDS',
+  'EXTERNAL_PARK_DATA_POLL_NEAR_5M_UTC',
+  'EXTERNAL_PARK_DATA_DEFAULT_PROVIDER',
+] as const
 
 function syncEditsFromRows(rows: PlatformSettingRow[]) {
   const next: Record<string, string | number | boolean> = {}
@@ -354,8 +360,10 @@ function resetRow(row: PlatformSettingRow) {
           <strong class="text-slate-200">Park (level 0)</strong> uses the first two numbers for
           <span class="text-slate-300">month rings S/Q/D</span> built from <span class="font-mono text-xs">PARK</span> daily
           snapshots. <strong class="text-slate-200">Asset (level 3)</strong> uses the next pair for rings from
-          <span class="font-mono text-xs">ASSET</span> snapshots. <strong class="text-slate-200">Cost ring (C)</strong> reads
-          <span class="font-mono text-xs">electricityCostEurPerDay</span> in snapshot <span class="font-mono text-xs">delivery_json</span>.
+          <span class="font-mono text-xs">ASSET</span> snapshots.           <strong class="text-slate-200">Cost ring (C)</strong> uses the daily sum of positive
+          <span class="font-mono text-xs">electricityCostEurPerDay</span> and
+          <span class="font-mono text-xs">maintenanceCostEurPerDay</span> in snapshot
+          <span class="font-mono text-xs">delivery_json</span>.
           <strong class="text-slate-200">People ring (P)</strong> uses average mood 1–5 per UTC day.
         </p>
         <p class="text-xs text-slate-500">

@@ -11,11 +11,6 @@ const uuid = Joi.string().uuid();
 const entityType = Joi.string()
   .valid(...ENTITY_TYPES)
   .required();
-const featureList = Joi.array()
-  .items(Joi.string().valid(...STUDIO_FEATURES))
-  .min(1)
-  .required();
-
 const trainBody = Joi.object({
   dataset: Joi.string().valid('FEATURE_STORE', 'SANDBOX').default('SANDBOX'),
   horizonMinutes: Joi.when('dataset', {
@@ -30,7 +25,17 @@ const trainBody = Joi.object({
     otherwise: uuid.allow(null).optional(),
   }),
   targetVariable: Joi.string().max(64).required(),
-  features: featureList,
+  features: Joi.when('dataset', {
+    is: 'FEATURE_STORE',
+    then: Joi.array()
+      .items(Joi.string().valid(...FEATURE_STORE_TRAIN_FEATURES))
+      .min(1)
+      .required(),
+    otherwise: Joi.array()
+      .items(Joi.string().valid(...STUDIO_FEATURES))
+      .min(1)
+      .required(),
+  }),
   strategy: Joi.string().valid('AUTO', 'MANUAL').default('MANUAL'),
   algorithm: Joi.string()
     .valid(...MANUAL_ALGORITHMS)
@@ -49,13 +54,6 @@ const trainBody = Joi.object({
       }
       if (v.targetVariable !== 'wait_time_plus_15') {
         return helpers.error('any.invalid', { message: 'FEATURE_STORE Phase 1 requires wait_time_plus_15' });
-      }
-      for (const f of v.features) {
-        if (!FEATURE_STORE_TRAIN_FEATURES.includes(f)) {
-          return helpers.error('any.invalid', {
-            message: `FEATURE_STORE invalid feature "${f}". Allowed: ${FEATURE_STORE_TRAIN_FEATURES.join(', ')}`,
-          });
-        }
       }
       return v;
     }

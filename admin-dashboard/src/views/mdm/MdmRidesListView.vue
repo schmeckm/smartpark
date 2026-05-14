@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
 import { getMdmParks, getMdmRides, getMdmZones } from '@/api/client'
 import type { MdmPark, MdmParkZone, MdmRideMaster } from '@/types/api'
 import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/auth'
 
+const { t } = useI18n()
 const { push } = useToast()
 const auth = useAuthStore()
 
@@ -13,6 +15,7 @@ const busy = ref(true)
 const parks = ref<MdmPark[]>([])
 const zones = ref<MdmParkZone[]>([])
 const rides = ref<MdmRideMaster[]>([])
+/** Empty = all MDM parks (no server-side park filter). */
 const parkId = ref('')
 const zoneId = ref('')
 const activeOnly = ref<boolean | null>(null)
@@ -21,7 +24,6 @@ const canCreate = computed(() => auth.hasPermission('rides', 'create'))
 
 async function loadParks() {
   parks.value = await getMdmParks()
-  if (!parkId.value && parks.value.length) parkId.value = parks.value[0].id
 }
 
 async function loadZones() {
@@ -70,63 +72,58 @@ onMounted(async () => {
   <div class="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6">
     <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div>
-        <h1 class="font-display text-xl font-semibold text-white">Ride master data</h1>
+        <h1 class="font-display text-xl font-semibold text-white">{{ t('mdmRidesList.title') }}</h1>
         <p class="mt-1 text-sm text-slate-400">
-          Park → zone → attraction registry (operations, capacity, staffing, safety, integration, KPIs).
+          {{ t('mdmRidesList.subtitle') }}
         </p>
       </div>
       <div class="flex flex-wrap gap-2">
+        <RouterLink
+          :to="{ name: 'master-data', params: { entityType: 'rides' } }"
+          class="rounded-lg border border-brand-500/50 bg-brand-950/30 px-4 py-2 text-sm font-medium text-brand-200 hover:bg-brand-900/40"
+        >
+          {{ t('menu.masterData') }}
+        </RouterLink>
         <RouterLink
           v-if="canCreate"
           to="/mdm/rides/new"
           class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-500"
         >
-          New ride
-        </RouterLink>
-        <RouterLink
-          to="/mdm/templates"
-          class="rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800"
-        >
-          Templates
-        </RouterLink>
-        <RouterLink
-          to="/mdm/zones"
-          class="rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800"
-        >
-          Zone assignment
+          {{ t('mdmRidesList.newRide') }}
         </RouterLink>
       </div>
     </div>
 
     <div class="flex flex-wrap items-end gap-3 rounded-xl border border-slate-800 bg-slate-900/40 p-4">
       <label class="text-xs text-slate-500">
-        Park
+        {{ t('mdmRidesList.filterPark') }}
         <select
           v-model="parkId"
           class="mt-1 block w-52 rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm text-white"
         >
+          <option value="">{{ t('mdmRidesList.allParks') }}</option>
           <option v-for="p in parks" :key="p.id" :value="p.id">{{ p.name }}</option>
         </select>
       </label>
       <label class="text-xs text-slate-500">
-        Zone
+        {{ t('mdmRidesList.filterZone') }}
         <select
           v-model="zoneId"
           class="mt-1 block w-52 rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm text-white"
         >
-          <option value="">All zones</option>
+          <option value="">{{ t('mdmRidesList.allZones') }}</option>
           <option v-for="z in zones" :key="z.id" :value="z.id">{{ z.name }}</option>
         </select>
       </label>
       <label class="text-xs text-slate-500">
-        Status
+        {{ t('mdmRidesList.filterStatus') }}
         <select
           v-model="activeOnly"
           class="mt-1 block w-40 rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm text-white"
         >
-          <option :value="null">Any</option>
-          <option :value="true">Active</option>
-          <option :value="false">Inactive</option>
+          <option :value="null">{{ t('masterDataEntity.filters.any') }}</option>
+          <option :value="true">{{ t('mdmRidesList.active') }}</option>
+          <option :value="false">{{ t('mdmRidesList.inactive') }}</option>
         </select>
       </label>
       <button
@@ -135,7 +132,7 @@ onMounted(async () => {
         :disabled="busy"
         @click="loadRides"
       >
-        Refresh
+        {{ t('masterDataEntity.refresh') }}
       </button>
     </div>
 
@@ -143,11 +140,11 @@ onMounted(async () => {
       <table class="min-w-full divide-y divide-slate-800 text-left text-sm">
         <thead class="bg-slate-900/80 text-xs uppercase tracking-wide text-slate-500">
           <tr>
-            <th class="px-4 py-3">Name</th>
-            <th class="px-4 py-3">Type</th>
-            <th class="px-4 py-3">Zone</th>
-            <th class="px-4 py-3">Lifecycle</th>
-            <th class="px-4 py-3">Active</th>
+            <th class="px-4 py-3">{{ t('masterDataEntity.table.name') }}</th>
+            <th class="px-4 py-3">{{ t('masterDataEntity.table.type') }}</th>
+            <th class="px-4 py-3">{{ t('masterDataEntity.table.zone') }}</th>
+            <th class="px-4 py-3">{{ t('mdmRidesList.lifecycle') }}</th>
+            <th class="px-4 py-3">{{ t('masterDataEntity.table.active') }}</th>
             <th class="px-4 py-3"></th>
           </tr>
         </thead>
@@ -162,7 +159,7 @@ onMounted(async () => {
                 class="rounded-full px-2 py-0.5 text-xs"
                 :class="r.activeFlag ? 'bg-emerald-900/50 text-emerald-300' : 'bg-slate-800 text-slate-400'"
               >
-                {{ r.activeFlag ? 'Yes' : 'No' }}
+                {{ r.activeFlag ? t('masterDataEntity.yes') : t('masterDataEntity.no') }}
               </span>
             </td>
             <td class="px-4 py-3 text-right">
@@ -170,13 +167,24 @@ onMounted(async () => {
                 :to="`/mdm/rides/${r.id}`"
                 class="text-brand-400 hover:text-brand-300"
               >
-                Open
+                {{ t('mdmRidesList.open') }}
               </RouterLink>
             </td>
           </tr>
         </tbody>
       </table>
-      <p v-if="!busy && !rides.length" class="px-4 py-8 text-center text-sm text-slate-500">No rides match filters.</p>
+      <div v-if="!busy && !rides.length" class="space-y-3 px-4 py-8 text-center">
+        <p class="text-sm text-slate-400">{{ t('mdmRidesList.emptyFilters') }}</p>
+        <p class="mx-auto max-w-xl text-xs leading-relaxed text-slate-500">
+          {{ t('mdmRidesList.emptyExplain') }}
+        </p>
+        <RouterLink
+          :to="{ name: 'master-data', params: { entityType: 'rides' } }"
+          class="inline-flex rounded-lg border border-brand-500/40 px-4 py-2 text-sm font-medium text-brand-300 hover:bg-slate-800"
+        >
+          {{ t('mdmRidesList.openAssetData') }}
+        </RouterLink>
+      </div>
     </div>
   </div>
 </template>

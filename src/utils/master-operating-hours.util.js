@@ -6,10 +6,16 @@
  * @param {string} localDate - `YYYY-MM-DD` in park-local calendar
  * @returns {object|null} ThemeParks-shaped `opening_times` row or null to fall back to adapter snapshots
  */
+function masterOperatingHoursFlagEnabled(cfg) {
+  if (!cfg || typeof cfg !== 'object') return false;
+  const v = cfg.useMasterOperatingHours;
+  return v === true || v === 1 || v === '1' || String(v).toLowerCase() === 'true';
+}
+
 function syntheticScheduleFromParkEnrichment(enrichment, localDate) {
   const enr = enrichment && typeof enrichment === 'object' ? enrichment : {};
   const cfg = enr.defaultOperatingHours;
-  if (!cfg || typeof cfg !== 'object' || cfg.useMasterOperatingHours !== true) {
+  if (!cfg || typeof cfg !== 'object' || !masterOperatingHoursFlagEnabled(cfg)) {
     return null;
   }
   const type = cfg.type != null ? String(cfg.type).toUpperCase() : 'OPERATING';
@@ -26,4 +32,5 @@ function syntheticScheduleFromParkEnrichment(enrichment, localDate) {
 
 module.exports = {
   syntheticScheduleFromParkEnrichment,
+  masterOperatingHoursFlagEnabled,
 };

@@ -66,9 +66,25 @@ function featureVectorFromMap(map) {
   return TRAINING_FEATURE_NAMES.map((k) => n(map[k], 0));
 }
 
+/**
+ * Zero ride-wait ML inputs the operator turned off in master data (`useForMl: false` for mapped catalog codes).
+ * Keeps `TRAINING_FEATURE_NAMES` order/length for existing ridge payloads.
+ * @param {Record<string, number>} featureMap - from `snapshotToFeatureMap`
+ * @param {Set<string>|null|undefined} disabledKeys - subset of `TRAINING_FEATURE_NAMES`
+ * @returns {Record<string, number>}
+ */
+function applyMlFeatureMask(featureMap, disabledKeys) {
+  if (!disabledKeys || disabledKeys.size === 0) return featureMap;
+  const out = { ...featureMap };
+  for (const k of TRAINING_FEATURE_NAMES) {
+    if (disabledKeys.has(k)) out[k] = 0;
+  }
+  return out;
+}
+
 module.exports = {
   TRAINING_FEATURE_NAMES,
   snapshotToFeatureMap,
   featureVectorFromMap,
-  n,
+  applyMlFeatureMask,
 };

@@ -5,9 +5,14 @@ const { UnsStateService } = require('./uns-state.service');
 const { validateTopicPath } = require('./uns-validator.service');
 const { slugifyName } = require('./uns-topic-generator.service');
 const { getMqttClient, getMqttState } = require('../../services/mqtt-connector.service');
-const { getSnapshot, getStats } = require('../../services/mqtt-sparkplug-live-buffer.service');
+const {
+  getSnapshot,
+  getStats,
+  resolveBufferGroupIdForMqttLiveUrlParamAsync,
+} = require('../../services/mqtt-sparkplug-live-buffer.service');
 const { getCanonicalToSparkplugPublisher } = require('../../services/canonicalToSparkplugPublisher');
 const { getPlatformSettingsService } = require('../../services/platform-settings.service');
+const { sparkplugTopicPreviewForAsset } = require('../../services/sparkplug-edge-resolver.service');
 const { SPARKPLUG_MESSAGE_TYPES } = require('./sparkplug-topic-builder.service');
 
 const unsService = new UnsService();
@@ -86,26 +91,28 @@ const postHierarchySchemaPreview = asyncHandler(async (req, res) => {
 
 /** Flattened Sparkplug MQTT rows for UNS Live (in-memory buffer, broker-fed only). */
 const getMqttLiveEvents = asyncHandler(async (req, res) => {
-  const groupId = slugifyName(req.params.parkId);
+  const groupId = await resolveBufferGroupIdForMqttLiveUrlParamAsync(req.params.parkId);
   const rawLimit = req.query?.limit;
   const limit = Math.min(2000, Math.max(1, Number(rawLimit) || 500));
   const events = getSnapshot({ groupId, limit });
   res.json({ success: true, data: { events } });
 });
 
-const getMqttLiveStatus = asyncHandler(async (_req, res) => {
+const getMqttLiveStatus = asyncHandler(async (req, res) => {
   const mqtt = getMqttState();
   const buffer = getStats();
   const adapterSimulationActive = await getPlatformSettingsService().getBoolean(
     'EXTERNAL_PARK_DATA_ENABLED',
     true
   );
+  const mqttGroupId = await resolveBufferGroupIdForMqttLiveUrlParamAsync(req.params.parkId);
   res.json({
     success: true,
     data: {
       mqtt,
       buffer,
       adapterSimulationActive,
+      mqttGroupId,
     },
   });
 });
@@ -130,6 +137,24 @@ const postMqttLiveTestEvent = asyncHandler(async (req, res) => {
   res.json({ success: true, data: result });
 });
 
+const getSparkplugTopicPreview = asyncHandler(async (req, res) => {
+  const validated = req.validated || {};
+  const parkId = String(validated.parkId || '').trim();
+  const assetIdRaw = validated.assetId != null ? String(validated.assetId).trim() : '';
+  const assetSlugRaw = validated.assetSlug != null ? String(validated.assetSlug).trim() : '';
+  if (!assetIdRaw && !assetSlugRaw) {
+    throw new AppError('Provide assetId or assetSlug query parameter', 400, { code: 'MISSING_ASSET' });
+  }
+  const mt = validated.messageType != null ? String(validated.messageType).trim().toUpperCase() : undefined;
+  const data = await sparkplugTopicPreviewForAsset({
+    parkId,
+    assetId: assetIdRaw || null,
+    assetSlug: assetSlugRaw || null,
+    messageType: mt || null,
+  });
+  res.json({ success: true, data });
+});
+
 module.exports = {
   getTree,
   createNode,
@@ -144,4 +169,5 @@ module.exports = {
   getMqttLiveEvents,
   getMqttLiveStatus,
   postMqttLiveTestEvent,
+  getSparkplugTopicPreview,
 };

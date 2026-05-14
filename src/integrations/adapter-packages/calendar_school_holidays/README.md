@@ -1,33 +1,60 @@
 # School Holiday Calendar (`calendar_school_holidays`)
 
-Publishes daily school-holiday demand factors for **DE-BW**, **FR-Grand Est**, and **CH-BS**.
+This adapter generates daily holiday-related demand signals for park planning.
 
-Primary use case: demand-sensitive planning and ML features for park operations.
+It is local-only (no HTTP calls) and reads maintained date windows from YAML files.
 
-## Metrics
+## What this adapter is for
 
-- `is_holiday_de_bw` — school break windows from YAML (`de_bw.yaml`)
-- `is_holiday_fr_grandest` — school break (`fr_grandest.yaml`)
-- `is_holiday_ch_bs` — school break (`ch_bs.yaml`)
-- `is_weekend` — Sat/Sun in configured `timezone`
-- `iso_weekday` — **1 = Monday … 7 = Sunday** (for ML / feature parity with park snapshots)
-- `is_public_holiday_de_bw` — **Baden-Württemberg statutory public holidays** (fixed dates + Easter-based: Karfreitag, Ostermontag, Himmelfahrt, Pfingstmontag, Fronleichnam, etc.) without HTTP
-- `bridge_day` — working day between weekend or (school **or** BW public) holiday
-- `holiday_score` — weighted blend (includes public-holiday uplift)
+Use this adapter when you want stable calendar features for:
 
-For **all German Länder / FR / CH public holidays** via Nager, use **`calendar_demand`** instead or in addition.
+- staffing and operations planning
+- demand forecasting
+- ML feature pipelines
 
-## Recommended output profiles
+The current package focuses on:
 
-```json
-["SPARKPLUG_JSON", "CANONICAL_HISTORIAN"]
-```
+- `DE-BW` (Baden-Wuerttemberg school holidays + public holidays)
+- `FR-Grand Est` (school holidays)
+- `CH-BS` (school holidays)
 
-UNS JSON remains supported as optional human-readable output.
+## What you get (metrics)
 
-## Sparkplug target topic
+- `is_holiday_de_bw`
+- `is_holiday_fr_grandest`
+- `is_holiday_ch_bs`
+- `is_weekend`
+- `iso_weekday` (`1` = Monday, `7` = Sunday)
+- `is_public_holiday_de_bw`
+- `bridge_day`
+- `holiday_score`
 
-With this context:
+If you need wider country/state coverage (e.g. all German states), use `calendar_demand` in addition or instead.
+
+## Quick start
+
+1. Install the adapter in Devices and Services.
+2. Keep recommended outputs: `["SPARKPLUG_JSON","CANONICAL_HISTORIAN"]`.
+3. Set `parkSlug` and optional `timezone`.
+4. Run preview / run now and verify metrics in Operations Center.
+
+## Configuration (`configSchema`)
+
+| Field | Required | Meaning |
+|---|---|---|
+| `parkSlug` | yes | Park key used in topic paths and observation context. |
+| `timezone` | no | Timezone used for day evaluation (default `Europe/Berlin`). |
+| `dateOverride` | no | Test date (`YYYY-MM-DD`) for deterministic previews/backfills. |
+
+## Context fields (`contextJson`)
+
+Common fields:
+
+- `sparkplugGroupId`
+- `sparkplugEdgeNode` (often `calendar_gateway`)
+- `parkSlug` (optional fallback)
+
+Example:
 
 ```json
 {
@@ -37,34 +64,55 @@ With this context:
 }
 ```
 
-the Sparkplug encoder publishes to:
+Sparkplug topic example:
 
 `spBv1.0/europa_park/DDATA/calendar_gateway/current`
 
-## Configuration (`configSchema`)
+## Where data comes from
 
-| Field | Required | Description |
-|---|---|---|
-| `parkSlug` | yes | Park slug / UNS segment |
-| `timezone` | no | Local timezone for date evaluation (`Europe/Berlin` default) |
-| `dateOverride` | no | Optional `YYYY-MM-DD` for deterministic tests/backfills (use a date inside a YAML window to see non-zero factors) |
+Source files:
 
-## Data source
+- `data/calendar-holidays/de_bw.yaml`
+- `data/calendar-holidays/fr_grandest.yaml`
+- `data/calendar-holidays/ch_bs.yaml`
 
-- **No HTTP**: run preview shows **READ** rows for `data/calendar-holidays/{de_bw,fr_grandest,ch_bs}.yaml` (same files as the **Calendar Demand** adapter). Edit those YAML files to change windows.
-- **Zeros are normal** on dates that fall outside every school window and are not a weekend (e.g. many weekdays in May). Check the YAML ranges or set `dateOverride` to e.g. `2026-05-26` (start of a DE-BW window) to confirm MQTT values.
+Important: `0` values are normal on non-holiday weekdays.  
+To validate the pipeline quickly, set `dateOverride` to a known holiday window.
 
 ## UI defaults (`manifest.json`)
 
-The admin integration screen **pre-fills** empty or partial install YAML from the package manifest:
+When installing from UI, missing values are prefilled from the package manifest:
 
-- **`configSchema.properties.*.default`** → merged into **configJson** (only keys you have not saved yet).
-- **`defaultContextJson`** → merged into **contextJson** (adds `sparkplugGroupId` / `sparkplugEdgeNode` when missing).
-- **`defaultScheduleCron`** → used when **scheduleCron** is not set in YAML (`0 3 * * *` = daily 03:00).
+- `configSchema.properties.*.default` -> `configJson`
+- `defaultContextJson` -> `contextJson`
+- `defaultScheduleCron` -> scheduler default (if not set)
 
-Adjust these in `manifest.json` if your park slug or Sparkplug namespace differs.
+## Operations note
 
-## Notes
+Review and update holiday YAML windows regularly (typically yearly) to keep predictions accurate.
 
-- Adapter is fully local (no external API). Preview **API calls** counts YAML **READ** steps, not ThemeParks-style HTTP.
-- Review `data/calendar-holidays/*.yaml` yearly against official school calendars.
+## Fehlerbilder & Loesung
+
+### 1) Immer nur 0-Werte
+
+Pruefen:
+
+- Datum liegt wirklich in einem Holiday-Window?
+- Testweise `dateOverride` auf bekannten Ferientag setzen.
+- YAML-Dateien unter `data/calendar-holidays/` enthalten korrekte Zeitfenster.
+
+### 2) Kein Event im Operations Center
+
+Pruefen:
+
+- Adapter aktiviert und Scheduler/Run ausgefuehrt.
+- Output-Profile gesetzt (empfohlen: `SPARKPLUG_JSON`, `CANONICAL_HISTORIAN`).
+- Filter im Dashboard/Pipeline Tail nicht zu eng.
+
+### 3) Topic/Context passt nicht zum Park
+
+Pruefen:
+
+- `parkSlug` in `configJson`
+- `sparkplugGroupId` und `sparkplugEdgeNode` in `contextJson`
+- erwarteter UNS-/Sparkplug-Namespace

@@ -10,6 +10,7 @@ const HEADERS = [
   'last_name',
   'role',
   'current_zone_id',
+  'current_ride_id',
   'supervisor_id',
   'available',
   'skill_level',
@@ -74,6 +75,8 @@ function parseStaffXlsx(buffer) {
     const role = String(line[idx.role] ?? '').trim();
     const zoneRaw =
       idx.current_zone_id !== undefined ? String(line[idx.current_zone_id] ?? '').trim() : '';
+    const rideRaw =
+      idx.current_ride_id !== undefined ? String(line[idx.current_ride_id] ?? '').trim() : '';
     const supervisorRaw =
       idx.supervisor_id !== undefined ? String(line[idx.supervisor_id] ?? '').trim() : '';
     const available = idx.available !== undefined ? parseBool(line[idx.available]) : true;
@@ -86,6 +89,7 @@ function parseStaffXlsx(buffer) {
       lastName: last_name,
       role,
       currentZoneId: zoneRaw || null,
+      ...(idx.current_ride_id !== undefined ? { currentRideId: rideRaw || null } : {}),
       ...(idx.supervisor_id !== undefined ? { supervisorId: supervisorRaw || null } : {}),
       available,
       skillLevel: skill_level,
@@ -109,6 +113,7 @@ function buildStaffXlsxBuffer(staffRows) {
       p.lastName ?? '',
       p.role ?? '',
       p.currentZoneId ?? '',
+      p.currentRideId ?? '',
       p.supervisorId ?? '',
       p.available === false ? false : true,
       p.skillLevel ?? 1,
@@ -125,6 +130,7 @@ function buildStaffXlsxBuffer(staffRows) {
     [''],
     ['Leave id empty to create a new row on import. employee_number must be unique when set.'],
     ['supervisor_id: UUID of another staff row (People Manager / Supervisor); leave empty for none.'],
+    ['current_ride_id: UUID of a ride / show / attraction (rides table). When set, current_zone_id is auto-derived from the ride and any value provided here is ignored.'],
   ]);
   XLSX.utils.book_append_sheet(wb, readme, 'Readme');
   return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
