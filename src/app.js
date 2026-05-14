@@ -267,6 +267,23 @@ app.get(
   validate(mlForecastAccuracyQuery, 'query'),
   mlForecastAccuracyController.getMlForecastAccuracyKpis
 );
+/** Register before `/:id` — otherwise `model-win-rates` is captured as `id` and UUID validation returns 422. */
+app.get(
+  '/api/v1/ai/ml/forecast-accuracy/model-win-rates',
+  authenticate,
+  attachParkContext,
+  requirePermission('ai', 'read'),
+  requireParkContext,
+  mlForecastAccuracyController.getMlModelWinRateStats
+);
+app.get(
+  '/api/v1/ai/ml/forecast-accuracy/retro-lookback',
+  authenticate,
+  attachParkContext,
+  requirePermission('ai', 'read'),
+  requireParkContext,
+  mlForecastAccuracyController.getMlRetroLookback
+);
 app.get(
   '/api/v1/ai/ml/forecast-accuracy/:id',
   authenticate,
