@@ -50,7 +50,8 @@
     "settings": "Ajustes",
     "help": "Ayuda",
     "hotelGuestPlanning": "Planificación de visitas",
-    "addonBoard": "Add-on Board"
+    "addonBoard": "Add-on Board",
+    "trafficCorridors": "Corredores de tráfico"
   },
   "unsHub": {
     "subtitle": "Espacio de nombres unificado desde datos maestros e integraciones: jerarquía, temas y MQTT en vivo. El espejo del registro y la bandeja Spy son diagnósticos de solo lectura.",

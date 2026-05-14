@@ -50,7 +50,8 @@
     "settings": "Paramètres",
     "help": "Aide",
     "hotelGuestPlanning": "Planification fréquentation",
-    "addonBoard": "Add-on Board"
+    "addonBoard": "Add-on Board",
+    "trafficCorridors": "Couloirs de trafic"
   },
   "unsHub": {
     "subtitle": "Espace de noms unifié à partir des données de base et des intégrations : hiérarchie, sujets et MQTT en direct. Le miroir du registre et la boîte Spy sont des diagnostics en lecture seule.",

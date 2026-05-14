@@ -393,6 +393,74 @@ export interface PlatformPark {
   externalEntityId?: string | null
 }
 
+export type TrafficCorridorDirection = 'inbound' | 'outbound'
+
+export interface TrafficCorridorSnapshotRow {
+  id: string
+  corridorId: string
+  parkId: string
+  snapshotTs: string
+  source: string
+  currentTravelTimeMin: number
+  baselineTravelTimeMin: number
+  delayMin?: number | null
+  delayPercent?: number | null
+  congestionScore?: number | null
+  inboundPressureScore?: number | null
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface TrafficCorridorRow {
+  id: string
+  parkId: string
+  name: string
+  description?: string | null
+  originLabel?: string | null
+  originLat?: number | null
+  originLng?: number | null
+  destinationLabel?: string | null
+  destinationLat?: number | null
+  destinationLng?: number | null
+  direction: TrafficCorridorDirection
+  source: string
+  baselineTravelTimeMin: number
+  weight: number
+  enabled: boolean
+  latestSnapshot?: TrafficCorridorSnapshotRow | null
+  createdAt?: string
+  updatedAt?: string
+}
+
+export type AttendanceRiskForecastStatus = 'normal' | 'elevated' | 'high' | 'critical'
+
+export interface ParkDemandForecast5mRow {
+  id: string
+  parkId: string
+  snapshotTs: string
+  plannedDemand: number
+  knownRegisteredExpected: number
+  plannedTotal: number
+  trafficPressureScore: number
+  weatherScore: number
+  holidayScore: number
+  eventScore: number
+  parkingPressureScore: number
+  externalDemandPressureScore: number
+  additionalDemandLow: number
+  additionalDemandMid: number
+  additionalDemandHigh: number
+  expectedAttendanceLow: number
+  expectedAttendanceMid: number
+  expectedAttendanceHigh: number
+  status: AttendanceRiskForecastStatus
+  confidenceScore: number
+  recommendationsJson?: string[] | null
+  explanationJson?: Record<string, unknown> | null
+  createdAt?: string
+  updatedAt?: string
+}
+
 /** GET /api/v1/parks/:parkSlug/geo/pressure/live */
 export interface GeoPressureContributor {
   assetId: string

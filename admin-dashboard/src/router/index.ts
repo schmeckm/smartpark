@@ -86,6 +86,15 @@ const router = createRouter({
           },
         },
         {
+          path: 'operations/traffic-corridors',
+          name: 'traffic-corridors',
+          component: () => import('@/views/operations/TrafficCorridorsView.vue'),
+          meta: {
+            title: 'Traffic corridors',
+            permission: { resource: 'rides', action: 'read' },
+          },
+        },
+        {
           path: 'planning/hotel-guests',
           name: 'hotel-guest-planning',
           component: () => import('@/views/HotelGuestPlanningView.vue'),

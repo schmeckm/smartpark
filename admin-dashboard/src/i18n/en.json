@@ -50,7 +50,8 @@
     "settings": "Settings",
     "help": "Help",
     "hotelGuestPlanning": "Visit planning",
-    "addonBoard": "Add-on Board"
+    "addonBoard": "Add-on Board",
+    "trafficCorridors": "Traffic corridors"
   },
   "unsHub": {
     "subtitle": "Unified namespace from Master Data and integrations: hierarchy, topics, and live MQTT. Registry mirror and spy inbox are read-only diagnostics.",

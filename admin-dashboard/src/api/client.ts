@@ -17,6 +17,9 @@ import type {
   PlatformAsset,
   PlatformObservation,
   PlatformPark,
+  ParkDemandForecast5mRow,
+  TrafficCorridorRow,
+  TrafficCorridorSnapshotRow,
   GeoPressurePayload,
   GeoFlowSimulationPayload,
   PlatformOperationalContext,
@@ -3207,6 +3210,101 @@ export async function patchMdmRideZone(id: string, parkZoneId: string): Promise<
 
 export async function getPlatformParks(): Promise<PlatformPark[]> {
   return fetchEnvelope<PlatformPark[]>('/api/v1/parks')
+}
+
+export async function listTrafficCorridors(parkId: string): Promise<TrafficCorridorRow[]> {
+  return fetchEnvelope<TrafficCorridorRow[]>(`/api/v1/parks/${encodeURIComponent(parkId)}/traffic-corridors`)
+}
+
+export type TrafficCorridorCreateBody = {
+  name: string
+  description?: string | null
+  originLabel?: string | null
+  originLat?: number | null
+  originLng?: number | null
+  destinationLabel?: string | null
+  destinationLat?: number | null
+  destinationLng?: number | null
+  direction?: 'inbound' | 'outbound'
+  baselineTravelTimeMin: number
+  weight?: number
+  enabled?: boolean
+}
+
+export async function createTrafficCorridor(
+  parkId: string,
+  body: TrafficCorridorCreateBody
+): Promise<TrafficCorridorRow> {
+  return fetchEnvelope<TrafficCorridorRow>(`/api/v1/parks/${encodeURIComponent(parkId)}/traffic-corridors`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export type TrafficCorridorPatchBody = Partial<TrafficCorridorCreateBody>
+
+export async function updateTrafficCorridor(
+  corridorId: string,
+  body: TrafficCorridorPatchBody
+): Promise<TrafficCorridorRow> {
+  return fetchEnvelope<TrafficCorridorRow>(`/api/v1/traffic-corridors/${encodeURIComponent(corridorId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  })
+}
+
+export async function deleteTrafficCorridor(corridorId: string): Promise<{ deleted: boolean; id: string }> {
+  return fetchEnvelope<{ deleted: boolean; id: string }>(
+    `/api/v1/traffic-corridors/${encodeURIComponent(corridorId)}`,
+    { method: 'DELETE' }
+  )
+}
+
+export async function createManualTrafficSnapshot(
+  corridorId: string,
+  body: { currentTravelTimeMin: number; snapshotTs?: string }
+): Promise<TrafficCorridorSnapshotRow> {
+  return fetchEnvelope<TrafficCorridorSnapshotRow>(
+    `/api/v1/traffic-corridors/${encodeURIComponent(corridorId)}/snapshots/manual`,
+    { method: 'POST', body: JSON.stringify(body) }
+  )
+}
+
+export type AttendanceRiskForecastRunBody = {
+  plannedDemand: number
+  knownRegisteredExpected: number
+  weatherScore?: number
+  holidayScore?: number
+  eventScore?: number
+  parkingPressureScore?: number
+}
+
+export async function runAttendanceRiskForecast(
+  parkId: string,
+  body: AttendanceRiskForecastRunBody
+): Promise<ParkDemandForecast5mRow> {
+  return fetchEnvelope<ParkDemandForecast5mRow>(
+    `/api/v1/parks/${encodeURIComponent(parkId)}/attendance-risk-forecast/run`,
+    { method: 'POST', body: JSON.stringify(body) }
+  )
+}
+
+export async function getLatestAttendanceRiskForecast(parkId: string): Promise<ParkDemandForecast5mRow | null> {
+  return fetchEnvelope<ParkDemandForecast5mRow | null>(
+    `/api/v1/parks/${encodeURIComponent(parkId)}/attendance-risk-forecast/latest`
+  )
+}
+
+export async function getAttendanceRiskForecastHistory(
+  parkId: string,
+  params?: { limit?: number }
+): Promise<ParkDemandForecast5mRow[]> {
+  const q = new URLSearchParams()
+  if (params?.limit != null) q.set('limit', String(params.limit))
+  const qs = q.toString()
+  return fetchEnvelope<ParkDemandForecast5mRow[]>(
+    `/api/v1/parks/${encodeURIComponent(parkId)}/attendance-risk-forecast/history${qs ? `?${qs}` : ''}`
+  )
 }
 
 export async function getPlatformParkOperationalContext(

@@ -50,7 +50,8 @@
     "settings": "Einstellungen",
     "help": "Hilfe",
     "hotelGuestPlanning": "Besucherplanung",
-    "addonBoard": "Add-on Board"
+    "addonBoard": "Add-on Board",
+    "trafficCorridors": "Verkehrskorridore"
   },
   "unsHub": {
     "subtitle": "Unified Namespace aus Stammdaten und Integrationen: Hierarchie, Themen und Live-MQTT. Registry-Spiegel und Spy-Posteingang sind nur lesende Diagnose-Ansichten.",

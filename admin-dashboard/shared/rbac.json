@@ -312,6 +312,12 @@
           "permission": { "resource": "rides", "action": "read" }
         },
         {
+          "to": "/operations/traffic-corridors",
+          "labelKey": "menu.trafficCorridors",
+          "activePathPrefix": "/operations/traffic-corridors",
+          "permission": { "resource": "rides", "action": "read" }
+        },
+        {
           "to": "/platform/oee",
           "labelKey": "menu.oeeDowntime",
           "activePathPrefix": "/platform/oee",

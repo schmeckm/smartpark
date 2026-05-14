@@ -12,6 +12,7 @@ import StaffBoard from '@/components/StaffBoard.vue'
 import RecommendationsPanel from '@/components/RecommendationsPanel.vue'
 import RecentEventsStrip from '@/components/RecentEventsStrip.vue'
 import AiForecastWidget from '@/components/AiForecastWidget.vue'
+import AttendanceRiskForecastCard from '@/components/operations/AttendanceRiskForecastCard.vue'
 import { RIDES_ADAPTER_ZONE_ID, type Ride, type RideStatus } from '@/types/api'
 
 const auth = useAuthStore()
@@ -243,6 +244,8 @@ onMounted(() => {
         :last-socket-at="aiSocketAt"
         @refresh="onAiRefresh"
       />
+
+      <AttendanceRiskForecastCard v-if="auth.hasPermission('rides', 'read')" />
 
       <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
         <div class="flex items-start justify-between gap-3">
