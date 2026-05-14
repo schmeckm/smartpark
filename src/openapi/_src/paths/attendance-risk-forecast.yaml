@@ -1,0 +1,236 @@
+'/parks/{parkId}/traffic-corridors':
+  parameters:
+    -
+      name: parkId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  get:
+    tags:
+      - AttendanceRisk
+    summary: List traffic corridors for a park (with latest snapshot when present)
+    security:
+      -
+        bearerAuth: []
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeTrafficCorridorList'
+      '404':
+        $ref: '#/components/responses/NotFound'
+  post:
+    tags:
+      - AttendanceRisk
+    summary: Create a traffic corridor
+    security:
+      -
+        bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/TrafficCorridorCreateBody'
+    responses:
+      '201':
+        description: Created
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeTrafficCorridor'
+      '404':
+        $ref: '#/components/responses/NotFound'
+      '422':
+        description: Validation error
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+
+'/parks/{parkId}/attendance-risk-forecast/run':
+  parameters:
+    -
+      name: parkId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  post:
+    tags:
+      - AttendanceRisk
+    summary: Run attendance risk forecast for a park (persists 5m forecast row)
+    security:
+      -
+        bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AttendanceRiskForecastRunBody'
+    responses:
+      '201':
+        description: Created
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeParkDemandForecast'
+      '404':
+        $ref: '#/components/responses/NotFound'
+
+'/parks/{parkId}/attendance-risk-forecast/latest':
+  parameters:
+    -
+      name: parkId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  get:
+    tags:
+      - AttendanceRisk
+    summary: Latest attendance risk forecast for a park
+    security:
+      -
+        bearerAuth: []
+    responses:
+      '200':
+        description: OK (data may be null)
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeParkDemandForecast'
+      '404':
+        $ref: '#/components/responses/NotFound'
+
+'/parks/{parkId}/attendance-risk-forecast/history':
+  parameters:
+    -
+      name: parkId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    -
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 500
+        default: 96
+  get:
+    tags:
+      - AttendanceRisk
+    summary: Historical attendance risk forecasts (newest first)
+    security:
+      -
+        bearerAuth: []
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeParkDemandForecastList'
+      '404':
+        $ref: '#/components/responses/NotFound'
+
+'/traffic-corridors/{corridorId}':
+  parameters:
+    -
+      name: corridorId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  patch:
+    tags:
+      - AttendanceRisk
+    summary: Update a traffic corridor
+    security:
+      -
+        bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/TrafficCorridorPatchBody'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeTrafficCorridor'
+      '404':
+        $ref: '#/components/responses/NotFound'
+  delete:
+    tags:
+      - AttendanceRisk
+    summary: Delete a traffic corridor
+    security:
+      -
+        bearerAuth: []
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                data:
+                  type: object
+                  properties:
+                    deleted:
+                      type: boolean
+                    id:
+                      type: string
+                      format: uuid
+      '404':
+        $ref: '#/components/responses/NotFound'
+
+'/traffic-corridors/{corridorId}/snapshots/manual':
+  parameters:
+    -
+      name: corridorId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  post:
+    tags:
+      - AttendanceRisk
+    summary: Create a manual traffic snapshot for a corridor
+    security:
+      -
+        bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ManualTrafficSnapshotBody'
+    responses:
+      '201':
+        description: Created
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeTrafficCorridorSnapshot'
+      '404':
+        $ref: '#/components/responses/NotFound'

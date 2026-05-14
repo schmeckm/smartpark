@@ -14,9 +14,6 @@ tags:
   -
     name: Health
   -
-    name: Agent
-    description: 'Phase A agentic co-pilot runs (read-only tools; persisted trace).'
-  -
     name: Audit
   -
     name: Zones
@@ -59,6 +56,9 @@ tags:
   -
     name: Geo
     description: "Park-level **geo pressure** (wait hotspots, forecasts) and **guest flow** simulation / journey event ingest.\n`{parkSlug}` resolves like master-data (internal UUID, URL slug, or external entity id).\n"
+  -
+    name: AttendanceRisk
+    description: 'Manual traffic corridor snapshots as leading indicators for attendance risk (MVP; no external routing APIs).'
 security:
   -
     bearerAuth: []
@@ -1857,86 +1857,6 @@ components:
           nullable: true
           type: object
           additionalProperties: true
-    AddonBoardVenueTriplet:
-      type: object
-      description: 'Counts of active `park_assets` by `AssetType` RESTAURANT, SHOP, SHOW (Phase 3 cross-asset context). No POS throughput.'
-      properties:
-        restaurants:
-          type: integer
-          minimum: 0
-        shops:
-          type: integer
-          minimum: 0
-        shows:
-          type: integer
-          minimum: 0
-    AddonBoardCrossAssetHint:
-      type: object
-      description: 'Rule-based operations hint; clients map `code` to i18n.'
-      properties:
-        code:
-          type: string
-          example: CROSS_QUEUE_NEAR_COMMERCE
-        severity:
-          type: string
-          enum:
-            - INFO
-    AddonBoardCrossAssetContextRideSwdec:
-      type: object
-      description: 'Nested under ride card `swdec` — venues in the ride zone plus hint codes.'
-      required:
-        - schemaVersion
-        - zoneVenues
-        - hints
-      properties:
-        schemaVersion:
-          type: integer
-          enum:
-            - 1
-        zoneVenues:
-          $ref: '#/components/schemas/AddonBoardVenueTriplet'
-        hints:
-          type: array
-          items:
-            $ref: '#/components/schemas/AddonBoardCrossAssetHint'
-    AddonBoardCrossAssetContextPark:
-      type: object
-      description: 'Park-level venue roll-up on L0 / ride-list / critical-list / ride-detail root. Omitted when there are no venue assets.'
-      required:
-        - schemaVersion
-        - parkVenues
-        - zonesWithVenues
-      properties:
-        schemaVersion:
-          type: integer
-          enum:
-            - 1
-        parkVenues:
-          $ref: '#/components/schemas/AddonBoardVenueTriplet'
-        zonesWithVenues:
-          type: integer
-          minimum: 0
-          description: 'Distinct zone keys (including unzoned bucket) with at least one venue asset.'
-    AddonBoardCrossAssetContextZoneResponse:
-      type: object
-      description: 'L1 zone summary — selected zone triplet plus park totals.'
-      required:
-        - schemaVersion
-        - parkVenues
-        - zoneVenues
-        - zonesWithVenues
-      properties:
-        schemaVersion:
-          type: integer
-          enum:
-            - 1
-        parkVenues:
-          $ref: '#/components/schemas/AddonBoardVenueTriplet'
-        zoneVenues:
-          $ref: '#/components/schemas/AddonBoardVenueTriplet'
-        zonesWithVenues:
-          type: integer
-          minimum: 0
     EnvelopeAddonBoardParkSummary:
       type: object
       properties:
@@ -1945,12 +1865,6 @@ components:
         data:
           type: object
           additionalProperties: true
-          properties:
-            crossAssetContext:
-              nullable: true
-              allOf:
-                -
-                  $ref: '#/components/schemas/AddonBoardCrossAssetContextPark'
     EnvelopeAddonBoardRides:
       type: object
       properties:
@@ -1959,21 +1873,6 @@ components:
         data:
           type: object
           additionalProperties: true
-          properties:
-            weatherContext:
-              type: object
-              nullable: true
-              additionalProperties: true
-            crossAssetContext:
-              nullable: true
-              allOf:
-                -
-                  $ref: '#/components/schemas/AddonBoardCrossAssetContextPark'
-            rides:
-              type: array
-              items:
-                type: object
-                additionalProperties: true
     EnvelopeAddonBoardZone:
       type: object
       properties:
@@ -1982,16 +1881,6 @@ components:
         data:
           type: object
           additionalProperties: true
-          properties:
-            weatherContext:
-              type: object
-              nullable: true
-              additionalProperties: true
-            crossAssetContext:
-              nullable: true
-              allOf:
-                -
-                  $ref: '#/components/schemas/AddonBoardCrossAssetContextZoneResponse'
     EnvelopeAddonBoardRideDetail:
       type: object
       properties:
@@ -2000,18 +1889,6 @@ components:
         data:
           type: object
           additionalProperties: true
-          properties:
-            crossAssetContext:
-              nullable: true
-              allOf:
-                -
-                  $ref: '#/components/schemas/AddonBoardCrossAssetContextPark'
-            swdec:
-              type: object
-              additionalProperties: true
-              properties:
-                crossAssetContext:
-                  $ref: '#/components/schemas/AddonBoardCrossAssetContextRideSwdec'
     EnvelopeAddonBoardZoneList:
       type: object
       properties:
@@ -3856,17 +3733,6 @@ components:
           type: boolean
         data:
           $ref: '#/components/schemas/UnsRegistryMirrorSummary'
-    EnvelopeUnsRegistryMirrorSyncPost:
-      type: object
-      properties:
-        success:
-          type: boolean
-        syncedAt:
-          type: string
-          format: date-time
-          description: 'ISO-8601 timestamp when the full mirror transaction completed'
-        data:
-          $ref: '#/components/schemas/UnsRegistryMirrorSummary'
     UnsHierarchyImportBody:
       type: object
       required:
@@ -4162,6 +4028,312 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MdmJsonObject'
+    TrafficCorridor:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        parkId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        originLabel:
+          type: string
+          nullable: true
+        originLat:
+          type: number
+          nullable: true
+        originLng:
+          type: number
+          nullable: true
+        destinationLabel:
+          type: string
+          nullable: true
+        destinationLat:
+          type: number
+          nullable: true
+        destinationLng:
+          type: number
+          nullable: true
+        direction:
+          type: string
+          enum:
+            - inbound
+            - outbound
+        source:
+          type: string
+        baselineTravelTimeMin:
+          type: number
+        weight:
+          type: number
+        enabled:
+          type: boolean
+        latestSnapshot:
+          $ref: '#/components/schemas/TrafficCorridorSnapshot5m'
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    TrafficCorridorSnapshot5m:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        corridorId:
+          type: string
+          format: uuid
+        parkId:
+          type: string
+          format: uuid
+        snapshotTs:
+          type: string
+          format: date-time
+        source:
+          type: string
+        currentTravelTimeMin:
+          type: number
+        baselineTravelTimeMin:
+          type: number
+        delayMin:
+          type: number
+          nullable: true
+        delayPercent:
+          type: number
+          nullable: true
+        congestionScore:
+          type: number
+          nullable: true
+        inboundPressureScore:
+          type: number
+          nullable: true
+    ParkDemandForecast5m:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        parkId:
+          type: string
+          format: uuid
+        snapshotTs:
+          type: string
+          format: date-time
+        plannedDemand:
+          type: integer
+        knownRegisteredExpected:
+          type: integer
+        plannedTotal:
+          type: integer
+        trafficPressureScore:
+          type: number
+        weatherScore:
+          type: number
+        holidayScore:
+          type: number
+        eventScore:
+          type: number
+        parkingPressureScore:
+          type: number
+        externalDemandPressureScore:
+          type: number
+        additionalDemandLow:
+          type: integer
+        additionalDemandMid:
+          type: integer
+        additionalDemandHigh:
+          type: integer
+        expectedAttendanceLow:
+          type: integer
+        expectedAttendanceMid:
+          type: integer
+        expectedAttendanceHigh:
+          type: integer
+        status:
+          type: string
+          enum:
+            - normal
+            - elevated
+            - high
+            - critical
+        confidenceScore:
+          type: number
+        recommendationsJson:
+          type: array
+          items:
+            type: string
+          nullable: true
+        explanationJson: {}
+    EnvelopeTrafficCorridorList:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrafficCorridor'
+    EnvelopeTrafficCorridor:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/TrafficCorridor'
+    EnvelopeTrafficCorridorSnapshot:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/TrafficCorridorSnapshot5m'
+    EnvelopeParkDemandForecast:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/ParkDemandForecast5m'
+          nullable: true
+    EnvelopeParkDemandForecastList:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ParkDemandForecast5m'
+    TrafficCorridorCreateBody:
+      type: object
+      required:
+        - name
+        - baselineTravelTimeMin
+      properties:
+        name:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          nullable: true
+        originLabel:
+          type: string
+          nullable: true
+        originLat:
+          type: number
+          nullable: true
+        originLng:
+          type: number
+          nullable: true
+        destinationLabel:
+          type: string
+          nullable: true
+        destinationLat:
+          type: number
+          nullable: true
+        destinationLng:
+          type: number
+          nullable: true
+        direction:
+          type: string
+          enum:
+            - inbound
+            - outbound
+        baselineTravelTimeMin:
+          type: number
+          minimum: 0
+        weight:
+          type: number
+          minimum: 0
+        enabled:
+          type: boolean
+    TrafficCorridorPatchBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        originLabel:
+          type: string
+          nullable: true
+        originLat:
+          type: number
+          nullable: true
+        originLng:
+          type: number
+          nullable: true
+        destinationLabel:
+          type: string
+          nullable: true
+        destinationLat:
+          type: number
+          nullable: true
+        destinationLng:
+          type: number
+          nullable: true
+        direction:
+          type: string
+          enum:
+            - inbound
+            - outbound
+        baselineTravelTimeMin:
+          type: number
+          minimum: 0
+        weight:
+          type: number
+          minimum: 0
+        enabled:
+          type: boolean
+    ManualTrafficSnapshotBody:
+      type: object
+      required:
+        - currentTravelTimeMin
+      properties:
+        currentTravelTimeMin:
+          type: number
+          minimum: 0
+        snapshotTs:
+          type: string
+          format: date-time
+          nullable: true
+    AttendanceRiskForecastRunBody:
+      type: object
+      required:
+        - plannedDemand
+        - knownRegisteredExpected
+      properties:
+        plannedDemand:
+          type: integer
+          minimum: 0
+        knownRegisteredExpected:
+          type: integer
+          minimum: 0
+        weatherScore:
+          type: number
+          minimum: 0
+          maximum: 100
+        holidayScore:
+          type: number
+          minimum: 0
+          maximum: 100
+        eventScore:
+          type: number
+          minimum: 0
+          maximum: 100
+        parkingPressureScore:
+          type: number
+          minimum: 0
+          maximum: 100
   parameters:
     IdPath:
       name: id
@@ -4330,7 +4502,7 @@ paths:
       tags:
         - AI
       summary: 'Add-on Board park summary (L0)'
-      description: "Needs `ops.read` or `rides.read` and `X-Park-Id`. **Phase 3:** `data.crossAssetContext` — active F&B / shop / show asset counts by park (master data only).\n"
+      description: 'Needs `ops.read` or `rides.read` and `X-Park-Id`'
       responses:
         '200':
           description: OK
@@ -4343,7 +4515,7 @@ paths:
       tags:
         - AI
       summary: 'Add-on Board ride cards with SWDEC + ML forecasts'
-      description: "Needs `ops.read` or `rides.read` and `X-Park-Id`. **Phase 3:** `data.crossAssetContext` (park roll-up); each ride `swdec.crossAssetContext` (zone venues + hint codes).\n"
+      description: 'Needs `ops.read` or `rides.read` and `X-Park-Id`'
       responses:
         '200':
           description: OK
@@ -4356,7 +4528,6 @@ paths:
       tags:
         - AI
       summary: 'Critical / watch-list rides for the board'
-      description: 'Same envelope as `GET /addon-board/rides` (includes optional `crossAssetContext` park roll-up).'
       parameters:
         -
           in: query
@@ -4459,7 +4630,6 @@ paths:
       tags:
         - AI
       summary: 'Zone-level Add-on Board summary (L1)'
-      description: '**Phase 3:** optional `data.crossAssetContext` with `zoneVenues` and park totals.'
       parameters:
         -
           in: path
@@ -4480,7 +4650,6 @@ paths:
       tags:
         - AI
       summary: 'Ride-level Add-on Board detail (L3)'
-      description: '**Phase 3:** `data.crossAssetContext` (park roll-up, same as list) and `data.swdec.crossAssetContext` (zone venues + hints).'
       parameters:
         -
           in: path
@@ -4691,256 +4860,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EnvelopeGenericData'
-  /agent/actions:
-    get:
-      tags:
-        - Agent
-      summary: 'List pending proposed agent actions for scoped park'
-      description: 'Needs **`agent.review`** and **`X-Park-Id`**. Returns proposals awaiting approve/reject (`status=proposed`).'
-      parameters:
-        -
-          in: header
-          name: X-Park-Id
-          required: true
-          schema:
-            type: string
-            format: uuid
-        -
-          in: query
-          name: limit
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-            default: 50
-        -
-          in: query
-          name: offset
-          schema:
-            type: integer
-            minimum: 0
-            default: 0
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EnvelopeGenericData'
-  '/agent/actions/{id}/approve':
-    parameters:
-      -
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-          format: uuid
-      -
-        in: header
-        name: X-Park-Id
-        required: true
-        schema:
-          type: string
-          format: uuid
-    post:
-      tags:
-        - Agent
-      summary: 'Approve and apply a proposed agent action'
-      description: "Needs **`agent.approve`** and **`X-Park-Id`**. Executes the whitelisted write tool (e.g. batch recommendation scoring, notify audit stub, incident create).\nOn success the action row stores **`outcome_metric`** (Phase C JSON: forecast-vs-actual bridge stub + `resolution: applied`).\n"
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EnvelopeGenericData'
-        '404':
-          description: 'Not found'
-        '410':
-          description: 'Proposal expired'
-  '/agent/actions/{id}/reject':
-    parameters:
-      -
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-          format: uuid
-      -
-        in: header
-        name: X-Park-Id
-        required: true
-        schema:
-          type: string
-          format: uuid
-    post:
-      tags:
-        - Agent
-      summary: 'Reject a proposed agent action'
-      description: "Needs **`agent.review`** and **`X-Park-Id`**. Stores **`outcome_metric`** with `resolution: rejected` and the same forecast snapshot stub as approve (for later analytics).\n"
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                reason:
-                  type: string
-                  maxLength: 2000
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EnvelopeGenericData'
-  /agent/runs:
-    get:
-      tags:
-        - Agent
-      summary: 'List agent runs for scoped park'
-      description: 'Needs **`agent.read`**, **`X-Park-Id`**, and optional filters (`limit`, `offset`, `skillId`, `status`).'
-      parameters:
-        -
-          in: header
-          name: X-Park-Id
-          required: true
-          schema:
-            type: string
-            format: uuid
-        -
-          in: query
-          name: limit
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-            default: 50
-        -
-          in: query
-          name: offset
-          schema:
-            type: integer
-            minimum: 0
-            default: 0
-        -
-          in: query
-          name: skillId
-          schema:
-            type: string
-        -
-          in: query
-          name: status
-          schema:
-            type: string
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EnvelopeGenericData'
-        '401':
-          description: Unauthorized
-        '403':
-          description: Forbidden
-    post:
-      tags:
-        - Agent
-      summary: 'Trigger an agent skill run (manual)'
-      description: "Needs **`agent.run`** and **`X-Park-Id`**. Body **`parkId`** must match the active park context.\nSupports **`daily_executive_brief`**, **`crowd_spike_triage`**, **`mapping_assistant`**, **`weather_pivot`**, and **`ride_down_response`** (suggest skills propose actions for approval).\n"
-      parameters:
-        -
-          in: header
-          name: X-Park-Id
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - skillId
-                - parkId
-              properties:
-                skillId:
-                  type: string
-                  enum:
-                    - daily_executive_brief
-                    - crowd_spike_triage
-                    - mapping_assistant
-                    - weather_pivot
-                    - ride_down_response
-                parkId:
-                  type: string
-                  format: uuid
-                triggerType:
-                  type: string
-                  default: manual
-                crowdEventId:
-                  type: string
-                  format: uuid
-                  nullable: true
-                  description: 'Optional crowd event (`crowd_events.id`) for `crowd_spike_triage` context.'
-                rideId:
-                  type: string
-                  format: uuid
-                  nullable: true
-                  description: 'Optional ride / park asset id (`park_assets.asset_id`) for `ride_down_response` focus context.'
-      responses:
-        '201':
-          description: Created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EnvelopeGenericData'
-        '401':
-          description: Unauthorized
-        '403':
-          description: Forbidden
-        '422':
-          description: 'Validation error'
-  '/agent/runs/{id}':
-    parameters:
-      -
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-          format: uuid
-      -
-        in: header
-        name: X-Park-Id
-        required: true
-        schema:
-          type: string
-          format: uuid
-    get:
-      tags:
-        - Agent
-      summary: 'Get agent run detail with steps and actions'
-      description: 'Needs **`agent.read`** and **`X-Park-Id`**. Returns ordered **`steps`** and **`actions`** for audit trace.'
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EnvelopeGenericData'
-        '401':
-          description: Unauthorized
-        '403':
-          description: Forbidden
-        '404':
-          description: 'Not found'
   /ai/health:
     get:
       tags:
@@ -7231,6 +7150,237 @@ paths:
                 $ref: '#/components/schemas/EnvelopeAssetRuntimeOverrideOne'
         '404':
           $ref: '#/components/responses/NotFound'
+  '/parks/{parkId}/traffic-corridors':
+    parameters:
+      -
+        name: parkId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - AttendanceRisk
+      summary: 'List traffic corridors for a park (with latest snapshot when present)'
+      security:
+        -
+          bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeTrafficCorridorList'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags:
+        - AttendanceRisk
+      summary: 'Create a traffic corridor'
+      security:
+        -
+          bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrafficCorridorCreateBody'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeTrafficCorridor'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: 'Validation error'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+  '/parks/{parkId}/attendance-risk-forecast/run':
+    parameters:
+      -
+        name: parkId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags:
+        - AttendanceRisk
+      summary: 'Run attendance risk forecast for a park (persists 5m forecast row)'
+      security:
+        -
+          bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttendanceRiskForecastRunBody'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeParkDemandForecast'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  '/parks/{parkId}/attendance-risk-forecast/latest':
+    parameters:
+      -
+        name: parkId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - AttendanceRisk
+      summary: 'Latest attendance risk forecast for a park'
+      security:
+        -
+          bearerAuth: []
+      responses:
+        '200':
+          description: 'OK (data may be null)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeParkDemandForecast'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  '/parks/{parkId}/attendance-risk-forecast/history':
+    parameters:
+      -
+        name: parkId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      -
+        name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 500
+          default: 96
+    get:
+      tags:
+        - AttendanceRisk
+      summary: 'Historical attendance risk forecasts (newest first)'
+      security:
+        -
+          bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeParkDemandForecastList'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  '/traffic-corridors/{corridorId}':
+    parameters:
+      -
+        name: corridorId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      tags:
+        - AttendanceRisk
+      summary: 'Update a traffic corridor'
+      security:
+        -
+          bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrafficCorridorPatchBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeTrafficCorridor'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags:
+        - AttendanceRisk
+      summary: 'Delete a traffic corridor'
+      security:
+        -
+          bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      deleted:
+                        type: boolean
+                      id:
+                        type: string
+                        format: uuid
+        '404':
+          $ref: '#/components/responses/NotFound'
+  '/traffic-corridors/{corridorId}/snapshots/manual':
+    parameters:
+      -
+        name: corridorId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags:
+        - AttendanceRisk
+      summary: 'Create a manual traffic snapshot for a corridor'
+      security:
+        -
+          bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManualTrafficSnapshotBody'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeTrafficCorridorSnapshot'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /audit-logs:
     get:
       tags:
@@ -8754,40 +8904,7 @@ paths:
           application/json:
             schema:
               type: object
-              required:
-                - capabilities
-              properties:
-                capabilities:
-                  type: array
-                  minItems: 1
-                  maxItems: 500
-                  items:
-                    type: object
-                    required:
-                      - signalCatalogId
-                      - signalSource
-                    additionalProperties: false
-                    properties:
-                      signalCatalogId:
-                        type: string
-                        format: uuid
-                      signalSource:
-                        type: string
-                        enum:
-                          - NOT_AVAILABLE
-                          - MASTER_DATA
-                          - MANUAL
-                          - ADAPTER
-                          - MQTT_EDGE
-                          - SIMULATION
-                          - ML
-                      valueType:
-                        type: string
-                        maxLength: 64
-                      useForMl:
-                        type: boolean
-                      useForForecast:
-                        type: boolean
+              additionalProperties: true
       responses:
         '200':
           description: OK
@@ -10848,39 +10965,6 @@ paths:
                     additionalProperties: true
         '404':
           $ref: '#/components/responses/NotFound'
-  '/parks/{parkId}/level0':
-    patch:
-      tags:
-        - Platform
-      summary: 'Patch park Level-0 master profile (hours baseline, Sparkplug routing block, identity)'
-      parameters:
-        -
-          in: path
-          name: parkId
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              minProperties: 1
-              additionalProperties: true
-              description: 'Subset of park master profile — see `parkLevel0Body` validator'
-      responses:
-        '200':
-          description: OK
-        '400':
-          description: 'Validation error'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorBody'
-        '404':
-          $ref: '#/components/responses/NotFound'
   '/parks/{parkId}/shift-handovers':
     parameters:
       -
@@ -10951,183 +11035,6 @@ paths:
       responses:
         '201':
           description: Created
-  '/parks/{parkId}/shift-handovers/{entryId}/acknowledge':
-    post:
-      tags:
-        - Platform
-      summary: 'Acknowledge shift handover entry'
-      parameters:
-        -
-          in: path
-          name: parkId
-          required: true
-          schema:
-            type: string
-            format: uuid
-        -
-          in: path
-          name: entryId
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                note:
-                  type: string
-                  maxLength: 4000
-                  nullable: true
-      responses:
-        '200':
-          description: OK
-        '404':
-          $ref: '#/components/responses/NotFound'
-  '/parks/{parkId}/shift-handovers/{entryId}/tasks':
-    patch:
-      tags:
-        - Platform
-      summary: 'Replace follow-up task list on shift handover entry'
-      parameters:
-        -
-          in: path
-          name: parkId
-          required: true
-          schema:
-            type: string
-            format: uuid
-        -
-          in: path
-          name: entryId
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - tasks
-              properties:
-                tasks:
-                  type: array
-                  maxItems: 100
-                  items:
-                    type: object
-                    properties:
-                      id:
-                        type: string
-                        maxLength: 80
-                      title:
-                        type: string
-                        maxLength: 280
-                      ownerUserId:
-                        type: string
-                        format: uuid
-                        nullable: true
-                      dueAt:
-                        type: string
-                        maxLength: 64
-                        nullable: true
-                      status:
-                        type: string
-                        enum:
-                          - OPEN
-                          - DONE
-                          - CANCELLED
-                    required:
-                      - title
-      responses:
-        '200':
-          description: OK
-        '404':
-          $ref: '#/components/responses/NotFound'
-  '/parks/{parkId}/shift-handovers/reminders/due':
-    get:
-      tags:
-        - Platform
-      summary: 'List shift handovers with reminders due'
-      parameters:
-        -
-          in: path
-          name: parkId
-          required: true
-          schema:
-            type: string
-            format: uuid
-        -
-          in: query
-          name: limit
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 200
-      responses:
-        '200':
-          description: OK
-        '404':
-          $ref: '#/components/responses/NotFound'
-  '/parks/{parkId}/shift-handovers/{entryId}/reminders/mark-sent':
-    post:
-      tags:
-        - Platform
-      summary: 'Mark shift handover reminder as sent'
-      parameters:
-        -
-          in: path
-          name: parkId
-          required: true
-          schema:
-            type: string
-            format: uuid
-        -
-          in: path
-          name: entryId
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: OK
-        '404':
-          $ref: '#/components/responses/NotFound'
-  '/parks/{parkId}/shift-handovers/{entryId}/pdf':
-    get:
-      tags:
-        - Platform
-      summary: 'Download shift handover PDF'
-      parameters:
-        -
-          in: path
-          name: parkId
-          required: true
-          schema:
-            type: string
-            format: uuid
-        -
-          in: path
-          name: entryId
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: 'PDF stream'
-          content:
-            application/pdf:
-              schema:
-                type: string
-                format: binary
-        '404':
-          $ref: '#/components/responses/NotFound'
   /recommendations:
     get:
       tags:
@@ -11995,19 +11902,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EnvelopeUnsRegistryMirrorSummary'
-  /uns-registry/mirror/sync:
-    post:
-      tags:
-        - UNS
-      summary: 'UNS registry mirror — force full sync from legacy'
-      description: 'Requires **integrations.read**. Runs a full mirror rebuild (ignores stale TTL). Use after deploy or when canonical Sparkplug metrics / signal catalog must refresh immediately.'
-      responses:
-        '200':
-          description: 'Sync completed; mirror counts plus syncedAt'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EnvelopeUnsRegistryMirrorSyncPost'
   /uns-registry/entities:
     get:
       tags:

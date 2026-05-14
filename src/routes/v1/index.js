@@ -39,6 +39,7 @@ const { platformSettingsRouter } = require('./platform-settings.routes');
 const { parkMasterRidesRouter } = require('../../modules/rides/park-master.routes');
 const { themeparksSyncRouter } = require('../../modules/adapters/themeparks/themeparks-sync.routes');
 const { registryPublisherRouter } = require('./registry-publisher.routes');
+const { trafficCorridorsGlobalRouter } = require('./traffic-corridors-global.routes');
 const v1Router = Router();
 
 const openApiPath = path.join(__dirname, '..', '..', 'openapi', 'openapi.yaml');
@@ -81,6 +82,7 @@ v1Router.use('/incidents', incidentsRouter);
 v1Router.use('/sqdc', sqdcRouter);
 v1Router.use('/addon-board', addonBoardRouter);
 v1Router.use('/operations-facts', operationsFactsRouter);
+v1Router.use('/traffic-corridors', trafficCorridorsGlobalRouter);
 v1Router.use('/admin/platform-settings', platformSettingsRouter);
 v1Router.use('/sync', themeparksSyncRouter);
 v1Router.use('/templates', platformTemplatesRouter);

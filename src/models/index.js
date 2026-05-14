@@ -55,6 +55,9 @@ const { defineSqdcDailySnapshot } = require('./sqdc-daily-snapshot.model');
 const { defineSqdcEvent } = require('./sqdc-event.model');
 const { defineSqdcMoodFeedback } = require('./sqdc-mood-feedback.model');
 const { defineMlModelRegistry } = require('./ml-model-registry.model');
+const { defineTrafficCorridor } = require('./traffic-corridor.model');
+const { defineTrafficCorridorSnapshot5m } = require('./traffic-corridor-snapshot-5m.model');
+const { defineParkDemandForecast5m } = require('./park-demand-forecast-5m.model');
 const { defineRegistryPublishEvent } = require('./registry-publish-event.model');
 const { defineRegistrySignalDeprecation } = require('./registry-signal-deprecation.model');
 
@@ -129,6 +132,9 @@ const SqdcDailySnapshot = defineSqdcDailySnapshot(sequelize);
 const SqdcEvent = defineSqdcEvent(sequelize);
 const SqdcMoodFeedback = defineSqdcMoodFeedback(sequelize);
 const MlModelRegistry = defineMlModelRegistry(sequelize);
+const TrafficCorridor = defineTrafficCorridor(sequelize);
+const TrafficCorridorSnapshot5m = defineTrafficCorridorSnapshot5m(sequelize);
+const ParkDemandForecast5m = defineParkDemandForecast5m(sequelize);
 const RegistryPublishEvent = defineRegistryPublishEvent(sequelize);
 const RegistrySignalDeprecation = defineRegistrySignalDeprecation(sequelize);
 
@@ -235,6 +241,15 @@ ParkAsset.hasMany(AssetMlProfileAssignment, { foreignKey: 'assetId', sourceKey: 
 AssetMlProfileAssignment.belongsTo(ParkAsset, { foreignKey: 'assetId', targetKey: 'assetId', as: 'asset' });
 ParkAsset.hasMany(AssetMlOverride, { foreignKey: 'assetId', sourceKey: 'assetId', as: 'mlOverrides' });
 AssetMlOverride.belongsTo(ParkAsset, { foreignKey: 'assetId', targetKey: 'assetId', as: 'asset' });
+
+Park.hasMany(TrafficCorridor, { foreignKey: 'parkId', as: 'trafficCorridors' });
+TrafficCorridor.belongsTo(Park, { foreignKey: 'parkId', as: 'park' });
+TrafficCorridor.hasMany(TrafficCorridorSnapshot5m, { foreignKey: 'corridorId', as: 'snapshots' });
+TrafficCorridorSnapshot5m.belongsTo(TrafficCorridor, { foreignKey: 'corridorId', as: 'corridor' });
+Park.hasMany(TrafficCorridorSnapshot5m, { foreignKey: 'parkId', as: 'trafficCorridorSnapshots' });
+TrafficCorridorSnapshot5m.belongsTo(Park, { foreignKey: 'parkId', as: 'park' });
+Park.hasMany(ParkDemandForecast5m, { foreignKey: 'parkId', as: 'demandForecasts5m' });
+ParkDemandForecast5m.belongsTo(Park, { foreignKey: 'parkId', as: 'park' });
 
 User.hasMany(UserRole, { foreignKey: 'userId', as: 'userRoles' });
 UserRole.belongsTo(User, { foreignKey: 'userId', as: 'user' });
@@ -380,6 +395,9 @@ module.exports = {
   SqdcEvent,
   SqdcMoodFeedback,
   MlModelRegistry,
+  TrafficCorridor,
+  TrafficCorridorSnapshot5m,
+  ParkDemandForecast5m,
   RegistryPublishEvent,
   RegistrySignalDeprecation,
   UnsRegistryEntity,

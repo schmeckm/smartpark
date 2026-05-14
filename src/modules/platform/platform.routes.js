@@ -9,7 +9,13 @@ const templatesCtrl = require('./platform-templates.controller');
 const geoPressureCtrl = require('../../controllers/geo-pressure.controller');
 const geoFlowCtrl = require('../../controllers/geo-flow.controller');
 const rideMasterExtensionsCtrl = require('../../controllers/ride-master-extensions.controller');
+const trafficAttendanceCtrl = require('../../controllers/traffic-attendance.controller');
 const { validateExtensionsPatchBody } = require('../../validators/ride-master-extensions-patch.validator');
+const {
+  trafficCorridorCreateBody,
+  attendanceRiskForecastRunBody,
+  forecastHistoryQuery,
+} = require('../../validators/traffic-attendance.schemas');
 const {
   listAssetsQuery,
   assetIdParam,
@@ -106,6 +112,40 @@ platformParksRouter.post(
   validate(parkIdParam, 'params'),
   validate(shiftHandoverCreateBody),
   shiftHandoverCtrl.create
+);
+
+platformParksRouter.get(
+  '/:parkId/traffic-corridors',
+  requirePermission('rides', 'read'),
+  validate(parkIdParam, 'params'),
+  trafficAttendanceCtrl.listTrafficCorridors
+);
+platformParksRouter.post(
+  '/:parkId/traffic-corridors',
+  requirePermission('rides', 'update'),
+  validate(parkIdParam, 'params'),
+  validate(trafficCorridorCreateBody),
+  trafficAttendanceCtrl.createTrafficCorridor
+);
+platformParksRouter.post(
+  '/:parkId/attendance-risk-forecast/run',
+  requirePermission('rides', 'update'),
+  validate(parkIdParam, 'params'),
+  validate(attendanceRiskForecastRunBody),
+  trafficAttendanceCtrl.runAttendanceRiskForecast
+);
+platformParksRouter.get(
+  '/:parkId/attendance-risk-forecast/latest',
+  requirePermission('rides', 'read'),
+  validate(parkIdParam, 'params'),
+  trafficAttendanceCtrl.getLatestAttendanceRiskForecast
+);
+platformParksRouter.get(
+  '/:parkId/attendance-risk-forecast/history',
+  requirePermission('rides', 'read'),
+  validate(parkIdParam, 'params'),
+  validate(forecastHistoryQuery, 'query'),
+  trafficAttendanceCtrl.getAttendanceRiskForecastHistory
 );
 
 const platformAssetsRouter = Router();

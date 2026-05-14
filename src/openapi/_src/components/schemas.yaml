@@ -3959,3 +3959,309 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MdmJsonObject'
+    TrafficCorridor:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        parkId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        originLabel:
+          type: string
+          nullable: true
+        originLat:
+          type: number
+          nullable: true
+        originLng:
+          type: number
+          nullable: true
+        destinationLabel:
+          type: string
+          nullable: true
+        destinationLat:
+          type: number
+          nullable: true
+        destinationLng:
+          type: number
+          nullable: true
+        direction:
+          type: string
+          enum:
+            - inbound
+            - outbound
+        source:
+          type: string
+        baselineTravelTimeMin:
+          type: number
+        weight:
+          type: number
+        enabled:
+          type: boolean
+        latestSnapshot:
+          $ref: '#/components/schemas/TrafficCorridorSnapshot5m'
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    TrafficCorridorSnapshot5m:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        corridorId:
+          type: string
+          format: uuid
+        parkId:
+          type: string
+          format: uuid
+        snapshotTs:
+          type: string
+          format: date-time
+        source:
+          type: string
+        currentTravelTimeMin:
+          type: number
+        baselineTravelTimeMin:
+          type: number
+        delayMin:
+          type: number
+          nullable: true
+        delayPercent:
+          type: number
+          nullable: true
+        congestionScore:
+          type: number
+          nullable: true
+        inboundPressureScore:
+          type: number
+          nullable: true
+    ParkDemandForecast5m:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        parkId:
+          type: string
+          format: uuid
+        snapshotTs:
+          type: string
+          format: date-time
+        plannedDemand:
+          type: integer
+        knownRegisteredExpected:
+          type: integer
+        plannedTotal:
+          type: integer
+        trafficPressureScore:
+          type: number
+        weatherScore:
+          type: number
+        holidayScore:
+          type: number
+        eventScore:
+          type: number
+        parkingPressureScore:
+          type: number
+        externalDemandPressureScore:
+          type: number
+        additionalDemandLow:
+          type: integer
+        additionalDemandMid:
+          type: integer
+        additionalDemandHigh:
+          type: integer
+        expectedAttendanceLow:
+          type: integer
+        expectedAttendanceMid:
+          type: integer
+        expectedAttendanceHigh:
+          type: integer
+        status:
+          type: string
+          enum:
+            - normal
+            - elevated
+            - high
+            - critical
+        confidenceScore:
+          type: number
+        recommendationsJson:
+          type: array
+          items:
+            type: string
+          nullable: true
+        explanationJson: {}
+    EnvelopeTrafficCorridorList:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrafficCorridor'
+    EnvelopeTrafficCorridor:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/TrafficCorridor'
+    EnvelopeTrafficCorridorSnapshot:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/TrafficCorridorSnapshot5m'
+    EnvelopeParkDemandForecast:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/ParkDemandForecast5m'
+          nullable: true
+    EnvelopeParkDemandForecastList:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ParkDemandForecast5m'
+    TrafficCorridorCreateBody:
+      type: object
+      required:
+        - name
+        - baselineTravelTimeMin
+      properties:
+        name:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          nullable: true
+        originLabel:
+          type: string
+          nullable: true
+        originLat:
+          type: number
+          nullable: true
+        originLng:
+          type: number
+          nullable: true
+        destinationLabel:
+          type: string
+          nullable: true
+        destinationLat:
+          type: number
+          nullable: true
+        destinationLng:
+          type: number
+          nullable: true
+        direction:
+          type: string
+          enum:
+            - inbound
+            - outbound
+        baselineTravelTimeMin:
+          type: number
+          minimum: 0
+        weight:
+          type: number
+          minimum: 0
+        enabled:
+          type: boolean
+    TrafficCorridorPatchBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        originLabel:
+          type: string
+          nullable: true
+        originLat:
+          type: number
+          nullable: true
+        originLng:
+          type: number
+          nullable: true
+        destinationLabel:
+          type: string
+          nullable: true
+        destinationLat:
+          type: number
+          nullable: true
+        destinationLng:
+          type: number
+          nullable: true
+        direction:
+          type: string
+          enum:
+            - inbound
+            - outbound
+        baselineTravelTimeMin:
+          type: number
+          minimum: 0
+        weight:
+          type: number
+          minimum: 0
+        enabled:
+          type: boolean
+    ManualTrafficSnapshotBody:
+      type: object
+      required:
+        - currentTravelTimeMin
+      properties:
+        currentTravelTimeMin:
+          type: number
+          minimum: 0
+        snapshotTs:
+          type: string
+          format: date-time
+          nullable: true
+    AttendanceRiskForecastRunBody:
+      type: object
+      required:
+        - plannedDemand
+        - knownRegisteredExpected
+      properties:
+        plannedDemand:
+          type: integer
+          minimum: 0
+        knownRegisteredExpected:
+          type: integer
+          minimum: 0
+        weatherScore:
+          type: number
+          minimum: 0
+          maximum: 100
+        holidayScore:
+          type: number
+          minimum: 0
+          maximum: 100
+        eventScore:
+          type: number
+          minimum: 0
+          maximum: 100
+        parkingPressureScore:
+          type: number
+          minimum: 0
+          maximum: 100

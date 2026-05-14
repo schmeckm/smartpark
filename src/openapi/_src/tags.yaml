@@ -46,3 +46,6 @@ tags:
   -
     name: Geo
     description: "Park-level **geo pressure** (wait hotspots, forecasts) and **guest flow** simulation / journey event ingest.\n`{parkSlug}` resolves like master-data (internal UUID, URL slug, or external entity id).\n"
+  -
+    name: AttendanceRisk
+    description: 'Manual traffic corridor snapshots as leading indicators for attendance risk (MVP; no external routing APIs).'
