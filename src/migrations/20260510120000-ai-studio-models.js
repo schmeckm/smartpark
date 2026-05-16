@@ -34,6 +34,8 @@ module.exports = {
       feature_importance_json: { type: Sequelize.JSONB, allowNull: false, defaultValue: {} },
       eval_holdout_json: { type: Sequelize.JSONB, allowNull: true },
       dataset_snapshot_json: { type: Sequelize.JSONB, allowNull: true },
+      archived_at: { type: Sequelize.DATE, allowNull: true },
+      archived_by: { type: Sequelize.UUID, allowNull: true },
       created_at: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.literal('CURRENT_TIMESTAMP') },
       updated_at: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.literal('CURRENT_TIMESTAMP') },
     });
