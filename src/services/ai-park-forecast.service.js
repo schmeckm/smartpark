@@ -1,3 +1,4 @@
+/* eslint-disable max-lines */
 /**
  * Park / entity wait forecasts: baseline from snapshot series, then X-layer, then ML enterprise layer.
  * When a ride has `park_assets.evaluated_algorithm` and an **active** matching FEATURE_STORE `ai_studio_models` row,

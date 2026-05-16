@@ -36,24 +36,9 @@ services:
   mqtt:
     image: eclipse-mosquitto:2.0.18
     restart: unless-stopped
-    ports:
-      - '1883:1883'
-      - '9001:9001'
     volumes:
-      - mosquitto_data:/mosquitto/data
-      - mosquitto_log:/mosquitto/log
-    # Hier übergeben wir Ihre Konfigurationszeilen direkt beim Start als Befehl
-    entrypoint: >
-      sh -c "
-      mkdir -p /mosquitto/config &&
-      echo 'listener 1883' > /mosquitto/config/mosquitto.conf &&
-      echo 'allow_anonymous true' >> /mosquitto/config/mosquitto.conf &&
-      echo 'persistence false' >> /mosquitto/config/mosquitto.conf &&
-      echo 'listener 9001' >> /mosquitto/config/mosquitto.conf &&
-      echo 'protocol websockets' >> /mosquitto/config/mosquitto.conf &&
-      echo 'allow_anonymous true' >> /mosquitto/config/mosquitto.conf &&
-      exec mosquitto -c /mosquitto/config/mosquitto.conf
-      "
+      - ./docker/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    command: mosquitto -c /mosquitto/config/mosquitto.conf
 
   influxdb:
     image: influxdb:2.7-alpine
@@ -90,7 +75,7 @@ services:
       INTEGRATION_FLOW_CONCURRENCY: ${INTEGRATION_FLOW_CONCURRENCY:-3}
       INTEGRATION_FLOW_SCHEDULER_ENABLED: ${INTEGRATION_FLOW_SCHEDULER_ENABLED:-false}
       WIDGET_RUNTIME_ENABLED: ${WIDGET_RUNTIME_ENABLED:-false}
-      MQTT_ENABLED: 'true'
+      MQTT_ENABLED: ${MQTT_ENABLED:-true}
       MQTT_BROKER_URL: ${MQTT_BROKER_URL:-mqtt://mqtt:1883}
       MQTT_CLIENT_ID: ${MQTT_CLIENT_ID:-smart-park-os-api}
       ML_TRACE_ENABLED: ${ML_TRACE_ENABLED:-false}
@@ -122,5 +107,3 @@ volumes:
   pgdata:
   influxdata:
   app_data:
-  mosquitto_data:
-  mosquitto_log:
