@@ -1,0 +1,549 @@
+/integration-flows/failures:
+  get:
+    tags:
+      - Integrations
+    summary: List failed integration flow runs (failure inbox)
+    description: 'Returns failed runs with derived failed-step metadata and flow names. Supports filters and pagination. Requires **integrations.read** and `INTEGRATION_FLOW_ENGINE_ENABLED`.'
+    security:
+      -
+        bearerAuth: []
+    parameters:
+      -
+        name: flowId
+        in: query
+        schema:
+          type: string
+          format: uuid
+      -
+        name: retryStatus
+        in: query
+        schema:
+          type: string
+          enum:
+            - not_applicable
+            - pending_retry
+            - retry_succeeded
+            - retry_failed
+            - retry_exhausted
+      -
+        name: nodeType
+        in: query
+        schema:
+          type: string
+      -
+        name: acknowledged
+        in: query
+        schema:
+          type: string
+          enum:
+            - yes
+            - no
+            - all
+      -
+        name: from
+        in: query
+        schema:
+          type: string
+          format: date-time
+      -
+        name: to
+        in: query
+        schema:
+          type: string
+          format: date-time
+      -
+        name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+      -
+        name: offset
+        in: query
+        schema:
+          type: integer
+          minimum: 0
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeIntegrationFlowFailureInboxPage'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '404':
+        $ref: '#/components/responses/NotFound'
+      '422':
+        $ref: '#/components/responses/ValidationError'
+
+/integration-flows/runs/{runId}:
+  get:
+    tags:
+      - Integrations
+    summary: Get integration flow run (with steps and timeline)
+    description: 'Returns a persisted run including `steps` and a derived `timeline` from step rows. Requires `INTEGRATION_FLOW_ENGINE_ENABLED` and **integrations.read**. When the flag is off, responds **404**.'
+    security:
+      -
+        bearerAuth: []
+    parameters:
+      -
+        name: runId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeIntegrationFlowRun'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '404':
+        $ref: '#/components/responses/NotFound'
+
+/integration-flows/runs/{runId}/acknowledge:
+  post:
+    tags:
+      - Integrations
+    summary: Acknowledge a failed integration flow run
+    description: 'Records acknowledgement metadata without changing run status, retry fields, or step rows. Requires **integrations.manage**.'
+    security:
+      -
+        bearerAuth: []
+    parameters:
+      -
+        name: runId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/IntegrationFlowAcknowledgeRequest'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeIntegrationFlowFailureInboxItem'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '404':
+        $ref: '#/components/responses/NotFound'
+      '422':
+        $ref: '#/components/responses/ValidationError'
+
+/integration-flows/runs/{runId}/retry:
+  post:
+    tags:
+      - Integrations
+    summary: Manually retry a failed integration flow run
+    description: 'Creates a new run linked to the failed run when the flow is enabled and retry is configured. Requires **integrations.manage**. Does not mutate original step rows.'
+    security:
+      -
+        bearerAuth: []
+    parameters:
+      -
+        name: runId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeIntegrationFlowRunResult'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '404':
+        $ref: '#/components/responses/NotFound'
+      '422':
+        $ref: '#/components/responses/ValidationError'
+
+/integration-flows:
+  get:
+    tags:
+      - Integrations
+    summary: List integration flow definitions
+    description: 'Requires **integrations.read**. Flag-gated: **404** when disabled.'
+    security:
+      -
+        bearerAuth: []
+    parameters:
+      -
+        name: parkId
+        in: query
+        schema:
+          type: string
+          format: uuid
+      -
+        name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+      -
+        name: offset
+        in: query
+        schema:
+          type: integer
+          minimum: 0
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeIntegrationFlowDefinitionList'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '404':
+        $ref: '#/components/responses/NotFound'
+  post:
+    tags:
+      - Integrations
+    summary: Create integration flow definition
+    description: 'Validates `flowJson` graph. Requires **integrations.manage**.'
+    security:
+      -
+        bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/IntegrationFlowCreateRequest'
+    responses:
+      '201':
+        description: Created
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeIntegrationFlowDefinition'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '404':
+        $ref: '#/components/responses/NotFound'
+      '422':
+        $ref: '#/components/responses/ValidationError'
+
+/integration-flows/templates:
+  get:
+    tags:
+      - Integrations
+    summary: List predefined integration flow templates
+    description: 'Requires **integrations.read**. Flag-gated: **404** when disabled.'
+    security:
+      -
+        bearerAuth: []
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeIntegrationFlowTemplateList'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '404':
+        $ref: '#/components/responses/NotFound'
+
+/integration-flows/from-template:
+  post:
+    tags:
+      - Integrations
+    summary: Create integration flow from a predefined template
+    description: 'Merges whitelisted `configOverrides`, validates `flowJson`, then creates a definition. Requires **integrations.manage**.'
+    security:
+      -
+        bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/IntegrationFlowFromTemplateRequest'
+    responses:
+      '201':
+        description: Created
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeIntegrationFlowDefinition'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '404':
+        $ref: '#/components/responses/NotFound'
+      '422':
+        $ref: '#/components/responses/ValidationError'
+
+/integration-flows/{id}:
+  get:
+    tags:
+      - Integrations
+    summary: Get integration flow definition
+    security:
+      -
+        bearerAuth: []
+    parameters:
+      -
+        $ref: '#/components/parameters/IdPath'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeIntegrationFlowDefinition'
+      '404':
+        $ref: '#/components/responses/NotFound'
+  patch:
+    tags:
+      - Integrations
+    summary: Update integration flow definition
+    security:
+      -
+        bearerAuth: []
+    parameters:
+      -
+        $ref: '#/components/parameters/IdPath'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            minProperties: 1
+            properties:
+              parkId:
+                type: string
+                format: uuid
+                nullable: true
+              name:
+                type: string
+              description:
+                type: string
+                nullable: true
+              enabled:
+                type: boolean
+              triggerType:
+                type: string
+              flowJson:
+                $ref: '#/components/schemas/IntegrationFlowJson'
+              scheduleEnabled:
+                type: boolean
+              scheduleIntervalSeconds:
+                type: integer
+                nullable: true
+                enum:
+                  - 60
+                  - 300
+                  - 900
+                  - 1800
+                  - 3600
+              retryEnabled:
+                type: boolean
+              maxRetryAttempts:
+                type: integer
+                enum:
+                  - 0
+                  - 1
+                  - 2
+                  - 3
+              retryDelaySeconds:
+                type: integer
+                nullable: true
+                enum:
+                  - 60
+                  - 300
+                  - 900
+              retryOnNodeTypes:
+                type: array
+                nullable: true
+                items:
+                  type: string
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeIntegrationFlowDefinition'
+      '404':
+        $ref: '#/components/responses/NotFound'
+      '422':
+        $ref: '#/components/responses/ValidationError'
+  delete:
+    tags:
+      - Integrations
+    summary: Delete integration flow definition (historical runs retained; `flowId` nulled)
+    security:
+      -
+        bearerAuth: []
+    parameters:
+      -
+        $ref: '#/components/parameters/IdPath'
+    responses:
+      '204':
+        description: No content
+      '404':
+        $ref: '#/components/responses/NotFound'
+
+/integration-flows/{id}/schedule/recalculate:
+  post:
+    tags:
+      - Integrations
+    summary: Recalculate next scheduled run from now
+    description: 'Sets `nextScheduledRunAt` to now + interval. Requires an enabled flow with `scheduleEnabled` and a valid `scheduleIntervalSeconds`. Requires **integrations.manage**. Flag-gated **404** when the engine is disabled.'
+    security:
+      -
+        bearerAuth: []
+    parameters:
+      -
+        $ref: '#/components/parameters/IdPath'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeIntegrationFlowDefinition'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '404':
+        $ref: '#/components/responses/NotFound'
+      '422':
+        $ref: '#/components/responses/ValidationError'
+
+/integration-flows/{id}/validate:
+  post:
+    tags:
+      - Integrations
+    summary: Validate stored flow graph
+    security:
+      -
+        bearerAuth: []
+    parameters:
+      -
+        $ref: '#/components/parameters/IdPath'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeIntegrationFlowValidationResult'
+      '404':
+        $ref: '#/components/responses/NotFound'
+
+/integration-flows/{id}/run:
+  post:
+    tags:
+      - Integrations
+    summary: Run integration flow (manual execution)
+    security:
+      -
+        bearerAuth: []
+    parameters:
+      -
+        $ref: '#/components/parameters/IdPath'
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/IntegrationFlowRunRequest'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeIntegrationFlowRunResult'
+      '404':
+        $ref: '#/components/responses/NotFound'
+      '422':
+        $ref: '#/components/responses/ValidationError'
+
+/integration-flows/{id}/runs:
+  get:
+    tags:
+      - Integrations
+    summary: List runs for a flow
+    security:
+      -
+        bearerAuth: []
+    parameters:
+      -
+        $ref: '#/components/parameters/IdPath'
+      -
+        name: limit
+        in: query
+        schema:
+          type: integer
+      -
+        name: offset
+        in: query
+        schema:
+          type: integer
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeIntegrationFlowRunList'
+      '404':
+        $ref: '#/components/responses/NotFound'
+
+/integration-nodes:
+  get:
+    tags:
+      - Integrations
+    summary: List registered integration flow nodes
+    security:
+      -
+        bearerAuth: []
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeIntegrationNodeRegistryList'
+      '404':
+        $ref: '#/components/responses/NotFound'

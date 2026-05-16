@@ -56,6 +56,7 @@ function fakeEnv(overrides = {}) {
     mlTraceEnabled: false,
     mlProfileEnabled: false,
     mlFeatureWeightsEnabled: false,
+    integrationFlowEngineEnabled: false,
   };
   return { ...base, ...overrides };
 }
@@ -132,6 +133,13 @@ test('buildFeatureFlagReport: coerces optional booleans defensively', () => {
   assert.equal(r.mqtt.enabled, false);
   assert.equal(r.uns.spyEnabled, true);
   assert.equal(r.registry.publishEnabled, true);
+});
+
+test('buildFeatureFlagReport: integration flow engine flag surfaces under integrations', () => {
+  const off = buildFeatureFlagReport(fakeEnv());
+  assert.equal(off.integrations.flowEngineEnabled, false);
+  const on = buildFeatureFlagReport(fakeEnv({ integrationFlowEngineEnabled: true }));
+  assert.equal(on.integrations.flowEngineEnabled, true);
 });
 
 test('buildFeatureFlagReport: mlForecast booleans surface for boot log', () => {

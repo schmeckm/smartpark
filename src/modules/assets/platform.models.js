@@ -114,6 +114,8 @@ function definePlatformModels(sequelize) {
       lastSyncedAt: { type: DataTypes.DATE, allowNull: true, field: 'last_synced_at' },
       templateId: { type: DataTypes.UUID, allowNull: true, field: 'template_id' },
       masterProfile: { type: DataTypes.JSONB, allowNull: false, defaultValue: {}, field: 'master_profile' },
+      /** Last applied / user-chosen ML algorithm key for ride wait forecasting (AI Studio batch apply). */
+      evaluatedAlgorithm: { type: DataTypes.STRING(48), allowNull: true, field: 'evaluated_algorithm' },
     },
     { sequelize, modelName: 'ParkAsset', tableName: 'park_assets', underscored: true, timestamps: true }
   );

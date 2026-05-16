@@ -65,11 +65,14 @@ function fakeEnv(overrides = {}) {
     mlTraceEnabled: false,
     mlProfileEnabled: false,
     mlFeatureWeightsEnabled: false,
+    pdmIndustrialPlatformEnabled: false,
+    pdmOperationsBoardEnabled: true,
+    integrationFlowEngineEnabled: false,
   };
   return { ...base, ...overrides };
 }
 
-test('buildStructured: groups all current env keys into 14 sections', () => {
+test('buildStructured: groups all current env keys into 15 sections', () => {
   const s = buildStructured(fakeEnv());
   for (const k of [
     'runtime',
@@ -86,6 +89,7 @@ test('buildStructured: groups all current env keys into 14 sections', () => {
     'sim',
     'registry',
     'ingestion',
+    'pdm',
   ]) {
     assert.ok(Object.prototype.hasOwnProperty.call(s, k), `missing section: ${k}`);
   }
@@ -96,6 +100,9 @@ test('buildStructured: groups all current env keys into 14 sections', () => {
   assert.equal(s.mlForecast.traceEnabled, false);
   assert.equal(s.mlForecast.profileEnabled, false);
   assert.equal(s.mlForecast.featureWeightsEnabled, false);
+  assert.equal(s.pdm.industrialPlatformEnabled, false);
+  assert.equal(s.pdm.operationsBoardEnabled, true);
+  assert.equal(s.integrations.flowEngineEnabled, false);
 });
 
 test('buildStructured: coerces optional booleans defensively', () => {
@@ -146,6 +153,7 @@ test('validateStructured: applies Joi defaults for missing leaves', () => {
     sim: { oee: {} },
     registry: {},
     ingestion: {},
+    pdm: {},
   };
   const { value, warnings } = validateStructured(partial);
   assert.deepEqual(warnings, []);
@@ -154,6 +162,9 @@ test('validateStructured: applies Joi defaults for missing leaves', () => {
   assert.equal(value.weather.openMeteoForecastUrl, 'https://api.open-meteo.com/v1/forecast');
   assert.equal(value.sim.oee.publishMs, 3000);
   assert.equal(value.registry.signalPublishMaxAgeMs, 86_400_000);
+  assert.equal(value.pdm.industrialPlatformEnabled, false);
+  assert.equal(value.pdm.operationsBoardEnabled, true);
+  assert.equal(value.integrations.flowEngineEnabled, false);
 });
 
 test('Flags: instances are deeply frozen', () => {
@@ -193,6 +204,7 @@ test('Flags.toLogPayload(): masks secrets and matches the QW2 boot-log shape', (
     'sim',
     'registry',
     'ingestion',
+    'pdm',
   ]) {
     assert.ok(Object.prototype.hasOwnProperty.call(p, k), `missing section in log payload: ${k}`);
   }

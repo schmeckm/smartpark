@@ -13,12 +13,13 @@ import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { useRegionalDateTime } from '@/composables/useRegionalDateTime'
 import { useI18n } from 'vue-i18n'
+import { resolveApiOrigin } from '@/utils/apiOrigin'
 
 const { t } = useI18n()
 const auth = useAuthStore()
 const { push: pushToast } = useToast()
 const { formatTime, formatDateTime } = useRegionalDateTime()
-const apiOrigin = import.meta.env.VITE_API_URL || undefined
+const apiOrigin = resolveApiOrigin()
 
 const parkId = ref('')
 const integrationExternalParkId = ref('')

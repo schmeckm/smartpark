@@ -57,4 +57,13 @@ const patchParkLevel0 = asyncHandler(async (req, res) => {
   res.json({ success: true, data: park });
 });
 
-module.exports = { listParks, listParkZones, getOperationalContext, patchParkLevel0 };
+const { listParkPdmOperationsOverview } = require('../../services/pdm-operations-overview.service');
+
+const getPdmOperationsOverview = asyncHandler(async (req, res) => {
+  const body = req.validated || req.query || {};
+  const limit = body.limit != null ? Number(body.limit) : undefined;
+  const data = await listParkPdmOperationsOverview(req.params.parkId, { limit });
+  res.json({ success: true, data });
+});
+
+module.exports = { listParks, listParkZones, getOperationalContext, patchParkLevel0, getPdmOperationsOverview };

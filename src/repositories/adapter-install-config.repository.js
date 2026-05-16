@@ -46,6 +46,35 @@ class AdapterInstallConfigRepository {
     return path.join(getConfigRootDir(), `${k}.install.yaml`);
   }
 
+  /** Tombstone: user removed integration; boot-time reload must not re-upsert a DB row from disk. */
+  removedMarkerPath(adapterKey) {
+    const k = assertSafeAdapterKey(adapterKey);
+    return path.join(getConfigRootDir(), `${k}.removed`);
+  }
+
+  isMarkedRemoved(adapterKey) {
+    try {
+      return fs.existsSync(this.removedMarkerPath(adapterKey));
+    } catch {
+      return false;
+    }
+  }
+
+  writeRemovedMarker(adapterKey) {
+    this.ensureDir();
+    const p = this.removedMarkerPath(adapterKey);
+    fs.writeFileSync(p, `${new Date().toISOString()}\n`, 'utf8');
+  }
+
+  clearRemovedMarker(adapterKey) {
+    try {
+      const p = this.removedMarkerPath(adapterKey);
+      if (fs.existsSync(p)) fs.unlinkSync(p);
+    } catch {
+      /* ignore */
+    }
+  }
+
   ensureDir() {
     const d = getConfigRootDir();
     fs.mkdirSync(d, { recursive: true });
@@ -75,6 +104,7 @@ class AdapterInstallConfigRepository {
   saveFull(adapterKey, doc) {
     this.ensureDir();
     const k = assertSafeAdapterKey(adapterKey);
+    this.clearRemovedMarker(k);
     const merged = { ...defaultInstallDocument(k), ...doc, adapterKey: k };
     merged.updatedAt = new Date().toISOString();
     if (!merged.installedAt) merged.installedAt = merged.updatedAt;
@@ -93,6 +123,7 @@ class AdapterInstallConfigRepository {
     try {
       const p = this.filePath(adapterKey);
       if (fs.existsSync(p)) fs.unlinkSync(p);
+      this.writeRemovedMarker(adapterKey);
     } catch {
       /* ignore */
     }

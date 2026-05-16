@@ -40,6 +40,10 @@ const { themeparksSyncRouter } = require('../../modules/adapters/themeparks/them
 const { registryPublisherRouter } = require('./registry-publisher.routes');
 const { agentRouter } = require('./agent.routes');
 const { trafficCorridorsGlobalRouter } = require('./traffic-corridors-global.routes');
+const { trafficSnapshotsRouter } = require('./traffic-snapshots.routes');
+const { integrationFlowRouter } = require('../../modules/integration-flow/routes/integration-flow.routes');
+const { integrationNodesRouter } = require('../../modules/integration-flow/routes/integration-nodes.routes');
+const { widgetRuntimeRouter } = require('../../modules/widget-runtime/routes/widget-runtime.routes');
 const v1Router = Router();
 
 const openApiPath = path.join(__dirname, '..', '..', 'openapi', 'openapi.yaml');
@@ -69,6 +73,9 @@ v1Router.use('/import', importRouter);
 v1Router.use('/simulator', simulatorRouter);
 v1Router.use('/data-quality', dataQualityRouter);
 v1Router.use('/integrations', integrationsRouter);
+v1Router.use('/integration-flows', integrationFlowRouter);
+v1Router.use('/integration-nodes', integrationNodesRouter);
+v1Router.use('/widget-runtime', widgetRuntimeRouter);
 v1Router.use('/uns-registry', unsRegistryRouter);
 v1Router.use('/uns-spy', unsSpyRouter);
 v1Router.use('/registry-publisher', registryPublisherRouter);
@@ -83,6 +90,7 @@ v1Router.use('/sqdc', sqdcRouter);
 v1Router.use('/addon-board', addonBoardRouter);
 v1Router.use('/operations-facts', operationsFactsRouter);
 v1Router.use('/traffic-corridors', trafficCorridorsGlobalRouter);
+v1Router.use('/traffic', trafficSnapshotsRouter);
 v1Router.use('/admin/platform-settings', platformSettingsRouter);
 v1Router.use('/sync', themeparksSyncRouter);
 v1Router.use('/templates', platformTemplatesRouter);

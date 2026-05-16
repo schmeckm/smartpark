@@ -18,6 +18,8 @@ function defineMlModelRegistry(sequelize) {
       trainingRows: { type: DataTypes.INTEGER, allowNull: true, field: 'training_rows' },
       trainedAt: { type: DataTypes.DATE, allowNull: true, field: 'trained_at' },
       isActive: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true, field: 'is_active' },
+      archivedAt: { type: DataTypes.DATE, allowNull: true, field: 'archived_at' },
+      archivedBy: { type: DataTypes.UUID, allowNull: true, field: 'archived_by' },
     },
     {
       sequelize,

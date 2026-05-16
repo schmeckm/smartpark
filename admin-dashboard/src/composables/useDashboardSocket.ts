@@ -3,6 +3,7 @@ import { io, type Socket } from 'socket.io-client'
 import type { CanonicalInboundMessage, CrowdEvent, Recommendation, Ride, Staff, Zone } from '@/types/api'
 import { getOperationsFactsRides, getRecommendations, getRides, getStaff, getZones } from '@/api/client'
 import { getApiParkContextId, setApiParkContextId } from '@/utils/apiParkContext'
+import { resolveApiOrigin } from '@/utils/apiOrigin'
 import { mergeRidesWithOperationsFacts } from '@/utils/operationsFactsDashboardRides'
 import { useAuthStore } from '@/stores/auth'
 import { useParkContextStore } from '@/stores/parkContext'
@@ -45,7 +46,7 @@ export function useDashboardSocket(options?: UseDashboardSocketOptions) {
   const loadError = ref<string | null>(null)
   const socket = shallowRef<Socket | null>(null)
 
-  const apiOrigin = import.meta.env.VITE_API_URL || undefined
+  const apiOrigin = resolveApiOrigin()
 
   async function loadRidesWithOperationsFactsPreferred(): Promise<Ride[]> {
     const legacy = await getRides()

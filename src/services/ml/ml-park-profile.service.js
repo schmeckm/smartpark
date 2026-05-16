@@ -16,12 +16,14 @@ function assertPlainObject(label, v) {
 }
 
 /**
- * @param {{ parkId: string, enabled?: boolean, profileName?: string }} filters
+ * @param {{ parkId: string, enabled?: boolean, profileName?: string, includeArchived?: boolean }} filters
  */
 async function listParkMlProfiles(filters) {
   const where = { parkId: String(filters.parkId) };
   if (typeof filters.enabled === 'boolean') where.enabled = filters.enabled;
   if (filters.profileName) where.profileName = { [Op.iLike]: `%${String(filters.profileName)}%` };
+  const includeArchived = filters.includeArchived === true || filters.includeArchived === 'true';
+  if (!includeArchived) where.archivedAt = { [Op.is]: null };
   const rows = await MlParkProfile.findAll({
     where,
     order: [['updatedAt', 'DESC']],
@@ -112,6 +114,30 @@ async function upsertParkMlProfile(parkId, payload) {
   return createParkMlProfile(parkId, payload);
 }
 
+/**
+ * Soft-archive park metadata profile (excluded from default list + feature-weight resolution).
+ * @param {string} parkId
+ * @param {string} id
+ * @param {string|null} [userId]
+ */
+async function archiveParkMlProfile(parkId, id, userId = null) {
+  const { AppError } = require('../../utils/app-error');
+  const row = await MlParkProfile.findOne({
+    where: { id: String(id), parkId: String(parkId) },
+  });
+  if (!row) throw new AppError('Park ML profile not found', 404, { code: 'NOT_FOUND' });
+  if (row.archivedAt) return row.get({ plain: true });
+  if (row.enabled) {
+    throw new AppError('Disable profile before archiving', 409, { code: 'PROFILE_ENABLED' });
+  }
+  await row.update({
+    archivedAt: new Date(),
+    archivedBy: userId || null,
+  });
+  const fresh = await MlParkProfile.findByPk(row.id);
+  return fresh ? fresh.get({ plain: true }) : row.get({ plain: true });
+}
+
 module.exports = {
   listParkMlProfiles,
   getParkMlProfile,
@@ -119,4 +145,5 @@ module.exports = {
   updateParkMlProfile,
   upsertParkMlProfile,
   assertPlainObject,
+  archiveParkMlProfile,
 };

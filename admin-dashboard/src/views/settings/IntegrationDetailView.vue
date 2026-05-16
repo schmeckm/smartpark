@@ -13,6 +13,7 @@ import {
 } from '@/api/client'
 import type { ExternalDestinationOption, ExternalParkOption } from '@/api/client'
 import AdapterUiBanner from '@/components/adapter/AdapterUiBanner.vue'
+import TrafficTomTomAdapterPanel from '@/components/adapter/TrafficTomTomAdapterPanel.vue'
 import type { AdapterPackageDto, AdapterRunLocalBody, AdapterRunLocalDebug, AdapterRunLocalResult } from '@/types/api'
 import { useToast } from '@/composables/useToast'
 import { askConfirm } from '@/composables/useConfirmDialog'
@@ -799,6 +800,19 @@ function formatValue(v: unknown): string {
           class="mt-3 max-h-[min(28rem,50vh)] overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/80 p-4 text-sm text-slate-300"
         >
           <pre class="whitespace-pre-wrap font-sans leading-relaxed">{{ readmeText }}</pre>
+        </div>
+      </section>
+
+      <section
+        v-if="pkg.adapterKey === 'traffic_tomtom'"
+        class="rounded-xl border border-slate-800 bg-slate-900/60 p-4"
+      >
+        <h2 class="text-sm font-semibold text-white">Traffic API (TomTom)</h2>
+        <p class="mt-1 text-xs text-slate-500">
+          Adapter package <span class="font-mono text-slate-400">traffic_tomtom</span> — credentials live in the encrypted traffic-provider row (not in <span class="font-mono">configJson</span>).
+        </p>
+        <div class="mt-3">
+          <TrafficTomTomAdapterPanel variant="adapter-detail" />
         </div>
       </section>
 

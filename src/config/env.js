@@ -1,5 +1,6 @@
 require('dotenv').config();
 const { getDbHost } = require('../../config/db-host');
+const { defaultMqttBrokerUrl, defaultInfluxUrl } = require('../../config/service-defaults');
 
 function required(name, fallback) {
   const v = process.env[name];
@@ -26,7 +27,7 @@ module.exports = {
   },
   corsOrigin: process.env.CORS_ORIGIN || '*',
   mqttEnabled: process.env.MQTT_ENABLED === 'true' || process.env.MQTT_ENABLED === '1',
-  mqttBrokerUrl: process.env.MQTT_BROKER_URL || 'mqtt://127.0.0.1:1883',
+  mqttBrokerUrl: process.env.MQTT_BROKER_URL || defaultMqttBrokerUrl(),
   mqttUsername: process.env.MQTT_USERNAME || '',
   mqttPassword: process.env.MQTT_PASSWORD || '',
   mqttClientId: process.env.MQTT_CLIENT_ID || 'smart-park-os-api',
@@ -157,7 +158,7 @@ module.exports = {
 
   /** InfluxDB 2.x — optional OT historian for numeric Sparkplug DDATA (see docker-compose influxdb service). */
   influxEnabled: process.env.INFLUX_ENABLED === 'true' || process.env.INFLUX_ENABLED === '1',
-  influxUrl: process.env.INFLUX_URL || '',
+  influxUrl: process.env.INFLUX_URL || defaultInfluxUrl(),
   influxToken: process.env.INFLUX_TOKEN || '',
   influxOrg: process.env.INFLUX_ORG || 'smartpark',
   influxBucket: process.env.INFLUX_BUCKET || 'ot_metrics',
@@ -168,4 +169,57 @@ module.exports = {
     return Number.isFinite(n) && n >= 0 ? n : 1e-9;
   })(),
   influxMinWriteIntervalMs: Math.max(0, Number(process.env.INFLUX_MIN_WRITE_INTERVAL_MS) || 0),
+
+  /**
+   * Industrial PdM platform (health score, trends, failure modes, structured recommendations).
+   * When off, evaluation payloads match legacy Phase 0–1 shape only.
+   */
+  pdmIndustrialPlatformEnabled:
+    process.env.PDM_INDUSTRIAL_PLATFORM_ENABLED === 'true' || process.env.PDM_INDUSTRIAL_PLATFORM_ENABLED === '1',
+  /** Park operations board aggregates (extra API + UI). Defaults on when unset; set false to hide. */
+  pdmOperationsBoardEnabled:
+    process.env.PDM_OPERATIONS_BOARD_ENABLED === 'false' || process.env.PDM_OPERATIONS_BOARD_ENABLED === '0'
+      ? false
+      : true,
+
+  /**
+   * Integration Flow Engine (n8n-style orchestration MVP). When false, routes return 404.
+   */
+  integrationFlowEngineEnabled:
+    process.env.INTEGRATION_FLOW_ENGINE_ENABLED === 'true' ||
+    process.env.INTEGRATION_FLOW_ENGINE_ENABLED === '1',
+
+  /** Poll integration flow definitions for interval-based runs (requires integrationFlowEngineEnabled). */
+  integrationFlowSchedulerEnabled:
+    process.env.INTEGRATION_FLOW_SCHEDULER_ENABLED === 'true' ||
+    process.env.INTEGRATION_FLOW_SCHEDULER_ENABLED === '1',
+
+  /** Seconds between scheduler ticks (default 30). */
+  integrationFlowSchedulerPollSeconds: Math.max(5, Number(process.env.INTEGRATION_FLOW_SCHEDULER_POLL_SECONDS) || 30),
+
+  integrationFlowRetrySchedulerEnabled:
+    process.env.INTEGRATION_FLOW_RETRY_SCHEDULER_ENABLED === 'true' ||
+    process.env.INTEGRATION_FLOW_RETRY_SCHEDULER_ENABLED === '1',
+
+  integrationFlowRetrySchedulerPollSeconds: Math.max(
+    5,
+    Number(process.env.INTEGRATION_FLOW_RETRY_SCHEDULER_POLL_SECONDS) || 30
+  ),
+
+  /** Max concurrent integration flow runs per API process (in-memory queue). */
+  integrationFlowConcurrency: Math.max(
+    1,
+    Number(process.env.INTEGRATION_FLOW_CONCURRENCY) || 3
+  ),
+
+  /** Advanced PAYLOAD_TRANSFORM script mode (secure sandbox required; default off). */
+  integrationFlowScriptNodeEnabled:
+    process.env.INTEGRATION_FLOW_SCRIPT_NODE_ENABLED === 'true' ||
+    process.env.INTEGRATION_FLOW_SCRIPT_NODE_ENABLED === '1',
+
+  /**
+   * Governed Widget Runtime (registry + instances). When false, routes return 404.
+   */
+  widgetRuntimeEnabled:
+    process.env.WIDGET_RUNTIME_ENABLED === 'true' || process.env.WIDGET_RUNTIME_ENABLED === '1',
 };

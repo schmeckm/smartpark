@@ -35,4 +35,11 @@ trafficCorridorsGlobalRouter.post(
   trafficAttendance.postManualSnapshot
 );
 
+trafficCorridorsGlobalRouter.get(
+  '/:corridorId/snapshots/latest/debug',
+  requirePermission('rides', 'update'),
+  validate(corridorIdParams, 'params'),
+  trafficAttendance.getLatestTrafficSnapshotDebug
+);
+
 module.exports = { trafficCorridorsGlobalRouter };

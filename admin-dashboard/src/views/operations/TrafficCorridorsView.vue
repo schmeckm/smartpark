@@ -1,18 +1,33 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useParkContextStore } from '@/stores/parkContext'
+import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
+import TrafficCorridorMapPicker from '@/components/operations/TrafficCorridorMapPicker.vue'
+import TrafficCorridorSnapshotRouteMap from '@/components/operations/TrafficCorridorSnapshotRouteMap.vue'
 import {
   createManualTrafficSnapshot,
   createTrafficCorridor,
   deleteTrafficCorridor,
+  getLatestTrafficSnapshotDebug,
   listTrafficCorridors,
   runAttendanceRiskForecast,
   updateTrafficCorridor,
 } from '@/api/client'
-import type { TrafficCorridorRow } from '@/types/api'
+import type { TrafficCorridorLastPollResult, TrafficCorridorRow, TrafficCorridorSnapshotDebugPayload } from '@/types/api'
+import { useRegionalDateTime } from '@/composables/useRegionalDateTime'
+import {
+  corridorAmpelDotClass,
+  corridorAmpelLabelDe,
+  corridorAmpelTitleDe,
+  corridorTrafficAmpel,
+  snapshotAgeMinutes,
+  snapshotAgeTextClass,
+} from '@/composables/trafficCorridorSnapshotDisplay'
 
 const parkCtx = useParkContextStore()
+const auth = useAuthStore()
+const { formatDateTime, formatRelativeTime } = useRegionalDateTime()
 const { push: toast } = useToast()
 
 const corridors = ref<TrafficCorridorRow[]>([])
@@ -37,6 +52,17 @@ const form = ref({
 
 const snapshotCorridor = ref<TrafficCorridorRow | null>(null)
 const snapshotTravel = ref(25)
+
+const detailsOpen = ref(false)
+const detailsLoading = ref(false)
+const detailsError = ref<string | null>(null)
+const detailsPayload = ref<TrafficCorridorSnapshotDebugPayload | null>(null)
+
+const trafficMapRef = ref<InstanceType<typeof TrafficCorridorMapPicker> | null>(null)
+const snapshotDetailsRouteMapRef = ref<InstanceType<typeof TrafficCorridorSnapshotRouteMap> | null>(null)
+
+/** Sanitized provider JSON dump — audit trail / admin debug only. */
+const showSanitizedProviderRawJson = computed(() => auth.hasPermission('audit', 'read'))
 
 const runPlanned = ref(12000)
 const runKnown = ref(800)
@@ -100,6 +126,95 @@ function numOrUndef(v: string | number): number | undefined {
   return Number.isFinite(n) ? n : undefined
 }
 
+function numFromForm(v: string | number): number | null {
+  if (v === '' || v == null) return null
+  const n = typeof v === 'number' ? v : Number(v)
+  return Number.isFinite(n) ? n : null
+}
+
+function coordString(n: number) {
+  return String(Math.round(n * 1e6) / 1e6)
+}
+
+function rowLastPoll(c: TrafficCorridorRow): TrafficCorridorLastPollResult | null {
+  const raw = c.lastPollResult
+  return raw && typeof raw === 'object' ? raw : null
+}
+
+function rowTrafficAmpel(c: TrafficCorridorRow) {
+  return corridorTrafficAmpel(rowLastPoll(c), c.latestSnapshot?.congestionScore ?? null)
+}
+
+function rowSnapshotAgeMinutes(c: TrafficCorridorRow) {
+  return snapshotAgeMinutes(c.latestSnapshot?.snapshotTs)
+}
+
+function rowSnapshotRelativeClass(c: TrafficCorridorRow) {
+  return snapshotAgeTextClass(rowSnapshotAgeMinutes(c))
+}
+
+function formatDelayPercentDisplay(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(Number(v))) return '—'
+  const n = Number(v)
+  const pct = n <= 1 ? n * 100 : n
+  return `${pct.toFixed(0)}%`
+}
+
+function routeKmFromRow(c: TrafficCorridorRow): string {
+  const m = c.latestSnapshotDetail?.routeDistanceMeters
+  if (m == null || !Number.isFinite(Number(m))) return '—'
+  return `${(Number(m) / 1000).toFixed(1)}`
+}
+
+async function openSnapshotDetails(corridorId: string) {
+  detailsOpen.value = true
+  detailsLoading.value = true
+  detailsError.value = null
+  detailsPayload.value = null
+  try {
+    detailsPayload.value = await getLatestTrafficSnapshotDebug(corridorId)
+  } catch (e) {
+    detailsError.value = e instanceof Error ? e.message : 'Failed to load snapshot details'
+  } finally {
+    detailsLoading.value = false
+  }
+}
+
+function closeSnapshotDetails() {
+  detailsOpen.value = false
+  detailsPayload.value = null
+  detailsError.value = null
+}
+
+function onMapPickOrigin({ lat, lng }: { lat: number; lng: number }) {
+  form.value.originLat = coordString(lat)
+  form.value.originLng = coordString(lng)
+}
+
+function onMapPickDestination({ lat, lng }: { lat: number; lng: number }) {
+  form.value.destinationLat = coordString(lat)
+  form.value.destinationLng = coordString(lng)
+}
+
+/** Backend: each of origin / destination must have both lat+lng or both empty (COORD_PAIR_INCOMPLETE). */
+function coordPairErrorMessage(): string | null {
+  const oLat = numFromForm(form.value.originLat)
+  const oLng = numFromForm(form.value.originLng)
+  const dLat = numFromForm(form.value.destinationLat)
+  const dLng = numFromForm(form.value.destinationLng)
+  const oAny = oLat != null || oLng != null
+  const oOk = oLat != null && oLng != null
+  if (oAny && !oOk) {
+    return 'Start (Origin): Breiten- und Längengrad immer paarweise ausfüllen — oder beide Felder leer lassen.'
+  }
+  const dAny = dLat != null || dLng != null
+  const dOk = dLat != null && dLng != null
+  if (dAny && !dOk) {
+    return 'Ziel (Destination): Breiten- und Längengrad immer paarweise ausfüllen — oder beide Felder leer lassen.'
+  }
+  return null
+}
+
 async function loadCorridors() {
   if (!parkCtx.activeParkId) {
     corridors.value = []
@@ -118,6 +233,11 @@ async function loadCorridors() {
 
 async function saveCorridor() {
   if (!parkCtx.activeParkId) return
+  const pairErr = coordPairErrorMessage()
+  if (pairErr) {
+    toast(pairErr, 'error')
+    return
+  }
   try {
     const body = {
       name: form.value.name.trim(),
@@ -202,6 +322,20 @@ watch(
   },
   { immediate: true }
 )
+
+watch(showEditor, async (open) => {
+  if (!open) return
+  await nextTick()
+  trafficMapRef.value?.invalidateSize()
+  requestAnimationFrame(() => trafficMapRef.value?.invalidateSize())
+})
+
+watch([detailsOpen, detailsLoading, detailsPayload], async ([open, loading, payload]) => {
+  if (!open || loading || !payload) return
+  await nextTick()
+  snapshotDetailsRouteMapRef.value?.invalidateSize()
+  requestAnimationFrame(() => snapshotDetailsRouteMapRef.value?.invalidateSize())
+})
 </script>
 
 <template>
@@ -209,8 +343,8 @@ watch(
     <div>
       <h1 class="font-display text-xl font-semibold text-white">Traffic corridors</h1>
       <p class="mt-1 max-w-2xl text-sm text-slate-400">
-        Configure inbound/outbound corridors and enter manual travel times. Traffic feeds attendance risk as a leading
-        indicator only (not visitor count).
+        Configure inbound/outbound corridors and enter manual travel times. Optional map picks origin/destination
+        coordinates. Traffic feeds attendance risk as a leading indicator only (not visitor count).
       </p>
     </div>
 
@@ -288,19 +422,46 @@ watch(
         <thead class="bg-slate-950/80 text-[11px] uppercase tracking-wide text-slate-500">
           <tr>
             <th class="px-3 py-2">Name</th>
+            <th class="px-3 py-2">Ampel</th>
+            <th class="px-3 py-2 w-8" title="Route realism">⚠</th>
+            <th class="px-3 py-2">Source</th>
             <th class="px-3 py-2">Direction</th>
+            <th class="px-3 py-2">Route (km)</th>
             <th class="px-3 py-2">Baseline (min)</th>
             <th class="px-3 py-2">Current (min)</th>
             <th class="px-3 py-2">Delay</th>
             <th class="px-3 py-2">Congestion</th>
             <th class="px-3 py-2">Inbound pressure</th>
+            <th class="px-3 py-2">Provider</th>
+            <th class="px-3 py-2 normal-case">Letzter Stand</th>
             <th class="px-3 py-2"></th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-800 text-slate-200">
           <tr v-for="c in corridors" :key="c.id">
             <td class="px-3 py-2 font-medium text-white">{{ c.name }}</td>
+            <td class="px-3 py-2">
+              <div
+                class="flex items-center gap-2"
+                :title="corridorAmpelTitleDe(rowTrafficAmpel(c), rowLastPoll(c))"
+              >
+                <span
+                  class="inline-block h-3 w-3 shrink-0 rounded-full"
+                  :class="corridorAmpelDotClass(rowTrafficAmpel(c))"
+                  aria-hidden="true"
+                />
+                <span class="text-xs text-slate-400">{{ corridorAmpelLabelDe(rowTrafficAmpel(c)) }}</span>
+              </div>
+            </td>
+            <td class="px-3 py-2 text-center text-amber-400" :title="c.latestSnapshotDetail?.providerErrorMessage || ''">
+              <span v-if="c.latestSnapshotDetail?.routeLooksUnrealistic" aria-label="Route warning">⚠</span>
+              <span v-else class="text-slate-600">—</span>
+            </td>
+            <td class="px-3 py-2 text-slate-400">
+              {{ c.latestSnapshot?.source || '—' }}
+            </td>
             <td class="px-3 py-2">{{ c.direction }}</td>
+            <td class="px-3 py-2 font-mono">{{ routeKmFromRow(c) }}</td>
             <td class="px-3 py-2 font-mono">{{ Number(c.baselineTravelTimeMin).toFixed(1) }}</td>
             <td class="px-3 py-2 font-mono">
               {{ c.latestSnapshot ? Number(c.latestSnapshot.currentTravelTimeMin).toFixed(1) : '—' }}
@@ -309,7 +470,7 @@ watch(
               <span v-if="c.latestSnapshot && c.latestSnapshot.delayMin != null">
                 {{ Number(c.latestSnapshot.delayMin).toFixed(1) }} min
                 <span v-if="c.latestSnapshot.delayPercent != null" class="text-slate-500">
-                  ({{ (Number(c.latestSnapshot.delayPercent) * 100).toFixed(0) }}%)
+                  ({{ formatDelayPercentDisplay(c.latestSnapshot.delayPercent) }})
                 </span>
               </span>
               <span v-else>—</span>
@@ -324,14 +485,27 @@ watch(
                   : '—'
               }}
             </td>
+            <td class="px-3 py-2 text-xs text-slate-400">
+              {{ c.latestSnapshotDetail?.providerStatus || '—' }}
+            </td>
+            <td class="px-3 py-2 text-xs leading-snug">
+              <template v-if="c.latestSnapshot?.snapshotTs">
+                <div class="text-slate-200">{{ formatDateTime(c.latestSnapshot.snapshotTs) }}</div>
+                <div :class="rowSnapshotRelativeClass(c)">
+                  {{ formatRelativeTime(c.latestSnapshot.snapshotTs) }}
+                </div>
+              </template>
+              <span v-else class="text-slate-500">—</span>
+            </td>
             <td class="px-3 py-2 text-right whitespace-nowrap">
-              <button type="button" class="text-brand-300 hover:text-brand-200" @click="openEdit(c)">Edit</button>
+              <button type="button" class="text-sky-300 hover:text-sky-200" @click="openSnapshotDetails(c.id)">Details</button>
+              <button type="button" class="ml-2 text-brand-300 hover:text-brand-200" @click="openEdit(c)">Edit</button>
               <button type="button" class="ml-2 text-slate-400 hover:text-white" @click="snapshotCorridor = c">Snapshot</button>
               <button type="button" class="ml-2 text-rose-300 hover:text-rose-200" @click="removeCorridor(c)">Delete</button>
             </td>
           </tr>
           <tr v-if="!corridors.length">
-            <td colspan="8" class="px-3 py-6 text-center text-slate-500">No corridors yet.</td>
+            <td colspan="14" class="px-3 py-6 text-center text-slate-500">No corridors yet.</td>
           </tr>
         </tbody>
       </table>
@@ -344,7 +518,7 @@ watch(
       role="dialog"
       aria-modal="true"
     >
-      <div class="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 p-5 shadow-xl">
+      <div class="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 p-5 shadow-xl">
         <h3 class="text-lg font-semibold text-white">{{ editing ? 'Edit corridor' : 'New corridor' }}</h3>
         <div class="mt-4 space-y-3 text-sm">
           <label class="block text-slate-300">
@@ -365,23 +539,64 @@ watch(
               <input v-model="form.destinationLabel" class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-white" />
             </label>
           </div>
-          <div class="grid grid-cols-2 gap-2">
-            <label class="text-slate-300">
-              Origin lat
-              <input v-model="form.originLat" class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-white" />
-            </label>
-            <label class="text-slate-300">
-              Origin lng
-              <input v-model="form.originLng" class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-white" />
-            </label>
-            <label class="text-slate-300">
-              Dest lat
-              <input v-model="form.destinationLat" class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-white" />
-            </label>
-            <label class="text-slate-300">
-              Dest lng
-              <input v-model="form.destinationLng" class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-white" />
-            </label>
+          <div>
+            <p class="text-xs text-slate-500">
+              Koordinaten (WGS84, optional): Pro Punkt immer <strong class="text-slate-400">Breite + Länge</strong> zusammen
+              — oder Karte: zuerst „Origin“ klicken, dann „Destination“.
+            </p>
+            <div class="mt-2 grid grid-cols-2 gap-2">
+              <label class="text-slate-300">
+                Start — Breitengrad (lat)
+                <input
+                  v-model="form.originLat"
+                  inputmode="decimal"
+                  autocomplete="off"
+                  class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-white"
+                />
+              </label>
+              <label class="text-slate-300">
+                Start — Längengrad (lng)
+                <input
+                  v-model="form.originLng"
+                  inputmode="decimal"
+                  autocomplete="off"
+                  class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-white"
+                />
+              </label>
+              <label class="text-slate-300">
+                Ziel — Breitengrad (lat)
+                <input
+                  v-model="form.destinationLat"
+                  inputmode="decimal"
+                  autocomplete="off"
+                  class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-white"
+                />
+              </label>
+              <label class="text-slate-300">
+                Ziel — Längengrad (lng)
+                <input
+                  v-model="form.destinationLng"
+                  inputmode="decimal"
+                  autocomplete="off"
+                  class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-white"
+                />
+              </label>
+            </div>
+          </div>
+          <div class="rounded-lg border border-slate-800 bg-slate-950/50 p-3">
+            <div class="text-xs font-medium uppercase tracking-wide text-slate-500">Map</div>
+            <TrafficCorridorMapPicker
+              ref="trafficMapRef"
+              class="mt-2"
+              :origin-lat="numFromForm(form.originLat)"
+              :origin-lng="numFromForm(form.originLng)"
+              :destination-lat="numFromForm(form.destinationLat)"
+              :destination-lng="numFromForm(form.destinationLng)"
+              :center-lat="parkCtx.activePark?.latitude ?? null"
+              :center-lng="parkCtx.activePark?.longitude ?? null"
+              @update:origin="onMapPickOrigin"
+              @update:destination="onMapPickDestination"
+            />
           </div>
           <label class="block text-slate-300">
             Direction
@@ -434,6 +649,87 @@ watch(
         <div class="mt-5 flex justify-end gap-2">
           <button type="button" class="rounded border border-slate-600 px-4 py-2 text-slate-200" @click="snapshotCorridor = null">Cancel</button>
           <button type="button" class="rounded bg-brand-600 px-4 py-2 text-white hover:bg-brand-500" @click="submitSnapshot">Save snapshot</button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      v-if="detailsOpen"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div class="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 p-5 shadow-xl">
+        <h3 class="text-lg font-semibold text-white">Latest snapshot details</h3>
+        <p class="mt-1 text-xs text-slate-500">
+          Map uses stored snapshot geometry (sanitized TomTom response). No live API calls from the browser.
+        </p>
+        <p v-if="detailsLoading" class="mt-3 text-sm text-slate-400">Loading…</p>
+        <p v-else-if="detailsError" class="mt-3 text-sm text-rose-300">{{ detailsError }}</p>
+        <dl v-else-if="detailsPayload" class="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+          <dt class="text-slate-500">Route (km)</dt>
+          <dd class="font-mono text-slate-100">
+            {{
+              detailsPayload.latestSnapshotDetail?.routeDistanceMeters != null
+                ? (Number(detailsPayload.latestSnapshotDetail.routeDistanceMeters) / 1000).toFixed(2)
+                : '—'
+            }}
+          </dd>
+          <dt class="text-slate-500">Travel time (s)</dt>
+          <dd class="font-mono text-slate-100">{{ detailsPayload.latestSnapshotDetail?.travelTimeSeconds ?? '—' }}</dd>
+          <dt class="text-slate-500">Traffic delay (s)</dt>
+          <dd class="font-mono text-slate-100">{{ detailsPayload.latestSnapshotDetail?.trafficDelaySeconds ?? '—' }}</dd>
+          <dt class="text-slate-500">Delay %</dt>
+          <dd class="font-mono text-slate-100">
+            {{ formatDelayPercentDisplay(detailsPayload.latestSnapshotDetail?.delayPercent) }}
+          </dd>
+          <dt class="text-slate-500">Current / baseline (min)</dt>
+          <dd class="font-mono text-slate-100">
+            {{ detailsPayload.latestSnapshotDetail?.currentTravelTimeMinutes ?? '—' }} /
+            {{ detailsPayload.latestSnapshotDetail?.baselineTravelTimeMinutes ?? '—' }}
+          </dd>
+          <dt class="text-slate-500">Provider status</dt>
+          <dd class="font-mono text-slate-100">{{ detailsPayload.latestSnapshotDetail?.providerStatus ?? '—' }}</dd>
+          <dt class="text-slate-500">Provider errors</dt>
+          <dd class="text-slate-200">
+            <span v-if="detailsPayload.latestSnapshotDetail?.providerErrorCode" class="font-mono text-amber-200">{{
+              detailsPayload.latestSnapshotDetail.providerErrorCode
+            }}</span>
+            <span v-if="detailsPayload.latestSnapshotDetail?.providerErrorMessage" class="mt-1 block text-slate-400">{{
+              detailsPayload.latestSnapshotDetail.providerErrorMessage
+            }}</span>
+            <span v-if="!detailsPayload.latestSnapshotDetail?.providerErrorCode" class="text-slate-500">—</span>
+          </dd>
+          <dt class="text-slate-500">Sampled at</dt>
+          <dd class="font-mono text-slate-100">{{ detailsPayload.latestSnapshotDetail?.sampledAt ?? '—' }}</dd>
+        </dl>
+        <div v-if="detailsPayload && !detailsLoading && !detailsError" class="mt-4">
+          <TrafficCorridorSnapshotRouteMap
+            ref="snapshotDetailsRouteMapRef"
+            :provider-raw-response="detailsPayload.providerRawResponse"
+            :origin-lat="detailsPayload.corridor?.originLat ?? null"
+            :origin-lng="detailsPayload.corridor?.originLng ?? null"
+            :destination-lat="detailsPayload.corridor?.destinationLat ?? null"
+            :destination-lng="detailsPayload.corridor?.destinationLng ?? null"
+            :route-distance-meters="detailsPayload.latestSnapshotDetail?.routeDistanceMeters ?? null"
+            :travel-time-seconds="detailsPayload.latestSnapshotDetail?.travelTimeSeconds ?? null"
+            :traffic-delay-seconds="detailsPayload.latestSnapshotDetail?.trafficDelaySeconds ?? null"
+          />
+        </div>
+        <details
+          v-if="showSanitizedProviderRawJson && detailsPayload && !detailsLoading && !detailsError && detailsPayload.providerRawResponse"
+          class="mt-4 rounded-lg border border-slate-800 bg-slate-950/40"
+        >
+          <summary class="cursor-pointer select-none px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-slate-500">
+            Sanitized provider raw (debug)
+          </summary>
+          <pre
+            class="max-h-52 overflow-auto border-t border-slate-800 p-3 text-[10px] leading-snug text-slate-300"
+            data-testid="traffic-snapshot-sanitized-raw-json"
+          >{{ JSON.stringify(detailsPayload.providerRawResponse, null, 2) }}</pre>
+        </details>
+        <div class="mt-5 flex justify-end">
+          <button type="button" class="rounded border border-slate-600 px-4 py-2 text-slate-200" @click="closeSnapshotDetails">Close</button>
         </div>
       </div>
     </div>

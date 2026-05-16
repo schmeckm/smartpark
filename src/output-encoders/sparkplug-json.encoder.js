@@ -34,6 +34,12 @@ function encode(observation, context) {
           metric,
         })
       : null;
+  const md =
+    observation.metadata && typeof observation.metadata === 'object'
+      ? /** @type {Record<string, unknown>} */ (observation.metadata)
+      : {};
+  const demoTagged = md.simulated === true || md.syntheticDemo === true;
+
   const payload = {
     format: 'sparkplug_json_mvp',
     timestamp: ts,
@@ -50,6 +56,14 @@ function encode(observation, context) {
       eventType: observation.eventType || null,
       source: observation.source || context?.source || null,
       canonicalUnsTopic,
+      ...(demoTagged
+        ? {
+            simulated: true,
+            syntheticDemo: true,
+            demoLabel: md.demoLabel != null ? String(md.demoLabel) : null,
+            presentationHint: md.presentationHint != null ? String(md.presentationHint) : null,
+          }
+        : {}),
     },
   };
   return { profile: 'sparkplug_json', topic, payload };

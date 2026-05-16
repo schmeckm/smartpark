@@ -144,6 +144,32 @@
       '404':
         $ref: '#/components/responses/NotFound'
 
+'/traffic-corridors/{corridorId}/snapshots/latest/debug':
+  parameters:
+    -
+      name: corridorId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  get:
+    tags:
+      - AttendanceRisk
+    summary: Latest traffic snapshot debug (includes sanitized provider raw JSON)
+    security:
+      -
+        bearerAuth: []
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeTrafficSnapshotDebug'
+      '404':
+        $ref: '#/components/responses/NotFound'
+
 '/traffic-corridors/{corridorId}':
   parameters:
     -

@@ -15,6 +15,9 @@ function plainRow(m) {
   return m.get ? m.get({ plain: true }) : m;
 }
 
+/**
+ * Park demand / attendance risk forecast — consumes {@link DemandPressureService} and persisted inputs only (no TomTom).
+ */
 class ParkDemandForecastService {
   constructor(deps = {}) {
     this.demandPressure = deps.demandPressureService || new DemandPressureService();

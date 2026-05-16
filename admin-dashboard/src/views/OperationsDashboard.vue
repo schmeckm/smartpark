@@ -18,6 +18,10 @@ import {
 } from '@/api/client'
 import { useParkContextStore } from '@/stores/parkContext'
 import {
+  useInstalledAdaptersStore,
+  TRAFFIC_CORRIDORS_SURFACE_ADAPTER_KEYS,
+} from '@/stores/installedAdapters'
+import {
   dailyVisitTotal,
   pruneGuestCountsForYear,
   VISIT_PLAN_TICKET_CHANNEL_ROW_IDS,
@@ -38,7 +42,14 @@ import { RIDES_ADAPTER_ZONE_ID, type Ride, type RideStatus, type VisitPlanPayloa
 const { t } = useI18n()
 const auth = useAuthStore()
 const parkCtx = useParkContextStore()
+const installedAdapters = useInstalledAdaptersStore()
 const { push: toast } = useToast()
+
+const showTrafficAttendanceCard = computed(
+  () =>
+    auth.hasPermission('rides', 'read') &&
+    installedAdapters.isAnyInstalled(TRAFFIC_CORRIDORS_SURFACE_ADAPTER_KEYS)
+)
 
 function todayIsoLocal(): string {
   const d = new Date()
@@ -746,7 +757,7 @@ onMounted(() => {
           <ParkTopLevelKpiMatrix :ctx="parkTopLevelKpiCtx" />
         </div>
 
-        <div class="mt-4">
+        <div v-if="showTrafficAttendanceCard" class="mt-4">
           <AttendanceRiskForecastCard />
         </div>
 
@@ -873,7 +884,7 @@ onMounted(() => {
         @refresh="onAiRefresh"
       />
 
-      <AttendanceRiskForecastCard v-if="auth.hasPermission('rides', 'read')" />
+      <AttendanceRiskForecastCard v-if="showTrafficAttendanceCard" card-test-id="traffic-attendance-risk-forecast-card" />
 
       <section v-if="showExternalLive" class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
         <div class="flex items-start justify-between gap-3">

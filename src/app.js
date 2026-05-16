@@ -23,14 +23,6 @@ const {
   adapterPipelineLogQuerySchema,
 } = require('./validators/integrations.schemas');
 const { parkSnapshotsBulkDeleteBody, parkSnapshotsPurgeBody } = require('./validators/ml-ai.validators');
-const {
-  mlPredictionTracesQuery,
-  predictionTraceIdParams,
-  mlForecastAccuracyQuery,
-  mlForecastAccuracyLogIdParams,
-} = require('./validators/ml-wait-predict.validators');
-const mlPredictionTraceController = require('./controllers/ml-prediction-trace.controller');
-const mlForecastAccuracyController = require('./controllers/ml-forecast-accuracy.controller');
 const { v1Router } = require('./routes/v1');
 const { masterDataRouter } = require('./modules/master-data/master-data.routes');
 const { unsRouter } = require('./modules/uns/uns.routes');
@@ -216,92 +208,6 @@ app.use('/api/v1/visit-actuals', authenticate, attachParkContext, visitActualRou
 
 /** Adapter operations center (health, dashboard, run-now, pause, …). */
 app.use('/api/v1/adapters', authenticate, adaptersRouter);
-
-/**
- * ML prediction traces (Phase 1 / Feature Monitor) — root mount so GET always matches
- * through Docker/Vite/proxy stacks (same rationale as pipeline-log / UNS / masters).
- * Handlers stay identical to `registerProtectedAiRoutes` in `routes/v1/ai.routes.js`.
- */
-app.get(
-  '/api/v1/ai/ml/prediction-traces',
-  authenticate,
-  attachParkContext,
-  requirePermission('ai', 'read'),
-  requireParkContext,
-  validate(mlPredictionTracesQuery, 'query'),
-  mlPredictionTraceController.getMlPredictionTraces
-);
-app.get(
-  '/api/v1/ai/ml/prediction-traces/filter-options',
-  authenticate,
-  attachParkContext,
-  requirePermission('ai', 'read'),
-  requireParkContext,
-  mlPredictionTraceController.getMlPredictionTraceFilterOptions
-);
-app.get(
-  '/api/v1/ai/ml/prediction-traces/:predictionId/coefficients',
-  authenticate,
-  attachParkContext,
-  requirePermission('ai', 'read'),
-  requireParkContext,
-  validate(predictionTraceIdParams, 'params'),
-  mlPredictionTraceController.getMlPredictionTraceCoefficients
-);
-app.get(
-  '/api/v1/ai/ml/prediction-traces/:predictionId',
-  authenticate,
-  attachParkContext,
-  requirePermission('ai', 'read'),
-  requireParkContext,
-  validate(predictionTraceIdParams, 'params'),
-  mlPredictionTraceController.getMlPredictionTraceById
-);
-
-app.get(
-  '/api/v1/ai/ml/forecast-accuracy/kpis',
-  authenticate,
-  attachParkContext,
-  requirePermission('ai', 'read'),
-  requireParkContext,
-  validate(mlForecastAccuracyQuery, 'query'),
-  mlForecastAccuracyController.getMlForecastAccuracyKpis
-);
-/** Register before `/:id` — otherwise `model-win-rates` is captured as `id` and UUID validation returns 422. */
-app.get(
-  '/api/v1/ai/ml/forecast-accuracy/model-win-rates',
-  authenticate,
-  attachParkContext,
-  requirePermission('ai', 'read'),
-  requireParkContext,
-  mlForecastAccuracyController.getMlModelWinRateStats
-);
-app.get(
-  '/api/v1/ai/ml/forecast-accuracy/retro-lookback',
-  authenticate,
-  attachParkContext,
-  requirePermission('ai', 'read'),
-  requireParkContext,
-  mlForecastAccuracyController.getMlRetroLookback
-);
-app.get(
-  '/api/v1/ai/ml/forecast-accuracy/:id',
-  authenticate,
-  attachParkContext,
-  requirePermission('ai', 'read'),
-  requireParkContext,
-  validate(mlForecastAccuracyLogIdParams, 'params'),
-  mlForecastAccuracyController.getMlForecastAccuracyById
-);
-app.get(
-  '/api/v1/ai/ml/forecast-accuracy',
-  authenticate,
-  attachParkContext,
-  requirePermission('ai', 'read'),
-  requireParkContext,
-  validate(mlForecastAccuracyQuery, 'query'),
-  mlForecastAccuracyController.getMlForecastAccuracyLogs
-);
 
 app.use('/api/v1', v1Router);
 

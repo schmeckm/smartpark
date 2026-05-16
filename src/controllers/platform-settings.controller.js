@@ -21,6 +21,12 @@ const listPlatformSettings = asyncHandler(async (req, res) => {
         mqttClientId: env.mqttClientId,
         mqttUsernameConfigured: Boolean(env.mqttUsername),
       },
+      telemetry: {
+        influxInfrastructureEnabled: env.influxEnabled,
+        influxUrlConfigured: Boolean(env.influxUrl && env.influxToken),
+        influxOrg: env.influxOrg || '',
+        influxBucket: env.influxBucket || '',
+      },
       general: {
         nodeEnv: env.nodeEnv,
         port: env.port,

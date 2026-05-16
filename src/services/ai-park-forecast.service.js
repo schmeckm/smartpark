@@ -1,18 +1,56 @@
 /**
  * Park / entity wait forecasts: baseline from snapshot series, then X-layer, then ML enterprise layer.
+ * When a ride has `park_assets.evaluated_algorithm` and an **active** matching FEATURE_STORE `ai_studio_models` row,
+ * +15m wait uses `AiStudioService.predictWithModel` (latest snapshot features) before X/ML layers.
  * @see docs/adr/0001-forecast-architecture.md
  */
-const { ParkFeatureSnapshot, RideFeatureSnapshot } = require('../models');
+const { Op } = require('sequelize');
+const { sequelize } = require('../db/sequelize');
+const { ParkFeatureSnapshot, RideFeatureSnapshot, ParkAsset, AiStudioModel } = require('../models');
 const { AppSettingRepository } = require('../repositories/app-setting.repository');
 const { DEFAULT_AI_FACTOR_CONFIGS } = require('../constants/ai-factor-config');
 const { applyXLayerToForecast } = require('./ai-forecast-x-adjustments.service');
 const { mergeMlEnterpriseLayer } = require('./ml-forecast-layer.service');
+const { AiStudioService } = require('./ai-studio.service');
+const { logger } = require('../utils/logger');
 const {
   buildAdrForecastExplainability,
   finalizeExplainabilityMvpEnvelope,
 } = require('./ai/prediction-explanation-normalizer.service');
 
 const AI_FACTOR_SETTING_KEY = 'ai.forecast.factorConfigs';
+
+/** Short TTL cache for ParkAsset + AiStudioModel resolution (ride grid hits many entities). */
+const STUDIO_RIDE_FS_CACHE_TTL_MS = 20_000;
+const STUDIO_RIDE_FS_CACHE_MAX = 400;
+/** @type {Map<string, { expiresAt: number, value: { evaluatedAlgorithm: string|null, modelPlain: object|null } }>} */
+const studioRideFsCache = new Map();
+
+function studioRideFsCacheGet(key) {
+  const row = studioRideFsCache.get(key);
+  if (!row) return undefined;
+  if (Date.now() > row.expiresAt) {
+    studioRideFsCache.delete(key);
+    return undefined;
+  }
+  return row.value;
+}
+
+function studioRideFsCacheSet(key, value) {
+  studioRideFsCache.set(key, { expiresAt: Date.now() + STUDIO_RIDE_FS_CACHE_TTL_MS, value });
+  while (studioRideFsCache.size > STUDIO_RIDE_FS_CACHE_MAX) {
+    const k = studioRideFsCache.keys().next().value;
+    studioRideFsCache.delete(k);
+  }
+}
+
+/** Clears ride FEATURE_STORE model-resolve cache for one park (e.g. after batch-apply activates models). */
+function clearStudioRideFsModelResolveCacheForPark(parkId) {
+  const prefix = `${String(parkId)}|`;
+  for (const k of studioRideFsCache.keys()) {
+    if (k.startsWith(prefix)) studioRideFsCache.delete(k);
+  }
+}
 
 /** Minimum 5m buckets to fit a simple slope (was 8; lowered so sparse dev data still yields +15/+60). */
 const MIN_SERIES_POINTS = 4;
@@ -48,9 +86,196 @@ function trendLabel(slope) {
   return 'STABLE';
 }
 
+/**
+ * Union of feature keys the studio model may read (FEATURE_STORE order + training list).
+ * @param {object} modelPlain
+ * @returns {string[]}
+ */
+function studioModelFeatureKeyList(modelPlain) {
+  const payload = modelPlain?.modelPayload || {};
+  const feats = Array.isArray(modelPlain?.featuresJson) ? modelPlain.featuresJson : [];
+  const order =
+    Array.isArray(payload.featureKeys) && payload.featureKeys.length > 0 ? payload.featureKeys : feats;
+  return [...new Set([...(order || []), ...feats].map((k) => String(k)))];
+}
+
+/**
+ * Safe live imputation: every required X must be a finite number before predictWithModel.
+ * Missing / null / NaN → conservative defaults (0) so trees/ridge never throw on undefined.
+ * @param {object} modelPlain
+ * @param {Record<string, unknown>} featuresInput
+ * @returns {Record<string, number>}
+ */
+function imputeFeatureStoreLiveFeatures(modelPlain, featuresInput) {
+  const keys = studioModelFeatureKeyList(modelPlain);
+  const base = featuresInput && typeof featuresInput === 'object' ? { ...featuresInput } : {};
+  const out = {};
+  for (const key of keys) {
+    const raw = base[key];
+    const n = Number(raw);
+    if (raw != null && raw !== '' && Number.isFinite(n)) {
+      out[key] = n;
+      continue;
+    }
+    const lk = String(key).toLowerCase();
+    if (lk.includes('rain') || lk.includes('precip') || lk.includes('wet')) {
+      out[key] = 0;
+    } else {
+      out[key] = 0;
+    }
+  }
+  return out;
+}
+
 class AiParkForecastService {
   constructor() {
     this.settings = new AppSettingRepository();
+    /** Used for FEATURE_STORE production override (ride wait +15m). */
+    this._studio = new AiStudioService();
+  }
+
+  /**
+   * Cached: `evaluated_algorithm` on park_assets + **active only** FEATURE_STORE studio row
+   * matching that algorithm (`wait_time_plus_15`, entity scope).
+   * @param {string} parkId
+   * @param {string} assetId
+   * @returns {Promise<{ evaluatedAlgorithm: string|null, modelPlain: object|null }>}
+   */
+  async resolveStudioFeatureStoreModelForRide(parkId, assetId) {
+    const key = `${parkId}|${assetId}`;
+    const hit = studioRideFsCacheGet(key);
+    if (hit !== undefined) return hit;
+
+    try {
+      const asset = await ParkAsset.findOne({
+        where: { assetId, parkId },
+        attributes: ['evaluatedAlgorithm'],
+      });
+      const ap = asset?.get ? asset.get({ plain: true }) : asset;
+      const algoRaw = ap?.evaluatedAlgorithm;
+      const algo = algoRaw != null && String(algoRaw).trim() !== '' ? String(algoRaw).trim() : null;
+      if (!algo) {
+        const val = { evaluatedAlgorithm: null, modelPlain: null };
+        studioRideFsCacheSet(key, val);
+        return val;
+      }
+
+      const row = await AiStudioModel.findOne({
+        where: {
+          [Op.and]: [
+            { parkId },
+            { modelScope: 'entity' },
+            { entityType: 'RIDE' },
+            { entityId: assetId },
+            { targetVariable: 'wait_time_plus_15' },
+            { activeFlag: true },
+            { archivedAt: { [Op.is]: null } },
+            { algorithm: algo },
+            sequelize.literal("(model_payload->>'dataset') = 'FEATURE_STORE'"),
+          ],
+        },
+        order: [['version', 'DESC']],
+      });
+      const modelPlain = row ? row.get({ plain: true }) : null;
+      const val = { evaluatedAlgorithm: algo, modelPlain };
+      studioRideFsCacheSet(key, val);
+      return val;
+    } catch (err) {
+      logger.error(
+        { err: err?.message, stack: err?.stack, parkId, assetId },
+        'park_forecast.studio_fs_model_resolve_failed'
+      );
+      const val = { evaluatedAlgorithm: null, modelPlain: null };
+      studioRideFsCacheSet(key, val);
+      return val;
+    }
+  }
+
+  /**
+   * Replace +15m / +60m forecasts from baseline when a FEATURE_STORE studio model applies.
+   * +60m scales with the same ratio as the baseline X/factor-adjusted curve vs +15m.
+   * Never throws: any failure → unchanged baseline summary (live grid stays up).
+   * @param {object} summary - output of buildFromSeries
+   * @param {{ parkId: string, assetId: string }} ctx
+   */
+  async applyStudioFeatureStoreForecastOverride(summary, ctx) {
+    const baseline = summary;
+    const { parkId, assetId } = ctx;
+    if (!parkId || !assetId || !baseline || baseline.degraded) return baseline;
+
+    let evaluatedAlgorithm = null;
+    let modelPlain = null;
+    try {
+      const resolved = await this.resolveStudioFeatureStoreModelForRide(parkId, assetId);
+      evaluatedAlgorithm = resolved.evaluatedAlgorithm;
+      modelPlain = resolved.modelPlain;
+    } catch (err) {
+      logger.error(
+        { err: err?.message, stack: err?.stack, parkId, assetId },
+        'park_forecast.studio_fs_resolve_unexpected'
+      );
+      return baseline;
+    }
+
+    if (!evaluatedAlgorithm || !modelPlain) return baseline;
+
+    let snap;
+    try {
+      snap = await this._studio.resolveLatestSnapshotFeatures(parkId, assetId);
+    } catch (err) {
+      logger.error(
+        { err: err?.message, stack: err?.stack, parkId, assetId },
+        'park_forecast.studio_fs_snapshot_load_failed'
+      );
+      return baseline;
+    }
+
+    if (!snap?.features || typeof snap.features !== 'object') return baseline;
+
+    let y;
+    try {
+      const imputed = imputeFeatureStoreLiveFeatures(modelPlain, snap.features);
+      y = this._studio.predictWithModel(modelPlain, imputed);
+    } catch (err) {
+      logger.error(
+        { err: err?.message, stack: err?.stack, parkId, assetId, evaluatedAlgorithm },
+        'park_forecast.studio_fs_predict_with_model_failed'
+      );
+      return baseline;
+    }
+
+    if (!Number.isFinite(y)) {
+      logger.warn({ parkId, assetId, evaluatedAlgorithm, y }, 'park_forecast.studio_fs_predict_non_finite');
+      return baseline;
+    }
+
+    try {
+      const f15 = Math.max(0, Math.round(Number(y)));
+      const base15 = Math.max(1, Number(baseline.forecast15Minutes) || 1);
+      const base60 = Number(baseline.forecast60Minutes);
+      const f60 = Number.isFinite(base60)
+        ? Math.max(0, Math.round((base60 / base15) * f15))
+        : f15;
+
+      const algoLabel = String(modelPlain.algorithm || evaluatedAlgorithm).replace(/_/g, ' ');
+      return {
+        ...baseline,
+        forecast15Minutes: f15,
+        forecast60Minutes: f60,
+        confidence: Math.max(Number(baseline.confidence) || 0.1, 0.55),
+        model: {
+          modelName: `AI Studio (${algoLabel})`,
+          modelType: 'FEATURE_STORE',
+          version: `v${modelPlain.version ?? 1}`,
+        },
+      };
+    } catch (err) {
+      logger.error(
+        { err: err?.message, stack: err?.stack, parkId, assetId },
+        'park_forecast.studio_fs_postprocess_failed'
+      );
+      return baseline;
+    }
   }
 
   async enrichSummaryWithFeatureSnapshots(summary, { provider, externalParkId, externalEntityId }) {
@@ -236,13 +461,23 @@ class AiParkForecastService {
       limit: 72,
     });
     if (entityPoints.length >= MIN_SERIES_POINTS) {
-      const summary = this.buildFromSeries(entityPoints, {
+      let summary = this.buildFromSeries(entityPoints, {
         externalParkId: externalParkId || entityPoints[0].externalParkId,
         externalEntityId,
         provider,
         factors,
         scope: 'ENTITY',
       });
+      const p0 = entityPoints[0].get ? entityPoints[0].get({ plain: true }) : entityPoints[0];
+      const pid = p0.internalParkId ?? p0.internal_park_id;
+      const aid = p0.internalAssetId ?? p0.internal_asset_id;
+      if (pid && aid) {
+        // eslint-disable-next-line no-await-in-loop
+        summary = await this.applyStudioFeatureStoreForecastOverride(summary, {
+          parkId: String(pid),
+          assetId: String(aid),
+        });
+      }
       const enriched = await this.enrichSummaryWithFeatureSnapshots(
         { ...summary, basis: 'ENTITY' },
         { provider, externalParkId: externalParkId || entityPoints[0].externalParkId, externalEntityId }
@@ -447,5 +682,5 @@ class AiParkForecastService {
   }
 }
 
-module.exports = { AiParkForecastService };
+module.exports = { AiParkForecastService, clearStudioRideFsModelResolveCacheForPark };
 

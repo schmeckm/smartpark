@@ -89,14 +89,23 @@ const providerOptions = computed(() => {
   return Array.from(set).sort((a, b) => a.localeCompare(b))
 })
 
-function adapterOpsGridStatusLabel(status: string) {
+function adapterOpsGridStatusLabel(status: string, row?: AdapterOpsGridRow | null) {
   const s = (status || '').toUpperCase()
   if (s === 'HEALTHY') return t('adapterOpsDashboard.statusHealthy')
   if (s === 'PAUSED') return t('adapterOpsDashboard.statusPaused')
   if (s === 'FAILED') return t('adapterOpsDashboard.statusFailed')
   if (s === 'WARNING') return t('adapterOpsDashboard.statusWarning')
-  if (s === 'MANUAL_OK') return t('adapterOpsDashboard.statusManualOk')
+  if (s === 'MANUAL_OK') {
+    const key = (row?.adapterKey || '').trim()
+    if (key === 'traffic_tomtom') return t('adapterOpsDashboard.statusManualOkTomtom')
+    return t('adapterOpsDashboard.statusManualOk', { key: key || 'adapter' })
+  }
   return status
+}
+
+function adapterOpsGridStatusHint(row: AdapterOpsGridRow) {
+  if ((row.status || '').toUpperCase() !== 'MANUAL_OK') return ''
+  return t('adapterOpsDashboard.statusManualOkHint')
 }
 
 function adapterOpsStatusMatchesFilter(rowStatus: string, filter: string) {
@@ -744,7 +753,7 @@ onBeforeUnmount(() => {
           <option value="FAILED">{{ t('adapterOpsDashboard.statusFailed') }}</option>
           <option value="WARNING">{{ t('adapterOpsDashboard.statusWarning') }}</option>
           <option value="HEALTHY">{{ t('adapterOpsDashboard.statusHealthy') }}</option>
-          <option value="MANUAL_OK">{{ t('adapterOpsDashboard.statusManualOk') }}</option>
+          <option value="MANUAL_OK">{{ t('adapterOpsDashboard.filterManualOk') }}</option>
           <option value="PAUSED">{{ t('adapterOpsDashboard.statusPaused') }}</option>
         </select>
         <select
@@ -811,8 +820,12 @@ onBeforeUnmount(() => {
               <td class="whitespace-nowrap px-2 py-1.5 font-mono text-[11px] text-brand-300">{{ row.adapterKey }}</td>
               <td class="px-2 py-1.5 text-slate-400">{{ row.adapterType || '—' }}</td>
               <td class="px-2 py-1.5 text-slate-400">{{ row.provider || '—' }}</td>
-              <td class="whitespace-nowrap px-2 py-1.5 font-semibold" :class="gridStatusClass(row.status)">
-                {{ adapterOpsGridStatusLabel(row.status) }}
+              <td
+                class="whitespace-nowrap px-2 py-1.5 font-semibold"
+                :class="gridStatusClass(row.status)"
+                :title="adapterOpsGridStatusHint(row) || undefined"
+              >
+                {{ adapterOpsGridStatusLabel(row.status, row) }}
               </td>
               <td class="px-2 py-1.5 text-slate-300">{{ row.active ? 'true' : 'false' }}</td>
               <td

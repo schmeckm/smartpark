@@ -903,7 +903,7 @@ class AddonBoardService {
       }
       const plain = a.get ? a.get({ plain: true }) : a;
       const pdmRules = pdmRulesByAsset?.get(aid) || [];
-      const pdmEval = evaluatePredictiveMaintenanceForAsset(plain, parkSlug, pdmRules);
+      const pdmEval = await evaluatePredictiveMaintenanceForAsset(plain, parkSlug, pdmRules);
       if (pdmEval) {
         void maybeAppendPdmEvaluationLog({
           assetId: aid,
@@ -1179,7 +1179,7 @@ class AddonBoardService {
     const thresholds = await resolveAddonBoardThresholds(parkId);
     const pdmMap = await loadEnabledRulesByAssetIds(parkId, [String(rideId)]);
     const pdmRules = pdmMap.get(String(rideId)) || [];
-    const pdmEval = evaluatePredictiveMaintenanceForAsset(asset.get({ plain: true }), parkSlug, pdmRules);
+    const pdmEval = await evaluatePredictiveMaintenanceForAsset(asset.get({ plain: true }), parkSlug, pdmRules);
     if (pdmEval) {
       void maybeAppendPdmEvaluationLog({
         assetId: String(rideId),

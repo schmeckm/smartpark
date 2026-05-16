@@ -46,6 +46,11 @@ declare module '@smartpark-root-utils/signal-availability-resolver.js' {
 
 declare module 'leaflet.heat'
 
+declare module '@/utils/tomtomRouteGeometry.mjs' {
+  export function extractTomTomRouteLatLngs(providerRawResponse: unknown): [number, number][]
+  export function tomTomRawJsonMayExposeApiKey(root: unknown): boolean
+}
+
 declare module '@/utils/mlForecastHealthStrip.mjs' {
   export const DQ_MODEL_RELEVANT_PATTERN: RegExp
   export function reasonCodesList(reasonCodesJson: unknown): string[]

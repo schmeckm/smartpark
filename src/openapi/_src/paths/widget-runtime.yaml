@@ -1,0 +1,193 @@
+/widget-runtime/widgets:
+  get:
+    tags:
+      - Widget Runtime
+    summary: List enabled widget types
+    description: 'Governed widget registry. Requires **integrations.read** and `WIDGET_RUNTIME_ENABLED`.'
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeDashboardWidgetRegistryList'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '404':
+        $ref: '#/components/responses/NotFound'
+
+/widget-runtime/data-sources:
+  get:
+    tags:
+      - Widget Runtime
+    summary: List enabled data sources
+    description: 'Governed data source registry (internal_api only). Requires **integrations.read** and `WIDGET_RUNTIME_ENABLED`.'
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeDashboardDataSourceRegistryList'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '404':
+        $ref: '#/components/responses/NotFound'
+
+/widget-runtime/instances:
+  get:
+    tags:
+      - Widget Runtime
+    summary: List widget instances
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          minimum: 0
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeDashboardWidgetInstanceList'
+      '404':
+        $ref: '#/components/responses/NotFound'
+  post:
+    tags:
+      - Widget Runtime
+    summary: Create widget instance
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/DashboardWidgetInstanceCreate'
+    responses:
+      '201':
+        description: Created
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeDashboardWidgetInstance'
+      '404':
+        $ref: '#/components/responses/NotFound'
+      '422':
+        description: Validation error
+
+/widget-runtime/instances/{id}:
+  get:
+    tags:
+      - Widget Runtime
+    summary: Get widget instance
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeDashboardWidgetInstance'
+      '404':
+        $ref: '#/components/responses/NotFound'
+  patch:
+    tags:
+      - Widget Runtime
+    summary: Update widget instance
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/DashboardWidgetInstancePatch'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeDashboardWidgetInstance'
+      '404':
+        $ref: '#/components/responses/NotFound'
+      '422':
+        description: Validation error
+  delete:
+    tags:
+      - Widget Runtime
+    summary: Delete widget instance
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    responses:
+      '200':
+        description: OK
+      '404':
+        $ref: '#/components/responses/NotFound'
+
+/widget-runtime/instances/{id}/data:
+  get:
+    tags:
+      - Widget Runtime
+    summary: Resolve widget instance data
+    description: 'Fetches governed data for the instance data source (reuses integration flow services).'
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeWidgetInstanceData'
+      '404':
+        $ref: '#/components/responses/NotFound'
+      '503':
+        description: Integration Flow Engine off
+
+/widget-runtime/instances/{id}/validate:
+  post:
+    tags:
+      - Widget Runtime
+    summary: Validate widget instance
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeWidgetInstanceValidation'
+      '404':
+        $ref: '#/components/responses/NotFound'

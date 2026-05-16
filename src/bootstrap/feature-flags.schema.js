@@ -13,6 +13,7 @@
  */
 
 const Joi = require('joi');
+const { defaultMqttBrokerUrl } = require('../../config/service-defaults');
 
 const csv = Joi.string().allow('').default('');
 const positiveInt = Joi.number().integer().min(0);
@@ -45,7 +46,9 @@ const flagsSchema = Joi.object({
 
   mqtt: Joi.object({
     enabled: Joi.boolean().default(false),
-    brokerUrl: Joi.string().uri({ scheme: ['mqtt', 'mqtts', 'ws', 'wss'] }).default('mqtt://127.0.0.1:1883'),
+    brokerUrl: Joi.string()
+      .uri({ scheme: ['mqtt', 'mqtts', 'ws', 'wss'] })
+      .default(defaultMqttBrokerUrl()),
     clientId: Joi.string().default('smart-park-os-api'),
     username: Joi.string().allow('').default(''),
     password: Joi.string().allow('').default(''),
@@ -93,6 +96,7 @@ const flagsSchema = Joi.object({
     outputProfiles: csv,
     adapterPipelineLogEnabled: Joi.boolean().default(true),
     adapterPipelineLogPath: Joi.string().default('data/adapter-pipeline.log'),
+    flowEngineEnabled: Joi.boolean().default(false),
   }).required(),
 
   sim: Joi.object({
@@ -119,6 +123,11 @@ const flagsSchema = Joi.object({
 
   ingestion: Joi.object({
     maxAgeMs: positiveMs.default(20 * 60 * 1000),
+  }).required(),
+
+  pdm: Joi.object({
+    industrialPlatformEnabled: Joi.boolean().default(false),
+    operationsBoardEnabled: Joi.boolean().default(true),
   }).required(),
 }).required();
 

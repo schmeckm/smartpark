@@ -1,3 +1,55 @@
+'/uns/parks/{parkId}/sparkplug-topic-preview':
+  get:
+    tags:
+      - UNS
+    summary: 'Preview canonical Sparkplug topic for a park asset'
+    description: |
+      Requires **`iotOt.settings.read`** or **`rides.read`**. Provide **`assetId`** or **`assetSlug`** (one required);
+      optional **`messageType`** (`DDATA`, `DBIRTH`, `DDEATH`, `NBIRTH`, `NDEATH`).
+    parameters:
+      -
+        in: path
+        name: parkId
+        required: true
+        schema:
+          type: string
+      -
+        in: query
+        name: assetId
+        schema:
+          type: string
+          format: uuid
+      -
+        in: query
+        name: assetSlug
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 240
+      -
+        in: query
+        name: messageType
+        schema:
+          type: string
+          enum:
+            - DDATA
+            - DBIRTH
+            - DDEATH
+            - NBIRTH
+            - NDEATH
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '422':
+        description: Validation error
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
 '/uns/parks/{parkId}/tree':
   get:
     tags:

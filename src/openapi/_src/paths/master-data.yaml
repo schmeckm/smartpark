@@ -1,3 +1,113 @@
+/master-data/signal-catalog:
+  get:
+    tags:
+      - Admin
+    summary: 'List signal catalog rows (registry admin)'
+    description: 'Requires **`integrations.read`** or **`rides.read`**.'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+  post:
+    tags:
+      - Admin
+    summary: 'Create signal catalog row'
+    description: 'Requires **`integrations.manage`** or **`rides.update`**. Body validated (`postSignalCatalogBody`).'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: true
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '422':
+        description: Validation error
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+'/master-data/signal-catalog/{catalogId}':
+  patch:
+    tags:
+      - Admin
+    summary: 'Patch signal catalog row'
+    description: 'Requires **`integrations.manage`** or **`rides.update`**. Body validated (`patchSignalCatalogBody`).'
+    parameters:
+      -
+        in: path
+        name: catalogId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: true
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '422':
+        description: Validation error
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+  delete:
+    tags:
+      - Admin
+    summary: 'Delete signal catalog row'
+    description: 'Requires **`integrations.manage`** or **`rides.update`**.'
+    parameters:
+      -
+        in: path
+        name: catalogId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '404':
+        description: Not found
 '/master-data/rides/{id}/signal-capabilities':
   get:
     tags:

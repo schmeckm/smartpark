@@ -4,6 +4,7 @@ import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useParkContextStore } from '@/stores/parkContext'
+import { useInstalledAdaptersStore } from '@/stores/installedAdapters'
 import { patchMyUserSettings } from '@/api/auth'
 import { i18n, isAppLocale, setI18nLocale } from '@/i18n'
 import type { AppLocale } from '@/i18n'
@@ -21,6 +22,7 @@ import { commandPaletteOpen } from '@/composables/useCommandPalette'
 const { t } = useI18n()
 const auth = useAuthStore()
 const parkCtx = useParkContextStore()
+const installedAdapters = useInstalledAdaptersStore()
 const route = useRoute()
 const router = useRouter()
 const localeMenuOpen = ref(false)
@@ -134,6 +136,13 @@ const navSections = computed((): NavSection[] => {
       } else {
         continue
       }
+      const gateAny = raw.requiresAnyInstalledAdapters
+      if (Array.isArray(gateAny) && gateAny.some((k) => String(k || '').trim())) {
+        if (!installedAdapters.isAnyInstalled(gateAny.map((k) => String(k).trim()).filter(Boolean))) continue
+      } else {
+        const gate = raw.requiresInstalledAdapter?.trim()
+        if (gate && !installedAdapters.isInstalled(gate)) continue
+      }
       let labelKey = raw.labelKey
       const alt = raw.labelKeyIfPermission
       if (alt && auth.hasPermission(alt.resource, alt.action)) {
@@ -164,6 +173,26 @@ const navSections = computed((): NavSection[] => {
     ],
   })
 
+  if (auth.hasPermission('integrations', 'read')) {
+    const plat = sections.find((s) => s.id === 'platform')
+    if (plat && !plat.items.some((i) => i.to === '/admin/integration-flow-studio')) {
+      plat.items.unshift({
+        to: '/admin/integration-flow-studio',
+        labelKey: 'menu.integrationFlowStudio',
+        navIcon: 'integrationsHub',
+        activePathPrefix: '/admin/integration-flow-studio',
+      })
+    }
+    if (plat && !plat.items.some((i) => i.to === '/admin/widget-runtime-studio')) {
+      plat.items.unshift({
+        to: '/admin/widget-runtime-studio',
+        labelKey: 'menu.widgetRuntimeStudio',
+        navIcon: 'integrationsHub',
+        activePathPrefix: '/admin/widget-runtime-studio',
+      })
+    }
+  }
+
   return sections
 })
 
@@ -185,6 +214,9 @@ function openCommandPalette() {
 onMounted(async () => {
   globalThis.addEventListener('pointerdown', onGlobalPointerDown)
   globalThis.addEventListener('keydown', onCommandPaletteHotkey)
+  if (auth.isAuthenticated) {
+    installedAdapters.hydrate().catch(() => {})
+  }
   if (auth.isAuthenticated && auth.hasPermission('rides', 'read')) {
     await parkCtx.hydrate()
   }
@@ -200,6 +232,9 @@ watch(
   async (ok) => {
     if (ok && auth.hasPermission('rides', 'read')) await parkCtx.hydrate()
     else if (!ok) parkCtx.clearOnLogout()
+    if (ok) {
+      installedAdapters.hydrate().catch(() => {})
+    } else installedAdapters.clearOnLogout()
   }
 )
 

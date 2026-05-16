@@ -228,6 +228,15 @@
             - 'false'
       -
         in: query
+        name: includeArchived
+        description: 'When true, include rows with archivedAt set (governance).'
+        schema:
+          type: string
+          enum:
+            - 'true'
+            - 'false'
+      -
+        in: query
         name: limit
         schema:
           type: integer
@@ -271,12 +280,58 @@
         description: Forbidden
       '404':
         description: 'Not found'
-/ai/studio/models/train:
+  delete:
+    tags:
+      - AI
+    summary: 'Archive or permanently delete ML Studio model row'
+    description: |
+      Needs **`ai.refresh`** and **`X-Park-Id`**.
+      Default (no query): **soft-archive** — fails with **`MODEL_ACTIVE`** if still active, or **`MODEL_LAST_DEPLOYABLE_VERSION`** if last non-archived row in slot.
+      With **`permanent=true`**: **hard-delete** the DB row; only allowed when the row is already archived (`archivedAt` set). Otherwise **`MODEL_NOT_ARCHIVED`** (409).
+    parameters:
+      -
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      -
+        in: query
+        name: permanent
+        required: false
+        description: 'If `true`, permanently remove the row from the database (archived rows only).'
+        schema:
+          type: boolean
+          default: false
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '404':
+        description: Not found
+      '409':
+        description: 'Governance conflict (e.g. MODEL_ACTIVE, MODEL_NOT_ARCHIVED)'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+'/ai/studio/models/train':
   post:
     tags:
       - AI
     summary: 'Train an ML Studio model (sandbox or feature-store dataset)'
-    description: 'Needs **`ai.refresh`** and **`X-Park-Id`**. Body is validated server-side (dataset, entityType, targetVariable, features, strategy, algorithm). See `ai-studio.validators.js`.'
+    description: |
+      Needs **`ai.refresh`** and **`X-Park-Id`**. Body is validated server-side (`ai-studio.validators.js`).
+      **FEATURE_STORE (Phase 2):** supervised training on `ride_feature_snapshots_5m` with optional **`featureStoreTrainingOptions`** (RF / GBM / MLP / ridge λ).
+      **SANDBOX:** deterministic stub metrics for algorithm comparison.
     requestBody:
       required: true
       content:
@@ -296,6 +351,165 @@
         description: Forbidden
       '422':
         description: 'Validation / business rules'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+'/ai/studio/models/validate-features':
+  post:
+    tags:
+      - AI
+    summary: 'FEATURE_STORE — raw data coverage per X feature (pre-training quality)'
+    description: |
+      Needs **`ai.read`** and **`X-Park-Id`**. Returns share of eligible snapshot rows (max 8000) where each selected feature has a non-null source before imputation.
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - entityType
+              - entityId
+            properties:
+              entityType:
+                type: string
+                enum:
+                  - RIDE
+              entityId:
+                type: string
+                format: uuid
+              features:
+                type: array
+                items:
+                  type: string
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '422':
+        description: 'Validation / business rules'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+'/ai/studio/models/batch-train-status':
+  get:
+    tags:
+      - AI
+    summary: 'Phase 3 — batch FEATURE_STORE training progress for current park'
+    description: 'Needs **`ai.read`** and **`X-Park-Id`**. In-memory status for the last / active park-wide ride batch.'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+'/ai/studio/models/batch-train-rides':
+  post:
+    tags:
+      - AI
+    summary: 'Start park-wide FEATURE_STORE training for all RIDE assets'
+    description: |
+      Needs **`ai.refresh`** and **`X-Park-Id`**. Returns **202** immediately; poll **`/ai/studio/models/batch-train-status`** for progress.
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              strategy:
+                type: string
+                enum:
+                  - AUTO
+                  - MANUAL
+              algorithm:
+                type: string
+              features:
+                type: array
+                items:
+                  type: string
+    responses:
+      '202':
+        description: Accepted
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '409':
+        description: 'Batch already running'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+      '422':
+        description: 'Validation / business rules'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+'/ai/studio/models/batch-apply':
+  post:
+    tags:
+      - AI
+    summary: 'Apply last batch algorithms to ride assets and activate FEATURE_STORE models'
+    description: |
+      Needs **`ai.refresh`** and **`X-Park-Id`**. Body **`batchId`** must match the finished batch from **`/ai/studio/models/batch-train-status`**.
+      Updates **`evaluated_algorithm`** on each successful ride row, **activates** the matching **`ai_studio_models`** row for that batch (FEATURE_STORE / `wait_time_plus_15`), deactivating prior active rows in the same slot, clears the ride-forecast resolve cache for the park, then clears in-memory batch state.
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - batchId
+            properties:
+              batchId:
+                type: string
+                format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '404':
+        description: 'Batch not found or batchId mismatch'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+      '409':
+        description: 'Batch still running'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+      '422':
+        description: 'Nothing to apply / validation'
         content:
           application/json:
             schema:
@@ -344,7 +558,34 @@
           application/json:
             schema:
               $ref: '#/components/schemas/ErrorBody'
-/ai/studio/predict:
+'/ai/studio/models/{id}/restore':
+  post:
+    tags:
+      - AI
+    summary: 'Restore archived ML Studio model'
+    description: 'Needs **`ai.refresh`** and **`X-Park-Id`**. Clears **`archivedAt`** / **`archivedBy`**.'
+    parameters:
+      -
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '404':
+        description: Not found
+'/ai/studio/predict':
   post:
     tags:
       - AI
@@ -356,6 +597,35 @@
         application/json:
           schema:
             $ref: '#/components/schemas/AiStudioPredictRequest'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '422':
+        description: 'Validation error'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+'/ai/studio/runtime-resolution':
+  post:
+    tags:
+      - AI
+    summary: 'Explain ML Studio predict model resolution (entity → category → park → fallback)'
+    description: 'Needs **`ai.read`** and **`X-Park-Id`**. Active-flag models only for the final pick; best MAE per level is informational. Validated per `runtimeResolutionBody` in `ai-studio.validators.js`.'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AiStudioRuntimeResolutionRequest'
     responses:
       '200':
         description: OK
@@ -1775,6 +2045,30 @@
           application/json:
             schema:
               $ref: '#/components/schemas/EnvelopeMlPredictionTraceFilterOptions'
+'/ai/ml/prediction-traces/{predictionId}/coefficients':
+  get:
+    tags:
+      - AI
+    summary: 'Learned ridge coefficients + manual weights for a prediction trace (read-only)'
+    description: |
+      **Read-only.** Resolves the trace’s model registry row and projects coefficient rows when present; requires `ai.read` and `X-Park-Id`.
+    parameters:
+      -
+        in: path
+        name: predictionId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '404':
+        description: Not found
 '/ai/ml/prediction-traces/{predictionId}':
   get:
     tags:
@@ -1852,6 +2146,35 @@
     responses:
       '200':
         description: OK
+'/ai/ml/forecast-accuracy/model-win-rates':
+  get:
+    tags:
+      - AI
+    summary: 'Forecast accuracy — model win-rate stats (observational)'
+    description: |
+      **Read-only.** Compares which ridge model names win head-to-head for comparable rows in `ml_forecast_accuracy_logs` (current park).
+      Requires `ai.read` and `X-Park-Id`.
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+'/ai/ml/forecast-accuracy/retro-lookback':
+  get:
+    tags:
+      - AI
+    summary: 'Forecast accuracy — retro lookback window summary'
+    description: |
+      **Read-only.** Returns bounded historical slices for accuracy dashboards; requires `ai.read` and `X-Park-Id`.
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
 '/ai/ml/forecast-accuracy/{id}':
   get:
     tags:
@@ -1986,3 +2309,314 @@
         description: OK
       '422':
         description: Missing or invalid rideId / window
+'/ai/ml/park-profiles':
+  get:
+    tags:
+      - AI
+    summary: 'List ML park metadata profiles (ML_PROFILE_ENABLED)'
+    description: |
+      Requires `ai.read`, `X-Park-Id`, and `ML_PROFILE_ENABLED=true`. Query validated (`parkListQuery`).
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '403':
+        description: Forbidden
+      '422':
+        description: Validation error
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+  post:
+    tags:
+      - AI
+    summary: 'Create ML park metadata profile'
+    description: Requires `ai.refresh`, `X-Park-Id`, and `ML_PROFILE_ENABLED=true`. Body per `parkProfileBody`.
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: true
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '403':
+        description: Forbidden
+      '422':
+        description: Validation error
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+'/ai/ml/park-profiles/{id}':
+  get:
+    tags:
+      - AI
+    summary: 'Get one ML park metadata profile'
+    description: Requires `ai.read`, `X-Park-Id`, and `ML_PROFILE_ENABLED=true`.
+    parameters:
+      -
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '404':
+        description: Not found
+  put:
+    tags:
+      - AI
+    summary: 'Replace ML park metadata profile'
+    description: Requires `ai.refresh`, `X-Park-Id`, and `ML_PROFILE_ENABLED=true`. Body per `parkProfilePutMerged`.
+    parameters:
+      -
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: true
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '404':
+        description: Not found
+      '422':
+        description: Validation error
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+  delete:
+    tags:
+      - AI
+    summary: 'Archive ML park metadata profile (soft delete)'
+    description: 'Requires `ai.refresh`, `X-Park-Id`, ML_PROFILE_ENABLED. Profile must have **`enabled=false`** first (`PROFILE_ENABLED` otherwise).'
+    parameters:
+      -
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '404':
+        description: Not found
+      '409':
+        description: Conflict
+'/ai/ml/ride-profiles':
+  get:
+    tags:
+      - AI
+    summary: 'List ML ride metadata profiles (ML_PROFILE_ENABLED)'
+    description: |
+      Requires `ai.read`, `X-Park-Id`, and `ML_PROFILE_ENABLED=true`. Query validated (`rideListQuery`).
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '403':
+        description: Forbidden
+      '422':
+        description: Validation error
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+  post:
+    tags:
+      - AI
+    summary: 'Create ML ride metadata profile'
+    description: Requires `ai.refresh`, `X-Park-Id`, and `ML_PROFILE_ENABLED=true`. Body per `rideProfileBody`.
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: true
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '403':
+        description: Forbidden
+      '422':
+        description: Validation error
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+'/ai/ml/ride-profiles/{id}':
+  get:
+    tags:
+      - AI
+    summary: 'Get one ML ride metadata profile'
+    description: Requires `ai.read`, `X-Park-Id`, and `ML_PROFILE_ENABLED=true`.
+    parameters:
+      -
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '404':
+        description: Not found
+      '422':
+        description: Validation error
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+  put:
+    tags:
+      - AI
+    summary: 'Replace ML ride metadata profile'
+    description: Requires `ai.refresh`, `X-Park-Id`, and `ML_PROFILE_ENABLED=true`. Body per `rideProfilePutMerged`.
+    parameters:
+      -
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: true
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '404':
+        description: Not found
+      '422':
+        description: Validation error
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+  delete:
+    tags:
+      - AI
+    summary: 'Archive ML ride metadata profile (soft delete)'
+    description: 'Same governance as park profiles — **`enabled=false`** required before archive.'
+    parameters:
+      -
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '404':
+        description: Not found
+      '409':
+        description: Conflict
+'/ai/ml/registry/entries/{id}':
+  delete:
+    tags:
+      - AI
+    summary: 'Archive or permanently delete ML model registry ridge row'
+    description: |
+      Requires **`ai.refresh`**. Default: **soft-archive** — excludes row from ride **`findActiveModel`** resolution. Fails if **`MODEL_ACTIVE`** or **`MODEL_LAST_DEPLOYABLE_VERSION`**.
+      With **`permanent=true`**: hard-delete from DB (**archived rows only**); otherwise **`MODEL_NOT_ARCHIVED`**.
+    parameters:
+      -
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      -
+        in: query
+        name: permanent
+        required: false
+        description: 'If `true`, permanently remove the row (archived rows only).'
+        schema:
+          type: boolean
+          default: false
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '404':
+        description: Not found
+      '409':
+        description: Governance conflict
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'

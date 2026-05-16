@@ -4,6 +4,8 @@ const LOW_FACTOR = 0.0012;
 const MID_FACTOR = 0.0022;
 const HIGH_FACTOR = 0.0035;
 
+const INBOUND_PRESSURE_BANDS = [0, 25, 50, 75, 100];
+
 function clamp(n, lo, hi) {
   const x = Number(n);
   if (Number.isNaN(x)) return lo;
@@ -11,16 +13,67 @@ function clamp(n, lo, hi) {
 }
 
 /**
- * @param {{ currentTravelTimeMin: number, baselineTravelTimeMin: number, direction: string }} p
+ * Legacy snapshots stored delayPercent as ratio 0..1; newer rows use percent 0..100.
+ * @param {number|null|undefined} stored
+ * @returns {number}
+ */
+function normalizeStoredDelayPercentAs100(stored) {
+  const v = Number(stored);
+  if (!Number.isFinite(v) || v < 0) return 0;
+  if (v <= 1) return v * 100;
+  return clamp(v, 0, 1000);
+}
+
+/**
+ * delayMinutes = max(0, current - baseline); delayPercent = delay/baseline*100 (percent points 0..+inf, clamped for scores).
+ * @param {{
+ *   currentTravelTimeMin: number,
+ *   baselineTravelTimeMin: number,
+ *   direction: string,
+ *   weight?: number,
+ *   incidentCount?: number,
+ * }} p
  */
 function computeSnapshotMetrics(p) {
   const base = Number(p.baselineTravelTimeMin);
   const cur = Number(p.currentTravelTimeMin);
-  const delay_min = cur - base;
-  const delay_percent = base > 0 ? delay_min / base : 0;
-  const congestion_score = clamp(delay_percent * 100, 0, 100);
-  const inbound_pressure_score = p.direction === 'outbound' ? 0 : congestion_score;
-  return { delay_min, delay_percent, congestion_score, inbound_pressure_score };
+  const delay_minutes = Math.max(0, cur - base);
+  let delay_percent = 0;
+  if (base > 0) delay_percent = (delay_minutes / base) * 100;
+  const congestion_score = clamp(delay_percent, 0, 100);
+  const inbound_pressure_score =
+    p.direction === 'outbound'
+      ? 0
+      : computeInboundPressureMvp({
+          delayPercent: delay_percent,
+          congestionScore: congestion_score,
+          incidentCount: p.incidentCount ?? 0,
+          weight: p.weight ?? 1,
+        });
+  return { delay_min: delay_minutes, delay_percent, congestion_score, inbound_pressure_score };
+}
+
+/**
+ * MVP discrete pressure 0 / 25 / 50 / 75 / 100 from delay, congestion, incidents, corridor weight.
+ * @param {{ delayPercent: number, congestionScore: number, incidentCount?: number, weight?: number }} p
+ */
+function computeInboundPressureMvp(p) {
+  const d = clamp(Number(p.delayPercent) || 0, 0, 100);
+  const c = clamp(Number(p.congestionScore) || 0, 0, 100);
+  const inc = clamp((Number(p.incidentCount) || 0) * 12, 0, 48);
+  const w = clamp(Number(p.weight) || 1, 0.1, 10);
+  const wBoost = clamp((w - 1) * 10, 0, 25);
+  const raw = clamp(0.42 * d + 0.42 * c + 0.08 * inc + 0.08 * wBoost, 0, 100);
+  let best = INBOUND_PRESSURE_BANDS[0];
+  let bestDist = Infinity;
+  for (const b of INBOUND_PRESSURE_BANDS) {
+    const dist = Math.abs(b - raw);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = b;
+    }
+  }
+  return best;
 }
 
 /**
@@ -123,8 +176,10 @@ function buildExplanationJson({ traffic_pressure_score, external_demand_pressure
     separation: {
       plannedDemand: 'Baseline plan from visit planning or ops input.',
       knownRegisteredExpected: 'Registered or ticketed demand already counted toward planned_total.',
-      externalDemandPressure: 'Composite pressure from traffic (leading indicator), parking, weather, holiday, events.',
-      probabilisticAdditionalDemand: 'Low / mid / high scenarios from planned_total × external pressure × calibrated factors — not a traffic-to-guests conversion.',
+      externalDemandPressure:
+        'Composite pressure from traffic corridor snapshots (leading indicator), parking, weather, holiday, events — traffic is not visitor count.',
+      probabilisticAdditionalDemand:
+        'Low / high scenarios from planned_total × external pressure × calibrated factors — not a traffic-to-guests conversion.',
     },
   };
 }
@@ -135,6 +190,8 @@ module.exports = {
   HIGH_FACTOR,
   clamp,
   computeSnapshotMetrics,
+  computeInboundPressureMvp,
+  normalizeStoredDelayPercentAs100,
   computeWeightedTrafficPressure,
   computeExternalDemandPressure,
   computeProbabilisticAdditionalDemand,

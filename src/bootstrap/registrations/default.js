@@ -31,6 +31,8 @@ const { IntegrationOrchestratorService } = require('../../services/integration-o
 const { AdapterInstalledSchedulerService } = require('../../modules/integrations/adapter-framework/adapter-installed-scheduler.service');
 const { WeatherOpenMeteoSchedulerService } = require('../../services/weather-open-meteo-scheduler.service');
 const { MlTrainingSchedulerService } = require('../../services/ml/ml-training-scheduler.service');
+const { IntegrationFlowSchedulerService } = require('../../modules/integration-flow/services/integration-flow-scheduler.service');
+const { IntegrationFlowRetrySchedulerService } = require('../../modules/integration-flow/services/integration-flow-retry-scheduler.service');
 const {
   startAttractionOeeSimulator,
   stopAttractionOeeSimulator,
@@ -100,6 +102,14 @@ function registerDefaultBoot(lifecycle, ctx) {
   });
 
   lifecycle.register({
+    name: 'cache:influx-streaming-gate',
+    run: async () => {
+      const { warmupInfluxStreamingGate } = require('../../services/influx-ot-metrics.service');
+      await warmupInfluxStreamingGate();
+    },
+  });
+
+  lifecycle.register({
     name: 'http:server-init',
     run: () => {
       httpServer = http.createServer(app);
@@ -145,6 +155,28 @@ function registerDefaultBoot(lifecycle, ctx) {
     name: 'scheduler:ml-training',
     run: async () => {
       const stop = await new MlTrainingSchedulerService().start();
+      return typeof stop === 'function' ? stop : null;
+    },
+  });
+
+  lifecycle.register({
+    name: 'scheduler:integration-flow',
+    run: async () => {
+      if (!env.integrationFlowEngineEnabled) {
+        return null;
+      }
+      const stop = new IntegrationFlowSchedulerService().startIfEnabled();
+      return typeof stop === 'function' ? stop : null;
+    },
+  });
+
+  lifecycle.register({
+    name: 'scheduler:integration-flow-retry',
+    run: async () => {
+      if (!env.integrationFlowEngineEnabled) {
+        return null;
+      }
+      const stop = new IntegrationFlowRetrySchedulerService().startIfEnabled();
       return typeof stop === 'function' ? stop : null;
     },
   });
@@ -235,12 +267,15 @@ const DEFAULT_BOOT_STEP_ORDER = Object.freeze([
   'boot:feature-flags',
   'db:sequelize',
   'cache:platform-settings',
+  'cache:influx-streaming-gate',
   'http:server-init',
   'scheduler:ai-orchestrator',
   'scheduler:integration-orchestrator',
   'scheduler:adapter-installed',
   'scheduler:weather-open-meteo',
   'scheduler:ml-training',
+  'scheduler:integration-flow',
+  'scheduler:integration-flow-retry',
   'http:listen',
   'influx:ot-metrics-flush',
   'mqtt:connector',

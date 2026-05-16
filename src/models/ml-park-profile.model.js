@@ -48,6 +48,8 @@ function defineMlParkProfile(sequelize) {
         field: 'feature_weights_json',
       },
       notes: { type: DataTypes.TEXT, allowNull: true },
+      archivedAt: { type: DataTypes.DATE, allowNull: true, field: 'archived_at' },
+      archivedBy: { type: DataTypes.UUID, allowNull: true, field: 'archived_by' },
     },
     {
       sequelize,

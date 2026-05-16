@@ -187,7 +187,7 @@ export default defineConfig(({ mode }) => {
       fs: {
         allow: [projectRoot, repoRoot],
       },
-      host: '0.0.0.0',
+      host: true,
       port: 5173,
       strictPort: true,
       watch: usePolling
@@ -198,7 +198,6 @@ export default defineConfig(({ mode }) => {
         : undefined,
       hmr: {
         protocol: 'ws',
-        host: 'localhost',
         port: 5173,
         clientPort: 5173,
       },
@@ -218,7 +217,7 @@ export default defineConfig(({ mode }) => {
       fs: {
         allow: [projectRoot, repoRoot],
       },
-      host: '0.0.0.0',
+      host: true,
       proxy: {
         '/api': {
           target: proxyTarget,

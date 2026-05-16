@@ -1,5 +1,5 @@
 const { Router } = require('express');
-const { requirePermission } = require('../../middleware/rbac.middleware');
+const { requirePermission, requireAnyPermission } = require('../../middleware/rbac.middleware');
 const { validate } = require('../../middleware/validate.middleware');
 const controller = require('../../controllers/integrations.controller');
 // `listLogs` lives in the singular controller (paired with the deprecated
@@ -45,6 +45,36 @@ const router = Router();
 router.get('/logs', requirePermission('integration', 'read'), integrationLegacyController.listLogs);
 
 router.get('/feature-flags', requirePermission('integrations', 'read'), controller.getFeatureFlags);
+
+const trafficProviderIntegrations = require('../../controllers/traffic-provider-integrations.controller');
+const { putTomTomTrafficProviderBody, testTomTomTrafficProviderBody } = require('../../validators/traffic-provider.schemas');
+
+router.get('/traffic-providers', requirePermission('integrations', 'read'), trafficProviderIntegrations.listTrafficProviders);
+router.put(
+  '/traffic-providers/traffic_tomtom',
+  requirePermission('integrations', 'manage'),
+  validate(putTomTomTrafficProviderBody),
+  trafficProviderIntegrations.putTomTomTrafficProvider
+);
+router.post(
+  '/traffic-providers/traffic_tomtom/test',
+  requirePermission('integrations', 'manage'),
+  validate(testTomTomTrafficProviderBody),
+  trafficProviderIntegrations.postTomTomTrafficProviderTest
+);
+/** @deprecated Legacy path — same handler as `traffic_tomtom`. */
+router.put(
+  '/traffic-providers/tomtom',
+  requirePermission('integrations', 'manage'),
+  validate(putTomTomTrafficProviderBody),
+  trafficProviderIntegrations.putTomTomTrafficProvider
+);
+router.post(
+  '/traffic-providers/tomtom/test',
+  requirePermission('integrations', 'manage'),
+  validate(testTomTomTrafficProviderBody),
+  trafficProviderIntegrations.postTomTomTrafficProviderTest
+);
 
 router.get('/providers', requirePermission('integrations', 'read'), controller.listProviders);
 router.get(
@@ -269,7 +299,11 @@ router.post(
   controller.materializeUnsNodes
 );
 
-router.get('/installed-adapters', requirePermission('integrations', 'read'), controller.listInstalledAdapters);
+router.get(
+  '/installed-adapters',
+  requireAnyPermission(['integrations', 'read'], ['rides', 'read']),
+  controller.listInstalledAdapters
+);
 /** Static path before `/:id` so `install-local` is never captured as an id segment. */
 router.post(
   '/installed-adapters/install-local',

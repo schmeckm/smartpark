@@ -2,8 +2,9 @@ import { onMounted, onUnmounted, ref, shallowRef } from 'vue'
 import { io, type Socket } from 'socket.io-client'
 import { getAiInsightsSummary, postAiForecastsRefresh, type AiInsightsSummary } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
+import { resolveApiOrigin } from '@/utils/apiOrigin'
 
-const apiOrigin = import.meta.env.VITE_API_URL || undefined
+const apiOrigin = resolveApiOrigin()
 
 type Opts = {
   connectSocket?: boolean

@@ -398,6 +398,16 @@ export interface PlatformPark {
 
 export type TrafficCorridorDirection = 'inbound' | 'outbound'
 
+/** Latest TomTom routing poll outcome (persisted on `traffic_corridors.last_poll_result`). */
+export interface TrafficCorridorLastPollResult {
+  polledAt?: string
+  ok?: boolean
+  code?: string | null
+  message?: string | null
+  snapshotId?: string | null
+  httpStatus?: number | null
+}
+
 export interface TrafficCorridorSnapshotRow {
   id: string
   corridorId: string
@@ -412,6 +422,21 @@ export interface TrafficCorridorSnapshotRow {
   inboundPressureScore?: number | null
   createdAt?: string
   updatedAt?: string
+}
+
+export interface TrafficCorridorLatestSnapshotDetail {
+  routeDistanceMeters?: number | null
+  travelTimeSeconds?: number | null
+  trafficDelaySeconds?: number | null
+  delayPercent: number
+  delayMinutes: number
+  currentTravelTimeMinutes?: number | null
+  baselineTravelTimeMinutes?: number | null
+  providerStatus: string
+  providerErrorCode?: string | null
+  providerErrorMessage?: string | null
+  sampledAt?: string | null
+  routeLooksUnrealistic?: boolean
 }
 
 export interface TrafficCorridorRow {
@@ -431,8 +456,18 @@ export interface TrafficCorridorRow {
   weight: number
   enabled: boolean
   latestSnapshot?: TrafficCorridorSnapshotRow | null
+  latestSnapshotDetail?: TrafficCorridorLatestSnapshotDetail | null
+  /** Set by `TrafficSnapshotService.pollEnabledCorridors` — latest routing attempt (for UI ampel on errors). */
+  lastPollResult?: TrafficCorridorLastPollResult | null
   createdAt?: string
   updatedAt?: string
+}
+
+export interface TrafficCorridorSnapshotDebugPayload {
+  corridor: TrafficCorridorRow
+  latestSnapshot: TrafficCorridorSnapshotRow | null
+  latestSnapshotDetail: TrafficCorridorLatestSnapshotDetail | null
+  providerRawResponse: Record<string, unknown> | null
 }
 
 export type AttendanceRiskForecastStatus = 'normal' | 'elevated' | 'high' | 'critical'
@@ -460,6 +495,16 @@ export interface ParkDemandForecast5mRow {
   confidenceScore: number
   recommendationsJson?: string[] | null
   explanationJson?: Record<string, unknown> | null
+  /** API aliases (same run as legacy fields). */
+  knownRegisteredDemand?: number
+  riskLevel?: AttendanceRiskForecastStatus
+  estimatedAdditionalDemandLow?: number
+  estimatedAdditionalDemandMid?: number
+  estimatedAdditionalDemandHigh?: number
+  totalExpectedAttendanceLow?: number
+  totalExpectedAttendanceMid?: number
+  totalExpectedAttendanceHigh?: number
+  explanation?: Record<string, unknown> | null
   createdAt?: string
   updatedAt?: string
 }

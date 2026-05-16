@@ -10,13 +10,14 @@ import {
 import { usePageSurfaces } from '@/composables/usePageSurfaces'
 import { useToast } from '@/composables/useToast'
 
-type TabId = 'AI' | 'WEATHER' | 'ADAPTERS' | 'SQDC' | 'MQTT' | 'GENERAL'
+type TabId = 'AI' | 'WEATHER' | 'ADAPTERS' | 'SQDC' | 'TELEMETRY' | 'MQTT' | 'GENERAL'
 
 const tabs: { id: TabId; label: string }[] = [
   { id: 'AI', label: 'AI' },
   { id: 'WEATHER', label: 'Weather' },
   { id: 'ADAPTERS', label: 'Adapters & Integrations' },
   { id: 'SQDC', label: 'SQDCP' },
+  { id: 'TELEMETRY', label: 'Telemetry & Influx' },
   { id: 'MQTT', label: 'MQTT' },
   { id: 'GENERAL', label: 'General' },
 ]
@@ -53,6 +54,7 @@ const friendlyLabels: Record<string, string> = {
   SQDC_RING_COST_EUR_AMBER_MAX: 'Cost ring (C): ≤ this € (and above green max) → amber',
   SQDC_RING_PEOPLE_MOOD_GREEN_MIN: 'People ring (P): average mood ≥ this → green (1–5)',
   SQDC_RING_PEOPLE_MOOD_AMBER_MIN: 'People ring (P): average mood ≥ this → amber (1–5)',
+  INFLUX_OT_STREAMING_ENABLED: 'Stream OT & ML metrics to InfluxDB (ot_metrics)',
 }
 
 /** Keys shown under “cron”; external section only surfaces the master switch (interval/provider stay in Integrations). */
@@ -81,7 +83,9 @@ async function load() {
         ? undefined
         : activeTab.value === 'SQDC'
           ? 'SQDC'
-          : activeTab.value
+          : activeTab.value === 'TELEMETRY'
+            ? 'TELEMETRY'
+            : activeTab.value
     const data = await getAdminPlatformSettings(cat)
     payload.value = data
     if (cat) syncEditsFromRows(data.settings)
@@ -96,6 +100,7 @@ async function load() {
 watch(activeTab, () => void load(), { immediate: true })
 
 const mqttBlock = computed(() => payload.value?.mqtt ?? null)
+const telemetryBlock = computed(() => payload.value?.telemetry ?? null)
 const generalBlock = computed(() => payload.value?.general ?? null)
 
 const rowsForTab = computed(() => {
@@ -121,11 +126,12 @@ const adapterSections = computed(() => {
     {
       id: 'external',
       title: 'External park live sync — Integrations',
-      body: 'Polling on/off, interval, and provider are edited under Integration settings. Here you only set the platform-wide master switch (operations can still disable live sync globally even if Integration polling is on).',
+      body: 'Polling on/off, interval, and provider are edited under Integration settings. Here you only set the platform-wide master switch (operations can still disable live sync globally even if Integration polling is on). TomTom routing uses the modular **traffic_tomtom** adapter (Devices & Services) and the same encrypted row as Integration settings → Traffic providers (not in .env).',
       link: { to: '/integrations#integration-polling', label: 'Integration settings — interval & provider' },
+      link2: { to: '/integrations#traffic-providers', label: 'TomTom traffic — API key & test' },
       rows: pick(ADAPTER_EXTERNAL_KEYS),
     },
-  ] as const
+  ]
 })
 
 const adapterAdvancedRows = computed(() => {
@@ -191,6 +197,76 @@ function resetRow(row: PlatformSettingRow) {
 
     <div v-if="loading" :class="ui.card">Loading…</div>
 
+    <template v-else-if="activeTab === 'TELEMETRY'">
+      <div
+        v-if="telemetryBlock"
+        :class="ui.card"
+        class="mb-6 space-y-3 text-sm"
+      >
+        <h2 class="text-base font-semibold text-white">InfluxDB infrastructure</h2>
+        <p class="text-slate-400 leading-relaxed">
+          <code class="text-xs">INFLUX_ENABLED</code> in the API environment must be true and InfluxDB reachable.
+          The toggle below controls whether the API actually writes Sparkplug OT samples and PdM/ML scores into bucket
+          <code class="text-xs">{{ telemetryBlock.influxBucket || 'ot_metrics' }}</code>.
+        </p>
+        <div class="grid gap-2 sm:grid-cols-2">
+          <div>
+            <span class="text-slate-500">Infrastructure enabled</span>
+            {{ telemetryBlock.influxInfrastructureEnabled ? 'yes' : 'no' }}
+          </div>
+          <div>
+            <span class="text-slate-500">URL & token configured</span>
+            {{ telemetryBlock.influxUrlConfigured ? 'yes' : 'no' }}
+          </div>
+          <div v-if="telemetryBlock.influxOrg">
+            <span class="text-slate-500">Org</span> {{ telemetryBlock.influxOrg }}
+          </div>
+        </div>
+      </div>
+      <div v-if="rowsForTab.length" class="space-y-4">
+        <div
+          v-for="row in rowsForTab"
+          :key="row.settingKey"
+          :class="ui.card"
+          class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
+        >
+          <div class="min-w-0 flex-1 space-y-1">
+            <div class="font-medium text-white">{{ friendlyLabels[row.settingKey] || row.settingKey }}</div>
+            <p v-if="row.description" class="text-sm text-slate-400">{{ row.description }}</p>
+            <div class="font-mono text-xs text-slate-500">
+              {{ row.settingKey }} · type {{ row.valueType }} · source {{ row.resolvedSource }}
+            </div>
+          </div>
+          <div class="flex shrink-0 flex-col gap-2 sm:w-64">
+            <template v-if="row.valueType === 'boolean'">
+              <label class="flex items-center gap-2 text-sm text-slate-300">
+                <input v-model="edits[row.settingKey]" type="checkbox" class="rounded border-slate-600" />
+                Enabled
+              </label>
+            </template>
+            <div class="flex gap-2">
+              <button
+                type="button"
+                class="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+                :disabled="!isDirty(row) || savingKey === row.settingKey"
+                @click="saveRow(row)"
+              >
+                Save
+              </button>
+              <button
+                type="button"
+                class="rounded-md border border-slate-600 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+                :disabled="!isDirty(row)"
+                @click="resetRow(row)"
+              >
+                Reset
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
+
     <template v-else-if="activeTab === 'MQTT' && mqttBlock">
       <div :class="ui.card" class="space-y-3 text-sm">
         <p class="text-slate-400">
@@ -228,6 +304,13 @@ function resetRow(row: PlatformSettingRow) {
             class="mt-3 inline-block text-sm font-medium text-brand-400 hover:text-brand-300"
           >
             {{ sec.link.label }} →
+          </RouterLink>
+          <RouterLink
+            v-if="sec.link2"
+            :to="sec.link2.to"
+            class="mt-2 inline-block text-sm font-medium text-brand-400 hover:text-brand-300"
+          >
+            {{ sec.link2.label }} →
           </RouterLink>
         </div>
         <div

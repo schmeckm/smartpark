@@ -2,6 +2,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { io, type Socket } from 'socket.io-client'
 import { getUnsMqttLiveEvents, getUnsMqttLiveStatus, type UnsMqttLiveEvent, type UnsMqttLiveStatus } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
+import { resolveApiOrigin } from '@/utils/apiOrigin'
 
 export function slugifyUnsParkKey(s: string): string {
   return String(s || '')
@@ -87,7 +88,7 @@ export function numMetric(m: Record<string, unknown>, key: string): number | nul
 
 export function useOeeMqttCockpit(groupKey: () => string) {
   const auth = useAuthStore()
-  const apiOrigin = import.meta.env.VITE_API_URL || undefined
+  const apiOrigin = resolveApiOrigin()
   const events = ref<UnsMqttLiveEvent[]>([])
   const liveStatus = ref<UnsMqttLiveStatus | null>(null)
   /** Lowercase Sparkplug group segment; set from mqtt-live status (aligns with API SPARKPLUG_GROUP_ID). */

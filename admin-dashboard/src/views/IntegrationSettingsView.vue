@@ -10,8 +10,6 @@ import {
   getProviderParks,
   getIntegrationProviders,
   getIntegrationSettings,
-  type ExternalDestinationOption,
-  type ExternalParkOption,
   patchExternalEntityMapping,
   patchIntegrationSettings,
   reprocessCanonicalMessage,
@@ -24,7 +22,10 @@ import {
   getIntegrationFeatureFlags,
   postThemeparksDiscoveryScanFromSettings,
   type IntegrationFeatureFlags,
+  type ExternalDestinationOption,
+  type ExternalParkOption,
 } from '@/api/client'
+import TrafficTomTomAdapterPanel from '@/components/adapter/TrafficTomTomAdapterPanel.vue'
 import { useToast } from '@/composables/useToast'
 import { useRegionalDateTime } from '@/composables/useRegionalDateTime'
 
@@ -337,6 +338,14 @@ watch(selectedDestinationId, async () => {
     </div>
 
     <template v-else>
+      <section id="traffic-providers" class="mb-4 space-y-3 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+        <h2 class="text-sm font-semibold text-white">Traffic providers</h2>
+        <p class="text-xs text-slate-500">
+          TomTom Routing (live traffic) for configured corridors. Credentials are stored encrypted in the database (not in <span class="font-mono">.env</span>); the full API key is never shown again after save — only a masked suffix.
+        </p>
+        <TrafficTomTomAdapterPanel variant="integrations" />
+      </section>
+
       <div v-show="showCanonicalPipelinePanel" class="space-y-4">
       <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
         <h2 class="text-sm font-semibold text-white">Provider selection</h2>

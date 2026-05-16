@@ -253,6 +253,13 @@ const pdmEvaluationLogsQuery = Joi.object({
   limit: Joi.number().integer().min(1).max(200).optional(),
 });
 
+const pdmSparkplugSeriesQuery = Joi.object({
+  metricName: Joi.string().trim().min(1).max(160).required(),
+  sparkplugDeviceId: Joi.string().trim().min(1).max(160).required(),
+  points: Joi.number().integer().min(12).max(240).optional(),
+  stepSeconds: Joi.number().integer().min(30).max(3600).optional(),
+});
+
 const shiftHandoverListQuery = Joi.object({
   from: Joi.string().trim().optional(),
   to: Joi.string().trim().optional(),
@@ -368,6 +375,10 @@ const geoFlowEventsBatchBody = Joi.object({
     .required(),
 });
 
+const pdmOperationsOverviewQuery = Joi.object({
+  limit: Joi.number().integer().min(1).max(80).optional(),
+});
+
 module.exports = {
   parkIdParam,
   handoverEntryParams,
@@ -388,6 +399,7 @@ module.exports = {
   pdmRuleCreateBody,
   pdmRulePatchBody,
   pdmEvaluationLogsQuery,
+  pdmSparkplugSeriesQuery,
   shiftHandoverListQuery,
   shiftHandoverCreateBody,
   shiftHandoverAcknowledgeBody,
@@ -404,4 +416,5 @@ module.exports = {
   geoPressureSimulateBody,
   geoFlowSimulationQuery,
   geoFlowEventsBatchBody,
+  pdmOperationsOverviewQuery,
 };

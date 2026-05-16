@@ -4,13 +4,21 @@ import { useParkContextStore } from '@/stores/parkContext'
 import { getLatestAttendanceRiskForecast } from '@/api/client'
 import type { ParkDemandForecast5mRow } from '@/types/api'
 
+withDefaults(
+  defineProps<{
+    /** Distinct test id when the same card is mounted twice on one page (e.g. ops dashboard layouts). */
+    cardTestId?: string
+  }>(),
+  { cardTestId: 'attendance-risk-forecast-card' }
+)
+
 const parkCtx = useParkContextStore()
 const loading = ref(false)
 const error = ref<string | null>(null)
 const forecast = ref<ParkDemandForecast5mRow | null>(null)
 
 const statusClass = computed(() => {
-  const s = forecast.value?.status
+  const s = forecast.value?.riskLevel || forecast.value?.status
   if (s === 'critical') return 'bg-rose-500/20 text-rose-200 border-rose-500/40'
   if (s === 'high') return 'bg-amber-500/20 text-amber-100 border-amber-500/40'
   if (s === 'elevated') return 'bg-yellow-500/15 text-yellow-100 border-yellow-500/35'
@@ -45,7 +53,7 @@ watch(
 
 <template>
   <div
-    data-testid="attendance-risk-forecast-card"
+    :data-testid="cardTestId"
     class="rounded-xl border border-slate-800 bg-slate-950/40 p-4 shadow-inner shadow-slate-950/40"
   >
     <div class="flex flex-wrap items-start justify-between gap-2">
@@ -69,7 +77,7 @@ watch(
     <div v-else class="mt-3 space-y-3 text-sm">
       <div class="flex flex-wrap items-center gap-2">
         <span class="rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide" :class="statusClass">
-          {{ forecast.status }}
+          {{ forecast.riskLevel || forecast.status }}
         </span>
         <span class="text-slate-500">Confidence {{ Math.round(forecast.confidenceScore) }}%</span>
       </div>
@@ -78,14 +86,19 @@ watch(
         <div class="rounded-lg border border-slate-800/80 bg-slate-900/50 px-3 py-2">
           <p class="text-[10px] uppercase tracking-wide text-slate-500">Expected attendance range</p>
           <p class="mt-1 font-mono text-white">
-            {{ forecast.expectedAttendanceLow.toLocaleString() }} — {{ forecast.expectedAttendanceHigh.toLocaleString() }}
-            <span class="text-slate-500">(mid {{ forecast.expectedAttendanceMid.toLocaleString() }})</span>
+            {{ (forecast.totalExpectedAttendanceLow ?? forecast.expectedAttendanceLow).toLocaleString() }} —
+            {{ (forecast.totalExpectedAttendanceHigh ?? forecast.expectedAttendanceHigh).toLocaleString() }}
+            <span class="text-slate-500"
+              >(mid {{ (forecast.totalExpectedAttendanceMid ?? forecast.expectedAttendanceMid).toLocaleString() }})</span
+            >
           </p>
         </div>
         <div class="rounded-lg border border-slate-800/80 bg-slate-900/50 px-3 py-2">
           <p class="text-[10px] uppercase tracking-wide text-slate-500">Additional demand range</p>
           <p class="mt-1 font-mono text-white">
-            +{{ forecast.additionalDemandLow.toLocaleString() }} … +{{ forecast.additionalDemandHigh.toLocaleString() }}
+            +{{ (forecast.estimatedAdditionalDemandLow ?? forecast.additionalDemandLow).toLocaleString() }} … +{{
+              (forecast.estimatedAdditionalDemandHigh ?? forecast.additionalDemandHigh).toLocaleString()
+            }}
           </p>
         </div>
         <div class="rounded-lg border border-slate-800/80 bg-slate-900/50 px-3 py-2">
@@ -94,7 +107,7 @@ watch(
         </div>
         <div class="rounded-lg border border-slate-800/80 bg-slate-900/50 px-3 py-2">
           <p class="text-[10px] uppercase tracking-wide text-slate-500">Known / registered expected</p>
-          <p class="mt-1 font-mono text-white">{{ forecast.knownRegisteredExpected.toLocaleString() }}</p>
+          <p class="mt-1 font-mono text-white">{{ (forecast.knownRegisteredDemand ?? forecast.knownRegisteredExpected).toLocaleString() }}</p>
         </div>
         <div class="rounded-lg border border-slate-800/80 bg-slate-900/50 px-3 py-2">
           <p class="text-[10px] uppercase tracking-wide text-slate-500">External demand pressure</p>

@@ -1,6 +1,7 @@
 import type { AuthUser, LoginResult, UserDateFormat, UserTimeFormat, UserUiPreferences } from '@/types/auth'
+import { resolveApiOrigin } from '@/utils/apiOrigin'
 
-const origin = import.meta.env.VITE_API_URL || ''
+const origin = resolveApiOrigin()
 
 function url(path: string) {
   if (path.startsWith('http')) return path

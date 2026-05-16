@@ -5,7 +5,7 @@ print_step() {
   printf '\n[api-startup] %s\n' "$1"
 }
 
-print_step "Waiting for PostgreSQL (db:5432/smartpark)..."
+print_step "Waiting for PostgreSQL (${DB_HOST:-db}:${DB_PORT:-5432}/${DB_NAME:-smartpark})..."
 node scripts/wait-for-postgres.js
 
 print_step "Running migrations..."

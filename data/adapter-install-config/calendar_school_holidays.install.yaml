@@ -2,7 +2,7 @@
 schemaVersion: 1
 adapterKey: calendar_school_holidays
 installedAt: '2026-05-08T10:30:01.379Z'
-updatedAt: '2026-05-13T19:29:39.146Z'
+updatedAt: '2026-05-16T11:38:23.097Z'
 configJson:
   parkSlug: europapark
   timezone: Europe/Berlin
@@ -14,5 +14,5 @@ outputProfiles:
   - SPARKPLUG_JSON
   - CANONICAL_HISTORIAN
 emitEnabled: true
-ingestCanonicalEnabled: true
+ingestCanonicalEnabled: false
 scheduleCron: '0 3 * * *'

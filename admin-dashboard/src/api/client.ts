@@ -26,6 +26,7 @@ import type {
   ParkDemandForecast5mRow,
   TrafficCorridorRow,
   TrafficCorridorSnapshotRow,
+  TrafficCorridorSnapshotDebugPayload,
   GeoPressurePayload,
   GeoFlowSimulationPayload,
   PlatformOperationalContext,
@@ -57,61 +58,7 @@ import type {
 } from '@/types/api'
 import type { AuditLogRow } from '@/types/auth'
 import { apiParkHeaders } from '@/utils/apiParkContext'
-
-function defaultHttpPort(protocol: string): string {
-  return protocol === 'https:' ? '443' : '80'
-}
-
-function effectivePort(u: URL): string {
-  return u.port || defaultHttpPort(u.protocol)
-}
-
-function isLoopbackHost(hostname: string): boolean {
-  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '[::1]'
-}
-
-/**
- * In dev, use same-origin relative `/api/...` when VITE_API_URL is unset so Vite's `server.proxy`
- * forwards to the API (see vite.config.ts).
- *
- * Ignore VITE_API_URL when it clearly targets the dev UI instead of the API:
- * - Same origin as the page.
- * - Both loopback hosts and same port (e.g. `http://localhost:5173` in env but the tab is
- *   `http://127.0.0.1:5173`).
- * - Loopback in env, non-loopback page, same port (e.g. env `http://localhost:5173` but the tab
- *   is `http://192.168.x.x:5173` — calling localhost from that tab would be wrong; relative /api
- *   uses the Vite proxy on the tab host).
- */
-function resolveApiOrigin(): string {
-  const raw = String(import.meta.env.VITE_API_URL || '').trim().replace(/\/$/, '')
-  if (!raw) return ''
-  if (import.meta.env.DEV && typeof globalThis.window !== 'undefined') {
-    try {
-      const configured = new URL(raw)
-      const page = new URL(globalThis.window.location.href)
-      if (configured.origin === page.origin) {
-        console.warn(
-          '[Smart Park] VITE_API_URL matches the dev UI origin — ignoring it so /api uses the Vite proxy. Unset VITE_API_URL or set it to the API (e.g. http://localhost:3000).'
-        )
-        return ''
-      }
-      const samePort = effectivePort(configured) === effectivePort(page)
-      const loopbackLoopbackSamePort =
-        samePort && isLoopbackHost(configured.hostname) && isLoopbackHost(page.hostname)
-      const loopbackEnvButLanUi =
-        samePort && isLoopbackHost(configured.hostname) && !isLoopbackHost(page.hostname)
-      if (loopbackLoopbackSamePort || loopbackEnvButLanUi) {
-        console.warn(
-          '[Smart Park] VITE_API_URL looks like the dev UI host/port — ignoring it so /api uses the Vite proxy. Point VITE_API_URL at the API (e.g. http://localhost:3000) or leave it unset.'
-        )
-        return ''
-      }
-    } catch {
-      /* invalid URL — fall through */
-    }
-  }
-  return raw
-}
+import { resolveApiOrigin } from '@/utils/apiOrigin'
 
 const origin = resolveApiOrigin()
 
@@ -166,6 +113,8 @@ async function fetchEnvelope<T>(path: string, init?: RequestInit): Promise<T> {
   }
   const res = await fetch(url(path), {
     ...init,
+    // Avoid stale GET (e.g. model list) after mutations when a cache/proxy/browser would reuse responses.
+    cache: init?.cache ?? 'no-store',
     headers: {
       Accept: 'application/json',
       'Content-Type': 'application/json',
@@ -629,6 +578,36 @@ export type AiStudioCatalog = {
   manualAlgorithms: Array<{ code: string; label: string }>
   hierarchy: Array<{ scope: string; description: string }>
   predictionOrder: string[]
+  algorithmSupport?: {
+    SANDBOX: {
+      implementationNote?: string
+      selectableAlgorithms: Array<{
+        code: string
+        label: string
+        implementationKind?: string
+        locked?: boolean
+        lockReason?: string
+      }>
+      autoStrategySupported?: boolean
+    }
+    FEATURE_STORE: {
+      implementationNote?: string
+      selectableAlgorithms: Array<{
+        code: string
+        label: string
+        implementationKind?: string
+        locked?: boolean
+        lockReason?: string
+      }>
+      autoStrategySupported?: boolean
+    }
+  }
+  productionMlRuntime?: {
+    modelStore?: string
+    algorithmFamily?: string
+    summary?: string
+    studioVsProduction?: string
+  }
 }
 
 export type AiStudioFeatureStorePreview = {
@@ -646,11 +625,79 @@ export type AiStudioDatasetStats = {
   rowCount: number
   parkSnapshotCount: number
   entitySampleCount: number
+  /** When a specific asset is selected: training-relevant row estimate (FEATURE_STORE = ride snapshots; else legacy sample counts). */
+  heuristicRowsSelectedEntity?: number | null
   missingRate: number
   seasonalityScore: number
   volatilityScore: number
   windowDays: number
   featureStorePreview?: AiStudioFeatureStorePreview | null
+  /**
+   * FEATURE_STORE: per-X completeness = rows with non-null raw sources / rows analyzed (same as `featureStoreFeatureCoverage`).
+   */
+  featureCompleteness?: Record<string, number> | null
+  featureCompletenessRowsAnalyzed?: number
+  /**
+   * @deprecated Prefer `featureCompleteness` — same values.
+   */
+  featureStoreFeatureCoverage?: Record<string, number> | null
+  featureStoreCoverageRowsAnalyzed?: number
+}
+
+/** POST /ai/studio/models/validate-features */
+export type AiStudioFeatureCoverageResponse = {
+  entityType: string
+  entityId: string
+  rowsAnalyzed: number
+  featureCoverage: Record<string, number>
+  featureCompleteness: Record<string, number>
+  featureCompletenessRowsAnalyzed: number
+}
+
+/** GET /ai/studio/models/batch-train-status — Phase 3 park-wide ride batch. */
+export type AiStudioBatchTrainResultRow = {
+  entityId: string
+  assetLabel?: string
+  ok: boolean
+  modelId?: string
+  mae?: number | null
+  rmse?: number | null
+  r2?: number | null
+  version?: number
+  algorithm?: string
+  error?: string
+  code?: string | null
+  /** Asset `evaluatedAlgorithm` before this train step. */
+  previousAlgorithm?: string | null
+  /** Best recent FEATURE_STORE model R² for this ride before training (for UI delta). */
+  previousR2?: number | null
+}
+
+export type AiStudioBatchTrainStatus = {
+  batchId?: string | null
+  total: number
+  current: number
+  currentEntityId: string
+  currentEntityLabel?: string
+  results: AiStudioBatchTrainResultRow[]
+  isRunning: boolean
+  error?: string | null
+  startedAt?: string | null
+  finishedAt?: string | null
+}
+
+export type AiStudioBatchTrainStartResponse = {
+  accepted: boolean
+  total: number
+  message?: string
+  batchId?: string | null
+}
+
+export type AiStudioBatchApplyResponse = {
+  updated: number
+  applied: number
+  modelsActivated: number
+  modelsActivateSkipped: number
 }
 
 /** Phase P — persisted ML Studio feature draft (app_settings), scoped by park + entity. */
@@ -678,6 +725,14 @@ export type AiStudioModelRow = {
   r2: number | null
   lastTrainingAt: string
   activeFlag: boolean
+  /** ACTIVE | CANDIDATE | ARCHIVED — from API after governance rollout */
+  governanceStatus?: 'ACTIVE' | 'CANDIDATE' | 'ARCHIVED'
+  archivedAt?: string | null
+  archivedBy?: string | null
+  /** Registry transparency: best MAE among non-archived rows in the same scope slot (evaluation only). */
+  bestMaeInSlot?: boolean
+  /** active_deployment | candidate | archived */
+  deploymentStatus?: string
   modelPayload: Record<string, unknown>
   featureImportanceJson: Record<string, number>
   evalHoldoutJson: {
@@ -701,6 +756,40 @@ export async function getAiStudioDatasetStats(params: {
   if (params.entityId) q.set('entityId', params.entityId)
   if (params.dataset) q.set('dataset', params.dataset)
   return fetchEnvelope<AiStudioDatasetStats>(`/api/v1/ai/studio/dataset-stats?${q}`)
+}
+
+export async function postAiStudioValidateFeatures(body: {
+  entityType: 'RIDE'
+  entityId: string
+  features?: string[]
+}): Promise<AiStudioFeatureCoverageResponse> {
+  return fetchEnvelope<AiStudioFeatureCoverageResponse>('/api/v1/ai/studio/models/validate-features', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export async function getAiStudioBatchTrainStatus(): Promise<AiStudioBatchTrainStatus> {
+  return fetchEnvelope<AiStudioBatchTrainStatus>('/api/v1/ai/studio/models/batch-train-status')
+}
+
+export async function postAiStudioBatchTrainRides(body?: {
+  strategy?: 'AUTO' | 'MANUAL'
+  algorithm?: string | null
+  features?: string[]
+  featureStoreTrainingOptions?: Record<string, unknown>
+}): Promise<AiStudioBatchTrainStartResponse> {
+  return fetchEnvelope<AiStudioBatchTrainStartResponse>('/api/v1/ai/studio/models/batch-train-rides', {
+    method: 'POST',
+    body: JSON.stringify(body ?? {}),
+  })
+}
+
+export async function postAiStudioBatchApply(body: { batchId: string }): Promise<AiStudioBatchApplyResponse> {
+  return fetchEnvelope<AiStudioBatchApplyResponse>('/api/v1/ai/studio/models/batch-apply', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
 }
 
 export async function getAiStudioFeatureDraft(params: {
@@ -735,6 +824,7 @@ export async function listAiStudioModels(params?: {
   targetVariable?: string
   modelScope?: string
   activeOnly?: boolean
+  includeArchived?: boolean
   limit?: number
 }): Promise<AiStudioModelRow[]> {
   const q = new URLSearchParams()
@@ -742,6 +832,7 @@ export async function listAiStudioModels(params?: {
   if (params?.targetVariable) q.set('targetVariable', params.targetVariable)
   if (params?.modelScope) q.set('modelScope', params.modelScope)
   if (params?.activeOnly === true) q.set('activeOnly', 'true')
+  if (params?.includeArchived === true) q.set('includeArchived', 'true')
   if (params?.limit != null) q.set('limit', String(params.limit))
   const qs = q.toString()
   return fetchEnvelope<AiStudioModelRow[]>(`/api/v1/ai/studio/models${qs ? `?${qs}` : ''}`)
@@ -760,6 +851,27 @@ export async function postAiStudioTrain(body: {
   algorithm?: string | null
   dataset?: 'FEATURE_STORE' | 'SANDBOX'
   horizonMinutes?: number
+  featureStoreTrainingOptions?: {
+    ridgeLambda?: number
+    randomForest?: {
+      nTrees?: number
+      maxDepth?: number
+      minLeaf?: number
+      maxSplitCandidates?: number
+    }
+    gradientBoosting?: {
+      rounds?: number
+      shrinkage?: number
+      treeDepth?: number
+      minLeaf?: number
+      maxSplitCandidates?: number
+    }
+    neuralNetwork?: {
+      hidden?: number
+      epochs?: number
+      lr?: number
+    }
+  }
 }): Promise<AiStudioModelRow> {
   return fetchEnvelope<AiStudioModelRow>('/api/v1/ai/studio/models/train', {
     method: 'POST',
@@ -771,6 +883,35 @@ export async function patchAiStudioModelActivate(id: string, activeFlag: boolean
   return fetchEnvelope<AiStudioModelRow>(`/api/v1/ai/studio/models/${encodeURIComponent(id)}/activate`, {
     method: 'PATCH',
     body: JSON.stringify({ activeFlag }),
+  })
+}
+
+export async function deleteAiStudioModelArchive(id: string): Promise<AiStudioModelRow> {
+  return fetchEnvelope<AiStudioModelRow>(`/api/v1/ai/studio/models/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function deleteAiStudioModelPermanent(id: string): Promise<{ id: string; deleted: boolean }> {
+  const q = new URLSearchParams()
+  q.set('permanent', 'true')
+  const data = await fetchEnvelope<{ id: string; deleted: boolean }>(
+    `/api/v1/ai/studio/models/${encodeURIComponent(id)}?${q}`,
+    { method: 'DELETE' }
+  )
+  if (!data || data.deleted !== true) {
+    throw new ApiRequestError(
+      'Permanent delete was not confirmed (server must return deleted: true). Rebuild/restart the API so DELETE ?permanent=true is supported.',
+      502,
+      'DELETE_PERMANENT_UNCONFIRMED'
+    )
+  }
+  return data
+}
+
+export async function postAiStudioModelRestore(id: string): Promise<AiStudioModelRow> {
+  return fetchEnvelope<AiStudioModelRow>(`/api/v1/ai/studio/models/${encodeURIComponent(id)}/restore`, {
+    method: 'POST',
   })
 }
 
@@ -803,6 +944,55 @@ export async function postAiStudioPredict(body: {
   resolution: string
 }> {
   return fetchEnvelope('/api/v1/ai/studio/predict', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export type AiStudioRuntimeModelSummary = {
+  id: string
+  modelScope: string
+  entityType: string
+  entityId: string | null
+  targetVariable: string
+  version: number
+  algorithm: string
+  activeFlag: boolean
+  archivedAt: string | null
+  mae: number | null
+  r2: number | null
+}
+
+export type AiStudioRuntimeResolution = {
+  parkId: string
+  entityType: string
+  entityIdRequested: string | null
+  targetVariable: string
+  canonicalEntityId: string | null
+  levels: Array<{
+    level: string
+    activeModel: AiStudioRuntimeModelSummary | null
+    bestMaeModel: AiStudioRuntimeModelSummary | null
+    candidateCount: number
+    reason: string
+  }>
+  final: {
+    level: string
+    model: AiStudioRuntimeModelSummary | null
+    reason: string
+  }
+  help: {
+    bestVsActive: string
+    productionNote: string
+  }
+}
+
+export async function postAiStudioRuntimeResolution(body: {
+  entityType: string
+  entityId?: string | null
+  targetVariable: string
+}): Promise<AiStudioRuntimeResolution> {
+  return fetchEnvelope<AiStudioRuntimeResolution>('/api/v1/ai/studio/runtime-resolution', {
     method: 'POST',
     body: JSON.stringify(body),
   })
@@ -1868,6 +2058,12 @@ export type AdminPlatformSettingsPayload = {
     mqttClientId: string
     mqttUsernameConfigured: boolean
   }
+  telemetry: {
+    influxInfrastructureEnabled: boolean
+    influxUrlConfigured: boolean
+    influxOrg: string
+    influxBucket: string
+  }
   general: {
     nodeEnv: string
     port: number
@@ -2222,7 +2418,65 @@ function mergeAdapterPackagesFromBody(body: {
   }
 }
 
-async function fetchAdapterPackagesResource(apiPath: string): Promise<AdapterPackagesResponse> {
+/**
+ * Same API envelope as {@link mergeAdapterPackagesFromBody}, but only includes adapters that have a
+ * `adapter_packages` row. Disk-scan-only packages must not appear as “installed” after DELETE.
+ */
+function mergeInstalledAdapterPackagesFromBody(body: {
+  data?: unknown
+  meta?: Record<string, unknown> | null
+}): AdapterPackagesResponse {
+  const registry = Array.isArray(body.data) ? body.data : []
+  const meta = body.meta !== undefined ? body.meta : null
+  const scanList = Array.isArray(
+    (meta as { localIntegrationPackages?: unknown[] } | null)?.localIntegrationPackages
+  )
+    ? (meta as { localIntegrationPackages: unknown[] }).localIntegrationPackages
+    : []
+
+  const scanByKey = new Map<string, AdapterPackageDto>()
+  for (const item of scanList) {
+    const dto = normalizeScanPackage(item)
+    if (dto) scanByKey.set(dto.adapterKey, dto)
+  }
+
+  const byKey = new Map<string, AdapterPackageDto>()
+  for (const row of registry) {
+    const reg = normalizeRegistryPackage(row)
+    if (!reg) continue
+    const scan = scanByKey.get(reg.adapterKey)
+    if (scan) {
+      const dto = { ...scan }
+      dto.enabled = reg.enabled
+      dto.status = reg.status
+      dto.sourceType = reg.sourceType
+      dto.sourcePath = reg.sourcePath
+      if (!dto.description && reg.description) dto.description = reg.description
+      if (!dto.providedDomains?.length && reg.providedDomains?.length) dto.providedDomains = reg.providedDomains
+      if (!dto.providedMetrics?.length && reg.providedMetrics?.length) dto.providedMetrics = reg.providedMetrics
+      if (!dto.iotClass && reg.iotClass) dto.iotClass = reg.iotClass
+      if (reg.id) dto.id = reg.id
+      if (reg.metadata) dto.metadata = reg.metadata
+      if (!dto.ui && reg.ui) dto.ui = reg.ui
+      if (!dto.logoAssetUrl && reg.logoAssetUrl) dto.logoAssetUrl = reg.logoAssetUrl
+      if (!dto.readmeAssetUrl && reg.readmeAssetUrl) dto.readmeAssetUrl = reg.readmeAssetUrl
+      if (!dto.bannerAssetUrl && reg.bannerAssetUrl) dto.bannerAssetUrl = reg.bannerAssetUrl
+      byKey.set(dto.adapterKey, dto)
+    } else {
+      byKey.set(reg.adapterKey, reg)
+    }
+  }
+
+  return {
+    packages: [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name)),
+    meta: meta && typeof meta === 'object' ? meta : null,
+  }
+}
+
+async function fetchAdapterPackagesResource(
+  apiPath: string,
+  opts?: { installedOnly?: boolean }
+): Promise<AdapterPackagesResponse> {
   const token = getAccessToken()
   const res = await fetch(url(apiPath), {
     headers: {
@@ -2251,7 +2505,7 @@ async function fetchAdapterPackagesResource(apiPath: string): Promise<AdapterPac
     throw new Error(msg || `HTTP ${res.status}`)
   }
 
-  return mergeAdapterPackagesFromBody(body)
+  return opts?.installedOnly ? mergeInstalledAdapterPackagesFromBody(body) : mergeAdapterPackagesFromBody(body)
 }
 
 /**
@@ -2261,9 +2515,9 @@ export async function getAdapterPackages(): Promise<AdapterPackagesResponse> {
   return fetchAdapterPackagesResource('/api/v1/integrations/adapters/packages')
 }
 
-/** GET /integrations/installed-adapters — same enrichment shape as packages list. */
+/** GET /integrations/installed-adapters — DB-backed installs only (no disk-only ghost cards). */
 export async function getInstalledAdapters(): Promise<AdapterPackagesResponse> {
-  return fetchAdapterPackagesResource('/api/v1/integrations/installed-adapters')
+  return fetchAdapterPackagesResource('/api/v1/integrations/installed-adapters', { installedOnly: true })
 }
 
 export type InstallLocalAdapterBody = {
@@ -2685,6 +2939,53 @@ export async function patchIntegrationSettings(value: Record<string, unknown>): 
   return fetchEnvelope('/api/v1/integrations/settings', {
     method: 'PATCH',
     body: JSON.stringify(value),
+  })
+}
+
+export type TrafficProviderConfigPublic = {
+  id: string | null
+  providerKey: string
+  displayName: string
+  enabled: boolean
+  maskedApiKey: string | null
+  pollIntervalMinutes: number
+  timeoutMs: number
+  baseUrl: string
+  createdAt?: string | null
+  updatedAt?: string | null
+  createdBy?: string | null
+  updatedBy?: string | null
+}
+
+export async function getTrafficProviders(): Promise<TrafficProviderConfigPublic[]> {
+  return fetchEnvelope<TrafficProviderConfigPublic[]>('/api/v1/integrations/traffic-providers')
+}
+
+export async function putTomTomTrafficProvider(body: {
+  enabled: boolean
+  apiKey?: string | null
+  displayName?: string | null
+  pollIntervalMinutes?: number
+  timeoutMs?: number
+  baseUrl?: string | null
+}): Promise<TrafficProviderConfigPublic> {
+  return fetchEnvelope<TrafficProviderConfigPublic>('/api/v1/integrations/traffic-providers/traffic_tomtom', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+export async function postTomTomTrafficProviderTest(body?: {
+  originLat?: number
+  originLng?: number
+  destinationLat?: number
+  destinationLng?: number
+}): Promise<{ ok: boolean; providerStatus: string; travelTimeSeconds: number; routeDistanceMeters: number | null }> {
+  return fetchEnvelope('/api/v1/integrations/traffic-providers/traffic_tomtom/test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}),
   })
 }
 
@@ -3281,6 +3582,11 @@ export type IntegrationFeatureFlags = {
   adapterDiscoverySpyEnabled: boolean
   mqttEnforceCapabilities: boolean
   mqttCapabilityGuardMode?: string
+  /** Mirrors API `INTEGRATION_FLOW_ENGINE_ENABLED` — Integration Flow Engine routes + Studio. */
+  integrationFlowEngineEnabled?: boolean
+  integrationFlowScriptNodeEnabled?: boolean
+  /** Mirrors API `WIDGET_RUNTIME_ENABLED` — governed widget registry + Widget Runtime Studio. */
+  widgetRuntimeEnabled?: boolean
 }
 
 export type MqttCapabilityGuardStatus = {
@@ -3298,6 +3604,469 @@ export async function getMqttCapabilityGuardStatus(): Promise<MqttCapabilityGuar
 
 export async function getIntegrationFeatureFlags(): Promise<IntegrationFeatureFlags> {
   return fetchEnvelope<IntegrationFeatureFlags>('/api/v1/integrations/feature-flags')
+}
+
+// --- Integration Flow Engine (gated by backend INTEGRATION_FLOW_ENGINE_ENABLED) ---
+
+/** Optional layout hints for Integration Flow Studio (ignored by the runtime runner). */
+export type IntegrationFlowJsonNode = {
+  id: string
+  type: string
+  config: Record<string, unknown>
+  position?: { x: number; y: number }
+}
+
+export type IntegrationFlowJson = {
+  nodes: IntegrationFlowJsonNode[]
+  edges: Array<{ source: string; target: string }>
+}
+
+export type IntegrationFlowDefinitionDto = {
+  id: string
+  parkId?: string | null
+  name: string
+  description?: string | null
+  enabled: boolean
+  triggerType: string
+  flowJson: IntegrationFlowJson
+  scheduleEnabled?: boolean
+  scheduleIntervalSeconds?: number | null
+  lastScheduledRunAt?: string | null
+  nextScheduledRunAt?: string | null
+  scheduleLockUntil?: string | null
+  retryEnabled?: boolean
+  maxRetryAttempts?: number
+  retryDelaySeconds?: number | null
+  retryOnNodeTypes?: string[] | null
+  createdBy?: string | null
+  updatedBy?: string | null
+  createdAt?: string
+  updatedAt?: string
+}
+
+/** Allowed backend values for `scheduleIntervalSeconds`. */
+export const INTEGRATION_FLOW_SCHEDULE_INTERVAL_SECONDS = [60, 300, 900, 1800, 3600] as const
+
+/** Allowed backend values for `retryDelaySeconds` when retry is enabled. */
+export const INTEGRATION_FLOW_RETRY_DELAY_SECONDS = [60, 300, 900] as const
+
+export type IntegrationFlowValidationResult = {
+  valid: boolean
+  errors: string[]
+  warnings: string[]
+}
+
+export type IntegrationFlowRunSummaryDto = {
+  runId: string
+  flowId: string
+  status: string
+  steps: Array<{ nodeId: string; nodeType: string; status: string; errorMessage?: string | null }>
+  output: unknown
+}
+
+export type IntegrationFlowRunStepDto = {
+  id: string
+  runId: string
+  nodeId: string
+  nodeType: string
+  status: string
+  startedAt?: string | null
+  finishedAt?: string | null
+  durationMs?: number | null
+  inputJson?: unknown
+  outputJson?: unknown
+  /** Sanitized lightweight preview for Studio debugging (optional). */
+  previewInputJson?: unknown
+  previewOutputJson?: unknown
+  errorMessage?: string | null
+  createdAt?: string
+  updatedAt?: string
+}
+
+export type IntegrationFlowTimelineEntryDto = {
+  nodeId: string
+  nodeType: string
+  status: string
+  startedAt?: string | null
+  finishedAt?: string | null
+  durationMs?: number | null
+  errorMessage?: string | null
+}
+
+export type IntegrationFlowRunDto = {
+  id: string
+  flowId?: string | null
+  status: string
+  startedAt?: string | null
+  finishedAt?: string | null
+  durationMs?: number | null
+  errorMessage?: string | null
+  inputJson?: unknown
+  outputJson?: unknown
+  createdAt?: string
+  updatedAt?: string
+  steps?: IntegrationFlowRunStepDto[]
+  /** Derived from steps (API); may be absent on older responses. */
+  timeline?: IntegrationFlowTimelineEntryDto[]
+  parentRunId?: string | null
+  retryAttempt?: number
+  retryOfRunId?: string | null
+  nextRetryAt?: string | null
+  retryStatus?: string | null
+  acknowledgedAt?: string | null
+  acknowledgedBy?: string | null
+  acknowledgementNote?: string | null
+}
+
+export type IntegrationFlowFailureInboxItemDto = {
+  runId: string
+  flowId: string | null
+  flowName: string | null
+  status: string
+  retryStatus: string | null
+  retryAttempt: number
+  maxRetryAttempts: number
+  retryEnabled: boolean
+  nextRetryAt: string | null
+  startedAt: string | null
+  finishedAt: string | null
+  durationMs: number | null
+  errorMessage: string | null
+  failedNodeId: string | null
+  failedNodeType: string | null
+  failedStepErrorMessage: string | null
+  acknowledgedAt: string | null
+  acknowledgedBy: string | null
+  acknowledgementNote: string | null
+}
+
+export type IntegrationFlowFailureInboxPageDto = {
+  items: IntegrationFlowFailureInboxItemDto[]
+  total: number
+  limit: number
+  offset: number
+}
+
+export type IntegrationFlowTemplateDto = {
+  templateKey: string
+  displayName: string
+  description: string
+  category: string
+  defaultConfigNotes: string
+  flowJson: IntegrationFlowJson
+}
+
+export type IntegrationNodeRegistryEntryDto = {
+  id: string
+  nodeKey: string
+  nodeType: string
+  displayName: string
+  category?: string | null
+  description?: string | null
+  configSchema?: unknown
+  inputSchema?: unknown
+  outputSchema?: unknown
+  enabled: boolean
+  createdAt?: string
+  updatedAt?: string
+}
+
+export async function listIntegrationFlows(params?: {
+  parkId?: string
+  limit?: number
+  offset?: number
+}): Promise<IntegrationFlowDefinitionDto[]> {
+  const q = new URLSearchParams()
+  if (params?.parkId) q.set('parkId', params.parkId)
+  if (params?.limit != null) q.set('limit', String(params.limit))
+  if (params?.offset != null) q.set('offset', String(params.offset))
+  const qs = q.toString() ? `?${q.toString()}` : ''
+  return fetchEnvelope<IntegrationFlowDefinitionDto[]>(`/api/v1/integration-flows${qs}`)
+}
+
+export async function getIntegrationFlow(id: string): Promise<IntegrationFlowDefinitionDto> {
+  return fetchEnvelope<IntegrationFlowDefinitionDto>(`/api/v1/integration-flows/${encodeURIComponent(id)}`)
+}
+
+export async function createIntegrationFlow(body: {
+  parkId?: string | null
+  name: string
+  description?: string | null
+  enabled?: boolean
+  triggerType?: string
+  flowJson: IntegrationFlowJson
+  scheduleEnabled?: boolean
+  scheduleIntervalSeconds?: number | null
+  retryEnabled?: boolean
+  maxRetryAttempts?: number
+  retryDelaySeconds?: number | null
+  retryOnNodeTypes?: string[] | null
+}): Promise<IntegrationFlowDefinitionDto> {
+  return fetchEnvelope<IntegrationFlowDefinitionDto>('/api/v1/integration-flows', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export async function patchIntegrationFlow(
+  id: string,
+  body: Partial<{
+    parkId: string | null
+    name: string
+    description: string | null
+    enabled: boolean
+    triggerType: string
+    flowJson: IntegrationFlowJson
+    scheduleEnabled: boolean
+    scheduleIntervalSeconds: number | null
+    retryEnabled?: boolean
+    maxRetryAttempts?: number
+    retryDelaySeconds?: number | null
+    retryOnNodeTypes?: string[] | null
+  }>
+): Promise<IntegrationFlowDefinitionDto> {
+  return fetchEnvelope<IntegrationFlowDefinitionDto>(`/api/v1/integration-flows/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  })
+}
+
+export async function deleteIntegrationFlow(id: string): Promise<void> {
+  await fetchEnvelope<void>(`/api/v1/integration-flows/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+export async function validateIntegrationFlow(id: string): Promise<IntegrationFlowValidationResult> {
+  return fetchEnvelope<IntegrationFlowValidationResult>(
+    `/api/v1/integration-flows/${encodeURIComponent(id)}/validate`,
+    { method: 'POST', body: '{}' }
+  )
+}
+
+export async function recalculateIntegrationFlowSchedule(id: string): Promise<IntegrationFlowDefinitionDto> {
+  return fetchEnvelope<IntegrationFlowDefinitionDto>(
+    `/api/v1/integration-flows/${encodeURIComponent(id)}/schedule/recalculate`,
+    { method: 'POST', body: '{}' }
+  )
+}
+
+export async function runIntegrationFlow(
+  id: string,
+  input?: Record<string, unknown>
+): Promise<IntegrationFlowRunSummaryDto> {
+  return fetchEnvelope<IntegrationFlowRunSummaryDto>(
+    `/api/v1/integration-flows/${encodeURIComponent(id)}/run`,
+    { method: 'POST', body: JSON.stringify({ input: input ?? {} }) }
+  )
+}
+
+export async function listIntegrationFlowRuns(
+  flowId: string,
+  params?: { limit?: number; offset?: number }
+): Promise<IntegrationFlowRunDto[]> {
+  const q = new URLSearchParams()
+  if (params?.limit != null) q.set('limit', String(params.limit))
+  if (params?.offset != null) q.set('offset', String(params.offset))
+  const qs = q.toString() ? `?${q.toString()}` : ''
+  return fetchEnvelope<IntegrationFlowRunDto[]>(
+    `/api/v1/integration-flows/${encodeURIComponent(flowId)}/runs${qs}`
+  )
+}
+
+export async function getIntegrationFlowRun(runId: string): Promise<IntegrationFlowRunDto> {
+  return fetchEnvelope<IntegrationFlowRunDto>(`/api/v1/integration-flows/runs/${encodeURIComponent(runId)}`)
+}
+
+export async function postIntegrationFlowRunRetry(runId: string): Promise<IntegrationFlowRunSummaryDto> {
+  return fetchEnvelope<IntegrationFlowRunSummaryDto>(
+    `/api/v1/integration-flows/runs/${encodeURIComponent(runId)}/retry`,
+    { method: 'POST', body: '{}' }
+  )
+}
+
+export async function listIntegrationFlowFailures(params?: {
+  flowId?: string
+  retryStatus?: string
+  nodeType?: string
+  acknowledged?: 'yes' | 'no' | 'all'
+  from?: string
+  to?: string
+  limit?: number
+  offset?: number
+}): Promise<IntegrationFlowFailureInboxPageDto> {
+  const q = new URLSearchParams()
+  if (params?.flowId) q.set('flowId', params.flowId)
+  if (params?.retryStatus) q.set('retryStatus', params.retryStatus)
+  if (params?.nodeType) q.set('nodeType', params.nodeType)
+  if (params?.acknowledged) q.set('acknowledged', params.acknowledged)
+  if (params?.from) q.set('from', params.from)
+  if (params?.to) q.set('to', params.to)
+  if (params?.limit != null) q.set('limit', String(params.limit))
+  if (params?.offset != null) q.set('offset', String(params.offset))
+  const qs = q.toString() ? `?${q.toString()}` : ''
+  return fetchEnvelope<IntegrationFlowFailureInboxPageDto>(`/api/v1/integration-flows/failures${qs}`)
+}
+
+export async function acknowledgeIntegrationFlowFailure(
+  runId: string,
+  note?: string | null
+): Promise<IntegrationFlowFailureInboxItemDto> {
+  return fetchEnvelope<IntegrationFlowFailureInboxItemDto>(
+    `/api/v1/integration-flows/runs/${encodeURIComponent(runId)}/acknowledge`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ note: note ?? '' }),
+    }
+  )
+}
+
+export async function listIntegrationFlowTemplates(): Promise<IntegrationFlowTemplateDto[]> {
+  return fetchEnvelope<IntegrationFlowTemplateDto[]>('/api/v1/integration-flows/templates')
+}
+
+export async function createIntegrationFlowFromTemplate(body: {
+  templateKey: string
+  name: string
+  parkId?: string | null
+  description?: string | null
+  enabled?: boolean
+  configOverrides?: { nodes?: Record<string, Record<string, unknown>> }
+}): Promise<IntegrationFlowDefinitionDto> {
+  return fetchEnvelope<IntegrationFlowDefinitionDto>('/api/v1/integration-flows/from-template', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export async function listIntegrationFlowNodes(): Promise<IntegrationNodeRegistryEntryDto[]> {
+  return fetchEnvelope<IntegrationNodeRegistryEntryDto[]>('/api/v1/integration-nodes')
+}
+
+// --- Widget Runtime (gated by backend WIDGET_RUNTIME_ENABLED) ---
+
+export type DashboardWidgetRegistryEntryDto = {
+  id: string
+  widgetKey: string
+  displayName: string
+  category: string | null
+  description: string | null
+  componentName: string
+  configSchema: Record<string, unknown> | null
+  enabled: boolean
+}
+
+export type DashboardDataSourceRegistryEntryDto = {
+  id: string
+  dataSourceKey: string
+  displayName: string
+  category: string | null
+  description: string | null
+  sourceType: string
+  endpoint: string | null
+  refreshSeconds: number
+  enabled: boolean
+}
+
+export type DashboardWidgetInstanceDto = {
+  id: string
+  widgetKey: string
+  title: string | null
+  description: string | null
+  widgetConfig: Record<string, unknown>
+  dataSourceKey: string | null
+  enabled: boolean
+  createdBy: string | null
+  updatedBy: string | null
+  createdAt?: string
+  updatedAt?: string
+}
+
+export type WidgetInstanceValidationResultDto = {
+  valid: boolean
+  errors: string[]
+  previewData?: unknown
+}
+
+export type WidgetInstanceDataDto = {
+  instance: DashboardWidgetInstanceDto
+  widget?: DashboardWidgetRegistryEntryDto | null
+  data?: unknown
+}
+
+export async function listWidgetRuntimeWidgets(): Promise<DashboardWidgetRegistryEntryDto[]> {
+  return fetchEnvelope<DashboardWidgetRegistryEntryDto[]>('/api/v1/widget-runtime/widgets')
+}
+
+export async function listWidgetRuntimeDataSources(): Promise<DashboardDataSourceRegistryEntryDto[]> {
+  return fetchEnvelope<DashboardDataSourceRegistryEntryDto[]>('/api/v1/widget-runtime/data-sources')
+}
+
+export async function listWidgetRuntimeInstances(params?: {
+  limit?: number
+  offset?: number
+}): Promise<DashboardWidgetInstanceDto[]> {
+  const q = new URLSearchParams()
+  if (params?.limit != null) q.set('limit', String(params.limit))
+  if (params?.offset != null) q.set('offset', String(params.offset))
+  const qs = q.toString() ? `?${q.toString()}` : ''
+  return fetchEnvelope<DashboardWidgetInstanceDto[]>(`/api/v1/widget-runtime/instances${qs}`)
+}
+
+export async function getWidgetRuntimeInstance(id: string): Promise<DashboardWidgetInstanceDto> {
+  return fetchEnvelope<DashboardWidgetInstanceDto>(
+    `/api/v1/widget-runtime/instances/${encodeURIComponent(id)}`
+  )
+}
+
+export async function createWidgetRuntimeInstance(body: {
+  widgetKey: string
+  title?: string | null
+  description?: string | null
+  widgetConfig?: Record<string, unknown>
+  dataSourceKey?: string | null
+  enabled?: boolean
+}): Promise<DashboardWidgetInstanceDto> {
+  return fetchEnvelope<DashboardWidgetInstanceDto>('/api/v1/widget-runtime/instances', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export async function patchWidgetRuntimeInstance(
+  id: string,
+  body: Partial<{
+    widgetKey: string
+    title: string | null
+    description: string | null
+    widgetConfig: Record<string, unknown>
+    dataSourceKey: string | null
+    enabled: boolean
+  }>
+): Promise<DashboardWidgetInstanceDto> {
+  return fetchEnvelope<DashboardWidgetInstanceDto>(
+    `/api/v1/widget-runtime/instances/${encodeURIComponent(id)}`,
+    { method: 'PATCH', body: JSON.stringify(body) }
+  )
+}
+
+export async function deleteWidgetRuntimeInstance(id: string): Promise<void> {
+  await fetchEnvelope(`/api/v1/widget-runtime/instances/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function validateWidgetRuntimeInstance(
+  id: string
+): Promise<WidgetInstanceValidationResultDto> {
+  return fetchEnvelope<WidgetInstanceValidationResultDto>(
+    `/api/v1/widget-runtime/instances/${encodeURIComponent(id)}/validate`,
+    { method: 'POST' }
+  )
+}
+
+export async function getWidgetRuntimeInstanceData(id: string): Promise<WidgetInstanceDataDto> {
+  return fetchEnvelope<WidgetInstanceDataDto>(
+    `/api/v1/widget-runtime/instances/${encodeURIComponent(id)}/data`
+  )
 }
 
 export async function postThemeparksDiscoveryScanFromSettings(): Promise<{
@@ -4014,6 +4783,14 @@ export async function createManualTrafficSnapshot(
   )
 }
 
+export async function getLatestTrafficSnapshotDebug(
+  corridorId: string
+): Promise<TrafficCorridorSnapshotDebugPayload> {
+  return fetchEnvelope<TrafficCorridorSnapshotDebugPayload>(
+    `/api/v1/traffic-corridors/${encodeURIComponent(corridorId)}/snapshots/latest/debug`
+  )
+}
+
 export type AttendanceRiskForecastRunBody = {
   plannedDemand: number
   knownRegisteredExpected: number
@@ -4060,6 +4837,38 @@ export async function getPlatformParkOperationalContext(
   const qs = q.toString()
   return fetchEnvelope<PlatformOperationalContext>(
     `/api/v1/parks/${encodeURIComponent(parkId)}/operational-context${qs ? `?${qs}` : ''}`
+  )
+}
+
+export type PdmOperationsOverviewAssetRow = {
+  assetId: string
+  name: string | null
+  slug: string | null
+  riskLevel: string
+  healthScore: number | null
+  healthState: string | null
+  healthTrend: string | null
+  telemetryOverall: string | null
+  topFailureMode: string | null
+  evaluatedAt: string
+}
+
+export type PdmOperationsOverviewPayload = {
+  industrialPlatformEnabled: boolean
+  operationsBoardEnabled?: boolean
+  generatedAt?: string
+  assets: PdmOperationsOverviewAssetRow[]
+}
+
+export async function getParkPdmOperationsOverview(
+  parkId: string,
+  params?: { limit?: number }
+): Promise<PdmOperationsOverviewPayload> {
+  const q = new URLSearchParams()
+  if (params?.limit != null) q.set('limit', String(params.limit))
+  const qs = q.toString()
+  return fetchEnvelope<PdmOperationsOverviewPayload>(
+    `/api/v1/parks/${encodeURIComponent(parkId)}/pdm-operations-overview${qs ? `?${qs}` : ''}`
   )
 }
 
@@ -4619,6 +5428,8 @@ export type AddonBoardParkSummary = {
 
 export type AssetPdmSignalStatus = 'OK' | 'WARN' | 'CRITICAL' | 'NO_DATA'
 
+export type AssetPdmTelemetrySource = 'live' | 'simulated' | 'none'
+
 export type AssetPdmSignalEvaluation = {
   ruleId: string
   metricName: string
@@ -4627,6 +5438,10 @@ export type AssetPdmSignalEvaluation = {
   value: number | null
   liveReceivedAt: string | null
   sparkplugDeviceId: string | null
+  sparkplugEdgeNodeId?: string | null
+  telemetrySource?: AssetPdmTelemetrySource
+  trendArrow?: string
+  metricTrend?: string | null
   status: AssetPdmSignalStatus
   thresholds: {
     warnAbove: number | null
@@ -4636,12 +5451,32 @@ export type AssetPdmSignalEvaluation = {
   }
 }
 
+/** Industrial PdM platform envelope (API when `PDM_INDUSTRIAL_PLATFORM_ENABLED` is on). */
+export type PdmIndustrialEvaluation = {
+  platformVersion?: number
+  health?: {
+    healthScore: number
+    healthState: string
+    healthTrend: string
+    confidence: string
+    deductions?: Array<{ code: string; amount: number }>
+  }
+  rideTelemetryProfile?: Record<string, unknown>
+  metricTrends?: Array<Record<string, unknown>>
+  failureModes?: Array<Record<string, unknown>>
+  telemetryQuality?: Record<string, unknown>
+  structuredRecommendations?: Array<Record<string, unknown>>
+  mlReadiness?: Record<string, unknown>
+  sparkplugContext?: Record<string, unknown>
+}
+
 export type AssetPredictiveMaintenancePayload = {
   riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
   recommendation: { title: string; detail: string }
   evaluatedAt: string
   enabledRuleCount: number
   signals: AssetPdmSignalEvaluation[]
+  industrial?: PdmIndustrialEvaluation | null
 }
 
 export type AssetPdmRuleRow = {
@@ -5459,19 +6294,63 @@ export type AssetPdmSparkplugMetricRow = {
   sparkplugDeviceId: string
   lastReceivedAt: string
   lastValue: unknown
+  /** Present when this row is demo telemetry (no live MQTT yet). */
+  source?: 'live' | 'simulated'
+}
+
+export type AssetPdmSparkplugEdgeCandidate = {
+  edgeNodeId: string
+  edgeResolutionSource: string
 }
 
 export type AssetPdmSparkplugMetricsPayload = {
   groupId: string
+  /** @deprecated use resolvedEdgeNodeId — kept for older clients */
   edgeNodeId: string
   deviceCandidates: string[]
   metrics: AssetPdmSparkplugMetricRow[]
   bufferHint: string
+  /** True when the API filled the list with built-in demo metrics. */
+  simulatedFallback?: boolean
+  resolvedEdgeNodeId?: string
+  edgeResolutionSource?: string
+  attemptedEdgeNodeIds?: string[]
+  edgeCandidates?: AssetPdmSparkplugEdgeCandidate[]
+  resolverReason?: string | null
+  zoneSlug?: string | null
 }
 
 export async function getAssetPdmSparkplugMetrics(assetId: string): Promise<AssetPdmSparkplugMetricsPayload> {
   return fetchEnvelope<AssetPdmSparkplugMetricsPayload>(
     `/api/v1/assets/${encodeURIComponent(assetId)}/pdm-sparkplug-metrics`
+  )
+}
+
+export type AssetPdmSparkplugMetricSeriesPayload = {
+  groupId: string
+  edgeNodeId: string
+  metricName: string
+  sparkplugDeviceId: string
+  seriesSource: 'live' | 'simulated' | 'none'
+  points: Array<{ t: string; v: number }>
+  resolvedEdgeNodeId?: string
+  edgeResolutionSource?: string
+  attemptedEdgeNodeIds?: string[]
+  seriesResolvedEdgeNodeId?: string | null
+  simulatedFallback?: boolean
+}
+
+export async function getAssetPdmSparkplugMetricSeries(
+  assetId: string,
+  params: { metricName: string; sparkplugDeviceId: string; points?: number; stepSeconds?: number }
+): Promise<AssetPdmSparkplugMetricSeriesPayload> {
+  const q = new URLSearchParams()
+  q.set('metricName', params.metricName)
+  q.set('sparkplugDeviceId', params.sparkplugDeviceId)
+  if (params.points != null) q.set('points', String(params.points))
+  if (params.stepSeconds != null) q.set('stepSeconds', String(params.stepSeconds))
+  return fetchEnvelope<AssetPdmSparkplugMetricSeriesPayload>(
+    `/api/v1/assets/${encodeURIComponent(assetId)}/pdm-sparkplug-metric-series?${q.toString()}`
   )
 }
 

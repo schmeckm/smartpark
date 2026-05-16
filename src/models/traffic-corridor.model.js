@@ -20,6 +20,7 @@ function defineTrafficCorridor(sequelize) {
       baselineTravelTimeMin: { type: DataTypes.DECIMAL(12, 4), allowNull: false, field: 'baseline_travel_time_min' },
       weight: { type: DataTypes.DECIMAL(12, 4), allowNull: false, defaultValue: 1.0 },
       enabled: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
+      lastPollResult: { type: DataTypes.JSONB, allowNull: true, field: 'last_poll_result' },
     },
     {
       sequelize,

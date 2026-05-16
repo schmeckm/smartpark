@@ -51,4 +51,10 @@ tags:
     description: "Park-level **geo pressure** (wait hotspots, forecasts) and **guest flow** simulation / journey event ingest.\n`{parkSlug}` resolves like master-data (internal UUID, URL slug, or external entity id).\n"
   -
     name: AttendanceRisk
-    description: 'Manual traffic corridor snapshots as leading indicators for attendance risk (MVP; no external routing APIs).'
+    description: 'Traffic corridor snapshots as leading indicators for attendance risk (MVP); optional TomTom live routing polls are documented under TrafficSnapshots.'
+  -
+    name: TrafficSnapshots
+    description: 'TomTom-backed traffic corridor routing snapshots (external demand pressure signal only; not visitor counts).'
+  -
+    name: Widget Runtime
+    description: 'Governed operational widget registry, data sources, and instances (MVP foundation for future dashboard runtime).'

@@ -1,0 +1,61 @@
+name: Build and Push Docker Images to Docker Hub
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # Extrahiere den Commit-SHA als kurzen Tag (optional, aber Best Practice)
+      - name: Set Short SHA
+        id: vars
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # BACKEND IMAGE (Umbenannt von -backend zu -api passend zur compose.prod!)
+      - name: Build and Push Backend API
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/smart-park-api:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/smart-park-api:${{ steps.vars.outputs.sha_short }}
+
+      # FRONTEND IMAGE
+      - name: Build and Push Frontend UI
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./admin-dashboard/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/smart-park-frontend:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/smart-park-frontend:${{ steps.vars.outputs.sha_short }}
+
+      # AUTOMATISCHER RE-DEPLOY IN PORTAINER VIA WEBHOOK
+      # Triggert Portainer, sobald die neuen Images auf Docker Hub liegen
+      - name: Trigger Portainer Stack Update Webhook
+        run: |
+          if [ ! -z "${{ secrets.PORTAINER_WEBHOOK_URL }}" ]; then
+            curl -X POST "${{ secrets.PORTAINER_WEBHOOK_URL }}"
+            echo "Portainer Webhook erfolgreich ausgelöst."
+          else
+            echo "Kein Portainer Webhook konfiguriert. Überspringe automatischen Re-Deploy."
+          fi

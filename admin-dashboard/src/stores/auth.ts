@@ -4,6 +4,7 @@ import type { AuthUser, LoginResult } from '@/types/auth'
 import { rolesHavePermission } from '@/constants/rbac'
 import { login as apiLogin, logout as apiLogout, getMe, refreshWithRefreshToken } from '@/api/auth'
 import { useParkContextStore } from '@/stores/parkContext'
+import { useInstalledAdaptersStore } from '@/stores/installedAdapters'
 import { resolveLocaleFromUser, setI18nLocale } from '@/i18n'
 
 const ACCESS = 'sp_access_token'
@@ -36,6 +37,7 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = null
     bootstrapped.value = false
     useParkContextStore().clearOnLogout()
+    useInstalledAdaptersStore().clearOnLogout()
   }
 
   async function bootstrap() {

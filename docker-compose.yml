@@ -56,22 +56,29 @@ services:
     ports:
       - '3000:3000'
     environment:
-      NODE_ENV: development
-      PORT: 3000
-      LOG_LEVEL: info
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: ${PORT:-3000}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Docker network only — do NOT use ${DB_HOST}: root .env is for host `npm start` (127.0.0.1:15432).
       DB_HOST: db
       DB_PORT: 5432
       DB_NAME: smartpark
       DB_USER: smartpark
       DB_PASSWORD: smartpark
-      CORS_ORIGIN: '*'
-      JWT_SECRET: change-me-in-production-use-long-random-string
-      JWT_ACCESS_EXPIRES_IN: 15m
-      JWT_REFRESH_DAYS: 7
+      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-use-long-random-string}
+      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
+      JWT_REFRESH_DAYS: ${JWT_REFRESH_DAYS:-7}
+      # Integration Flow Studio + /api/v1/integration-flows/* (set false in .env for prod-like runs).
+      INTEGRATION_FLOW_ENGINE_ENABLED: ${INTEGRATION_FLOW_ENGINE_ENABLED:-true}
+      INTEGRATION_FLOW_CONCURRENCY: ${INTEGRATION_FLOW_CONCURRENCY:-3}
+      # Widget Runtime Studio + /api/v1/widget-runtime/* — set false in .env for prod-like runs.
+      WIDGET_RUNTIME_ENABLED: ${WIDGET_RUNTIME_ENABLED:-true}
       # API must use the compose service name — not 127.0.0.1 (that is only from your Windows host).
-      MQTT_ENABLED: 'true'
-      MQTT_BROKER_URL: mqtt://mqtt:1883
-      MQTT_CLIENT_ID: smart-park-os-api
+      MQTT_ENABLED: ${MQTT_ENABLED:-true}
+      # Default mqtt://mqtt:1883 when unset; do not set MQTT_BROKER_URL=127.0.0.1 in root .env for compose.
+      MQTT_BROKER_URL: ${MQTT_BROKER_URL:-mqtt://mqtt:1883}
+      MQTT_CLIENT_ID: ${MQTT_CLIENT_ID:-smart-park-os-api}
       # ML observability / metadata (Phase 1–4). Compose defaults all three on for local E2E (profiles → trace → Weighted X).
       # Override in .env for prod-like runs (e.g. ML_FEATURE_WEIGHTS_ENABLED=false). See docs/architecture/ml-forecast-phased-roadmap.md
       ML_TRACE_ENABLED: ${ML_TRACE_ENABLED:-true}
@@ -85,7 +92,8 @@ services:
       WEATHER_OPEN_METEO_RETRY_BASE_MS: ${WEATHER_OPEN_METEO_RETRY_BASE_MS:-500}
       # Influx (optional): set INFLUX_ENABLED=true when influxdb service is running (see .env.example).
       INFLUX_ENABLED: ${INFLUX_ENABLED:-false}
-      INFLUX_URL: ${INFLUX_URL:-http://influxdb:8086}
+      # Docker network only — host .env often uses http://127.0.0.1:8086 (mapped port), which fails inside the container.
+      INFLUX_URL: http://influxdb:8086
       INFLUX_TOKEN: ${INFLUX_TOKEN:-smart-park-local-dev-influx-token-not-for-prod}
       INFLUX_ORG: ${INFLUX_ORG:-smartpark}
       INFLUX_BUCKET: ${INFLUX_BUCKET:-ot_metrics}
@@ -103,6 +111,7 @@ services:
     build:
       context: .
       dockerfile: admin-dashboard/Dockerfile
+      target: development
     ports:
       - '5173:5173'
     depends_on:
@@ -117,7 +126,11 @@ services:
       - ./admin-dashboard:/app
       # Vite resolves `@smartpark-root-utils/*` from here (parent `src/utils` is not visible under `/app` only).
       - ./src/utils:/app/monorepo-src-utils:ro
+      # Persists node_modules; after new npm deps (e.g. @vue-flow/*), restart frontend so entrypoint runs npm ci,
+      # or: docker compose down -v  (drops frontend_node_modules) then docker compose up.
       - frontend_node_modules:/app/node_modules
+      # Schützt den Container davor, dass lokale Node-Module vom Host eingespielt werden
+      - /app/node_modules
 
 volumes:
   pgdata:

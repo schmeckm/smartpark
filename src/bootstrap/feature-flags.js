@@ -121,6 +121,7 @@ function buildStructured(envObj) {
       outputProfiles: envObj.outputProfiles,
       adapterPipelineLogEnabled: Boolean(envObj.adapterPipelineLogEnabled),
       adapterPipelineLogPath: envObj.adapterPipelineLogPath,
+      flowEngineEnabled: Boolean(envObj.integrationFlowEngineEnabled),
     },
     sim: {
       oee: {
@@ -144,6 +145,10 @@ function buildStructured(envObj) {
     },
     ingestion: {
       maxAgeMs: envObj.ingestionMaxAgeMs,
+    },
+    pdm: {
+      industrialPlatformEnabled: Boolean(envObj.pdmIndustrialPlatformEnabled),
+      operationsBoardEnabled: Boolean(envObj.pdmOperationsBoardEnabled),
     },
   };
 }

@@ -3,9 +3,10 @@ import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { io, type Socket } from 'socket.io-client'
 import { getApiHealthSummary, getIntegrationSettings, getUnsMqttLiveStatus } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
+import { resolveApiOrigin } from '@/utils/apiOrigin'
 
 const auth = useAuthStore()
-const apiOrigin = import.meta.env.VITE_API_URL || undefined
+const apiOrigin = resolveApiOrigin()
 
 const wsConnected = ref(false)
 const mqttConnected = ref<boolean | null>(null)

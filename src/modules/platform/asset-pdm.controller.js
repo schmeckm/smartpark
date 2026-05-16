@@ -7,6 +7,7 @@ const {
   deleteRule,
   evaluatePredictiveMaintenanceForAsset,
   listKnownLiveSparkplugMetricsForAsset,
+  listPdSparkplugMetricSeriesForAsset,
   maybeAppendPdmEvaluationLog,
   listPdmEvaluationLogs,
 } = require('../../services/predictive-maintenance.service');
@@ -48,12 +49,24 @@ const getPdmSparkplugMetrics = asyncHandler(async (req, res) => {
   res.json({ success: true, data });
 });
 
+const getPdmSparkplugMetricSeries = asyncHandler(async (req, res) => {
+  const parkId = parkScope(req);
+  const q = req.validated || req.query || {};
+  const data = await listPdSparkplugMetricSeriesForAsset(req.params.assetId, parkId, {
+    metricName: q.metricName,
+    sparkplugDeviceId: q.sparkplugDeviceId,
+    points: q.points,
+    stepSeconds: q.stepSeconds,
+  });
+  res.json({ success: true, data });
+});
+
 const getPdmEvaluation = asyncHandler(async (req, res) => {
   const parkId = parkScope(req);
   const assetId = req.params.assetId;
   const asset = await ParkAsset.findOne({
     where: { parkId, assetId },
-    attributes: ['assetId', 'parkId', 'name', 'slug'],
+    attributes: ['assetId', 'parkId', 'name', 'slug', 'assetTypeCode', 'masterProfile'],
   });
   if (!asset) {
     throw new AppError('Asset not found for this park', 404, { code: 'ASSET_NOT_FOUND' });
@@ -63,7 +76,7 @@ const getPdmEvaluation = asyncHandler(async (req, res) => {
   const rules = await listRules(assetId, parkId);
   const enabledPlain = rules.filter((r) => r.enabled !== false);
   const plain = asset.get({ plain: true });
-  const evaluation = evaluatePredictiveMaintenanceForAsset(plain, parkSlug, enabledPlain);
+  const evaluation = await evaluatePredictiveMaintenanceForAsset(plain, parkSlug, enabledPlain);
   void maybeAppendPdmEvaluationLog({
     assetId,
     parkId,
@@ -93,6 +106,7 @@ module.exports = {
   patchPdmRule,
   deletePdmRule,
   getPdmSparkplugMetrics,
+  getPdmSparkplugMetricSeries,
   getPdmEvaluation,
   listPdmEvaluationLogsHandler,
 };

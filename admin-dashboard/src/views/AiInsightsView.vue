@@ -24,6 +24,7 @@ import {
   type PredictionExplainability,
 } from '@/api/client'
 import { getApiParkContextId } from '@/utils/apiParkContext'
+import { resolveApiOrigin } from '@/utils/apiOrigin'
 
 const { t } = useI18n()
 const { push: toast } = useToast()
@@ -32,7 +33,7 @@ const canManageIntegrations = () => auth.hasPermission('integrations', 'manage')
 
 const scoringSectionRef = shallowRef<InstanceType<typeof RecommendationAiSection> | null>(null)
 
-const apiOrigin = import.meta.env.VITE_API_URL || undefined
+const apiOrigin = resolveApiOrigin()
 const extraSocket = shallowRef<Socket | null>(null)
 const selectedExternalParkName = ref<string>('')
 const selectedExternalParkId = ref<string>('')

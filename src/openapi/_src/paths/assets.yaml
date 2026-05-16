@@ -34,6 +34,95 @@
           application/json:
             schema:
               $ref: '#/components/schemas/EnvelopePlatformAssets'
+/assets/zone-normalization/preview:
+  get:
+    tags:
+      - Platform
+    summary: 'Preview zone assignment normalization for restaurant/show assets'
+    description: 'Requires **`rides.read`**. Query requires `parkSlug`; optional `type` (`RESTAURANT` | `SHOW`, default `RESTAURANT`).'
+    parameters:
+      -
+        in: query
+        name: parkSlug
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+      -
+        in: query
+        name: type
+        schema:
+          type: string
+          enum:
+            - RESTAURANT
+            - SHOW
+          default: RESTAURANT
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '422':
+        description: Validation error
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+/assets/zone-normalization/apply:
+  post:
+    tags:
+      - Platform
+    summary: 'Apply zone normalization (optionally dry-run)'
+    description: 'Requires **`rides.update`**. Body includes `parkSlug`, optional `dryRun` (default true), optional `overrides` asset→zone slug map.'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - parkSlug
+            properties:
+              parkSlug:
+                type: string
+                minLength: 1
+                maxLength: 128
+              type:
+                type: string
+                enum:
+                  - RESTAURANT
+                  - SHOW
+                default: RESTAURANT
+              dryRun:
+                type: boolean
+                default: true
+              overrides:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    assetId:
+                      type: string
+                      format: uuid
+                    zoneSlug:
+                      type: string
+                      nullable: true
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeGenericData'
+      '422':
+        description: Validation error
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
 /assets/oee/reason-codes:
   get:
     tags:
@@ -279,6 +368,49 @@
         description: OK
       '404':
         $ref: '#/components/responses/NotFound'
+'/assets/{assetId}/pdm-sparkplug-metric-series':
+  parameters:
+    - in: path
+      name: assetId
+      required: true
+      schema:
+        type: string
+        format: uuid
+    - in: query
+      name: metricName
+      required: true
+      schema:
+        type: string
+    - in: query
+      name: sparkplugDeviceId
+      required: true
+      schema:
+        type: string
+    - in: query
+      name: points
+      required: false
+      schema:
+        type: integer
+        minimum: 12
+        maximum: 240
+    - in: query
+      name: stepSeconds
+      required: false
+      schema:
+        type: integer
+        minimum: 30
+        maximum: 3600
+  get:
+    tags:
+      - Platform
+    summary: 'Time series for one Sparkplug metric on an asset (live buffer or deterministic demo)'
+    responses:
+      '200':
+        description: OK
+      '400':
+        $ref: '#/components/responses/BadRequest'
+      '404':
+        $ref: '#/components/responses/NotFound'
 '/assets/{assetId}/pdm-evaluation-logs':
   parameters:
     -
@@ -319,10 +451,45 @@
   get:
     tags:
       - Platform
-    summary: 'Predictive-maintenance evaluation for asset (rule thresholds vs live signals)'
+    summary: 'Predictive-maintenance evaluation for asset (rule thresholds vs live signals). When **`PDM_INDUSTRIAL_PLATFORM_ENABLED`** is on, `data.evaluation.industrial` adds health score, trends, failure modes, recommendations, telemetry quality, Sparkplug context, and ML readiness metadata.'
     responses:
       '200':
         description: OK
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                data:
+                  type: object
+                  additionalProperties: true
+                  properties:
+                    rules:
+                      type: array
+                      items:
+                        type: object
+                        additionalProperties: true
+                    evaluation:
+                      type: object
+                      additionalProperties: true
+                      properties:
+                        riskLevel:
+                          type: string
+                        recommendation:
+                          type: object
+                          additionalProperties: true
+                        signals:
+                          type: array
+                          items:
+                            type: object
+                            additionalProperties: true
+                        industrial:
+                          type: object
+                          additionalProperties: true
+                          nullable: true
+                          description: 'Industrial PdM platform envelope (feature-flagged)'
       '404':
         $ref: '#/components/responses/NotFound'
 '/assets/{assetId}/pdm-rules':

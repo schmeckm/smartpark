@@ -363,13 +363,15 @@
           "labelKey": "menu.predictiveMaintenance",
           "navIcon": "predictiveMaintenance",
           "activePathPrefix": "/operations/predictive-maintenance",
-          "permission": { "resource": "rides", "action": "read" }
+          "permission": { "resource": "rides", "action": "read" },
+          "requiresInstalledAdapter": "predictive_maintenance"
         },
         {
           "to": "/operations/traffic-corridors",
           "labelKey": "menu.trafficCorridors",
           "activePathPrefix": "/operations/traffic-corridors",
-          "permission": { "resource": "rides", "action": "read" }
+          "permission": { "resource": "rides", "action": "read" },
+          "requiresAnyInstalledAdapters": ["traffic_corridors", "traffic_tomtom"]
         },
         {
           "to": "/platform/oee",
@@ -469,6 +471,14 @@
           "navIcon": "auditLog",
           "activePathPrefix": "/audit",
           "permission": { "resource": "audit", "action": "read" }
+        },
+        {
+          "to": "/admin/users",
+          "labelKey": "menu.userManagement",
+          "navIcon": "userManagement",
+          "activePathPrefix": "/admin/users",
+          "permission": { "resource": "audit", "action": "read" },
+          "requiredRoles": ["SYSTEM_ADMIN"]
         },
         {
           "to": "/admin/platform-settings",

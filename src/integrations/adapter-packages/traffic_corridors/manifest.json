@@ -1,0 +1,32 @@
+{
+  "adapterKey": "traffic_corridors",
+  "name": "Traffic corridors & attendance risk",
+  "description": "Enables the Traffic corridors UI and corridor snapshot workflows. Poll is a no-op here — install the **traffic_tomtom** adapter for TomTom API credentials (encrypted DB row); a future Google adapter would follow the same pattern.",
+  "version": "1.0.0",
+  "category": "Operations",
+  "qualityTier": "CORE",
+  "tags": ["traffic", "corridors", "attendance", "demand"],
+  "runtime": "NODE",
+  "entrypoint": "index.js",
+  "adapterType": "TRAFFIC",
+  "iotClass": "cloud_polling",
+  "capabilities": ["DISCOVERY", "POLLING"],
+  "providedDomains": ["operations"],
+  "providedMetrics": [],
+  "defaultContextJson": {},
+  "defaultScheduleCron": null,
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "notes": {
+        "type": "string",
+        "description": "Optional operator notes (ignored by runtime)."
+      }
+    }
+  },
+  "permissions": {
+    "network": false,
+    "mqttPublish": false,
+    "databaseWrite": false
+  }
+}

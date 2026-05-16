@@ -96,6 +96,7 @@ function buildFeatureFlagReport(env) {
       outputProfiles: parseCsv(env.outputProfiles),
       adapterPipelineLogEnabled: Boolean(env.adapterPipelineLogEnabled),
       adapterPipelineLogPath: env.adapterPipelineLogPath,
+      flowEngineEnabled: Boolean(env.integrationFlowEngineEnabled),
     },
     sim: {
       oeeEnabled: Boolean(env.simOeeEnabled),
@@ -115,6 +116,10 @@ function buildFeatureFlagReport(env) {
     },
     ingestion: {
       maxAgeMs: env.ingestionMaxAgeMs,
+    },
+    pdm: {
+      industrialPlatformEnabled: Boolean(env.pdmIndustrialPlatformEnabled),
+      operationsBoardEnabled: Boolean(env.pdmOperationsBoardEnabled),
     },
   };
 }

@@ -39,6 +39,9 @@ const getFeatureFlags = asyncHandler(async (_req, res) => {
       adapterDiscoverySpyEnabled: Boolean(env.adapterDiscoverySpyEnabled),
       mqttEnforceCapabilities: Boolean(env.mqttEnforceCapabilities),
       mqttCapabilityGuardMode: env.mqttCapabilityGuardMode || 'off',
+      integrationFlowEngineEnabled: Boolean(env.integrationFlowEngineEnabled),
+      integrationFlowScriptNodeEnabled: Boolean(env.integrationFlowScriptNodeEnabled),
+      widgetRuntimeEnabled: Boolean(env.widgetRuntimeEnabled),
     },
   });
 });

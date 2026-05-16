@@ -1,0 +1,11 @@
+      # 5. FRONTEND IMAGE bauen und pushen
+      - name: Build and Push Frontend UI
+        uses: docker/build-push-action@v5
+        with:
+          context: .                          # 🟢 Wichtig: Punkt bedeutet Repository-Wurzel
+          file: ./admin-dashboard/Dockerfile  # 🟢 Zeigt auf Ihr Dockerfile
+          push: true
+          # Hier wird automatisch die letzte Stage ("production") gebaut, 
+          # da kein explizites "--target" angegeben ist. Das ist genau richtig so!
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/smart-park-frontend:latest

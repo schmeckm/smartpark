@@ -22,10 +22,34 @@ async function seedSession(baseURL: string) {
   return { accessToken, refreshToken }
 }
 
+/** Feature-gated UI: ensure adapter is installed (idempotent upsert). */
+async function ensureTrafficCorridorsAdapter(baseURL: string, accessToken: string) {
+  const ctx = await playwrightRequest.newContext({
+    baseURL,
+    extraHTTPHeaders: { Authorization: `Bearer ${accessToken}` },
+  })
+  const res = await ctx.post('/api/v1/integrations/installed-adapters/install-local', {
+    data: {
+      adapterKey: 'traffic_corridors',
+      name: 'Traffic corridors (E2E)',
+      configJson: {},
+      contextJson: {},
+      outputProfiles: ['UNS_JSON'],
+      emitEnabled: false,
+      scheduleCron: null,
+    },
+  })
+  await ctx.dispose()
+  if (!res.ok()) {
+    throw new Error(`E2E install traffic_corridors failed ${res.status()}: ${await res.text()}`)
+  }
+}
+
 test.describe('Traffic corridors & attendance risk', () => {
   test.beforeEach(async ({ page, baseURL }) => {
     const root = baseURL || 'http://localhost:5173'
     const tokens = await seedSession(root)
+    await ensureTrafficCorridorsAdapter(root, tokens.accessToken)
     await page.goto('/login')
     await page.evaluate((t) => {
       localStorage.setItem('sp_access_token', t.accessToken)

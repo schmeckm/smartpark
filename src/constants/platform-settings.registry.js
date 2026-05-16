@@ -184,6 +184,14 @@ const PLATFORM_SETTING_REGISTRY = Object.freeze({
     description: 'People ring (P): mood average ≥ this (and < green min) → amber; below → red.',
     clamp: { min: 1, max: 5 },
   },
+  INFLUX_OT_STREAMING_ENABLED: {
+    category: 'TELEMETRY',
+    valueType: 'boolean',
+    envVar: 'INFLUX_OT_STREAMING_ENABLED',
+    codeDefault: false,
+    description:
+      'Stream Sparkplug OT samples and PdM/ML outputs into InfluxDB (bucket ot_metrics). Requires INFLUX_ENABLED and a reachable InfluxDB instance.',
+  },
 });
 
 const PLATFORM_SETTING_KEYS = Object.freeze(Object.keys(PLATFORM_SETTING_REGISTRY));

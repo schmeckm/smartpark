@@ -24,6 +24,8 @@ function defineAiStudioModel(sequelize) {
       featureImportanceJson: { type: DataTypes.JSONB, allowNull: false, defaultValue: {}, field: 'feature_importance_json' },
       evalHoldoutJson: { type: DataTypes.JSONB, allowNull: true, field: 'eval_holdout_json' },
       datasetSnapshotJson: { type: DataTypes.JSONB, allowNull: true, field: 'dataset_snapshot_json' },
+      archivedAt: { type: DataTypes.DATE, allowNull: true, field: 'archived_at' },
+      archivedBy: { type: DataTypes.UUID, allowNull: true, field: 'archived_by' },
     },
     {
       sequelize,

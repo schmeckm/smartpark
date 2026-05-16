@@ -3,6 +3,7 @@ import { io, type Socket } from 'socket.io-client'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { useRegionalDateTime } from '@/composables/useRegionalDateTime'
+import { resolveApiOrigin } from '@/utils/apiOrigin'
 
 export function useWave2Socket() {
   const auth = useAuthStore()
@@ -14,7 +15,7 @@ export function useWave2Socket() {
   const lastWeather = ref<Record<string, unknown> | null>(null)
   const timeline = ref<string[]>([])
 
-  const apiOrigin = import.meta.env.VITE_API_URL || undefined
+  const apiOrigin = resolveApiOrigin()
 
   function addLine(s: string) {
     const t = formatTime(new Date())

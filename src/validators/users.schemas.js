@@ -1,5 +1,6 @@
 const Joi = require('joi');
 const { isValidIanaTimeZone } = require('../utils/iana-timezone.util');
+const { ASSIGNABLE_ROLE_CODES } = require('../constants/role-codes');
 
 const SUPPORTED_LANGS = ['en', 'de', 'fr', 'es'];
 const DATE_FORMATS = ['DD.MM.YYYY', 'YYYY-MM-DD', 'MM/DD/YYYY'];
@@ -49,8 +50,38 @@ const patchMyUserSettingsSchema = Joi.object({
   .min(1)
   .messages({ 'object.min': 'at least one setting field is required' });
 
+const adminRoleCodeSchema = Joi.string()
+  .valid(...ASSIGNABLE_ROLE_CODES)
+  .messages({ 'any.only': 'roleCode must be a valid RBAC role code' });
+
+const createAdminUserSchema = Joi.object({
+  firstName: Joi.string().trim().required().max(80),
+  lastName: Joi.string().trim().required().max(80),
+  email: Joi.string().trim().email().required().max(255),
+  password: Joi.string().required().min(8).max(128),
+  roleCode: adminRoleCodeSchema.required(),
+  active: Joi.boolean().optional(),
+});
+
+const updateAdminUserSchema = Joi.object({
+  id: Joi.string().uuid().required(),
+  firstName: Joi.string().trim().max(80).optional(),
+  lastName: Joi.string().trim().max(80).optional(),
+  email: Joi.string().trim().email().max(255).optional(),
+  password: Joi.string().min(8).max(128).optional(),
+  roleCode: adminRoleCodeSchema.optional(),
+  active: Joi.boolean().optional(),
+}).min(2);
+
+const deleteAdminUserParamsSchema = Joi.object({
+  id: Joi.string().uuid().required(),
+});
+
 module.exports = {
   patchMyUserSettingsSchema,
+  createAdminUserSchema,
+  updateAdminUserSchema,
+  deleteAdminUserParamsSchema,
   SUPPORTED_LANGS,
   DATE_FORMATS,
   TIME_FORMATS,

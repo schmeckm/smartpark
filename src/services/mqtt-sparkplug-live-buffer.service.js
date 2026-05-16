@@ -17,6 +17,7 @@ const {
   getRegisteredEntityRowForSparkplugLookup,
   registerFromSparkplugDbirthMetric,
 } = require('../modules/uns/theme-parks-entity-domain.service');
+const { Park } = require('../models');
 
 const MAX_EVENTS = 1000;
 const RATE_WINDOW_MS = 1000;
@@ -306,7 +307,6 @@ async function resolveParkKeyForMqttLiveBufferParam(parkIdUrlParam) {
   const raw = String(parkIdUrlParam || '').trim();
   if (!raw || !UUID_RE.test(raw)) return raw;
   try {
-    const { Park } = require('../models');
     const park = await Park.findByPk(raw, { attributes: ['slug', 'name'] });
     if (!park) return raw;
     const slug = park.slug != null ? String(park.slug).trim() : '';
@@ -510,6 +510,41 @@ function listSparkplugMetricsForDevices(p, opts = {}) {
   });
 }
 
+/**
+ * Recent numeric Sparkplug samples for one metric (newest-first scan of the rolling buffer).
+ *
+ * @param {{ groupId: string; edgeNodeId: string; deviceId: string; metricName: string }} p
+ * @param {{ limit?: number; maxScan?: number }} [opts]
+ * @returns {Array<{ t: string; v: number }>}
+ */
+function listRecentSparkplugNumericSamples(p, opts = {}) {
+  const g = String(p.groupId || '').toLowerCase();
+  const edge = String(p.edgeNodeId || '');
+  const dev = String(p.deviceId || '');
+  const m = String(p.metricName || '').trim();
+  const limit = Math.min(300, Math.max(2, Number(opts.limit) || 120));
+  const maxScan = Math.min(12000, Math.max(limit, Number(opts.maxScan) || 8000));
+  /** @type {Array<{ t: string; v: number }>} */
+  const out = [];
+  let scanned = 0;
+  for (let i = events.length - 1; i >= 0 && out.length < limit && scanned < maxScan; i -= 1, scanned += 1) {
+    const e = events[i];
+    if (String(e.messageType || '').toUpperCase() === 'UNS_JSON') continue;
+    if (String(e.groupId || '').toLowerCase() !== g) continue;
+    if (String(e.edgeNodeId || '') !== edge) continue;
+    if (String(e.deviceId || '') !== dev) continue;
+    const metric = e.metric != null ? String(e.metric).trim() : '';
+    if (metric !== m) continue;
+    const raw = e.value;
+    const v = typeof raw === 'number' ? raw : Number(raw);
+    if (!Number.isFinite(v)) continue;
+    const tRaw = e.receivedAt != null ? String(e.receivedAt) : '';
+    if (!tRaw) continue;
+    out.push({ t: tRaw, v });
+  }
+  return out.reverse();
+}
+
 module.exports = {
   appendFromMqtt,
   appendTpunsLiveFromMqtt,
@@ -524,6 +559,7 @@ module.exports = {
   findLatestSparkplugLiveMetricRow,
   probeSparkplugLiveMetricForRide,
   listSparkplugMetricsForDevices,
+  listRecentSparkplugNumericSamples,
   MAX_EVENTS,
   /** @public for Phase 13 capability guard (topic parse only). */
   parseSparkplugTopic,

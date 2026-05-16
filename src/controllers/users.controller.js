@@ -2,9 +2,11 @@ const { asyncHandler } = require('../utils/async-handler');
 const { AppError } = require('../utils/app-error');
 const { UserRepository } = require('../repositories/user.repository');
 const { AuthService } = require('../services/auth.service');
+const { UserAdminService } = require('../services/user-admin.service');
 
 const userRepository = new UserRepository();
 const authService = new AuthService();
+const userAdminService = new UserAdminService();
 
 function settingsPayload(user) {
   const u = authService.toPublicUser(user);
@@ -42,4 +44,32 @@ const patchMySettings = asyncHandler(async (req, res) => {
   res.json({ success: true, data: authService.toPublicUser(reloaded) });
 });
 
-module.exports = { getMySettings, patchMySettings };
+const listUsers = asyncHandler(async (req, res) => {
+  const users = await userAdminService.listUsers();
+  res.json({ success: true, data: users });
+});
+
+const createUser = asyncHandler(async (req, res) => {
+  const user = await userAdminService.createUser(req.validated, req.user.id);
+  res.status(201).json({ success: true, data: user });
+});
+
+const updateUser = asyncHandler(async (req, res) => {
+  const { id, ...body } = req.validated;
+  const user = await userAdminService.updateUser(id, body, req.user.id);
+  res.json({ success: true, data: user });
+});
+
+const deleteUser = asyncHandler(async (req, res) => {
+  await userAdminService.deleteUser(req.validated.id, req.user.id);
+  res.status(204).send();
+});
+
+module.exports = {
+  getMySettings,
+  patchMySettings,
+  listUsers,
+  createUser,
+  updateUser,
+  deleteUser,
+};

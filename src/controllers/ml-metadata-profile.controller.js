@@ -7,15 +7,21 @@ const {
   getParkMlProfile,
   createParkMlProfile,
   updateParkMlProfile,
+  archiveParkMlProfile,
 } = require('../services/ml/ml-park-profile.service');
 const {
   listRideMlProfiles,
   getRideMlProfile,
   createRideMlProfile,
   updateRideMlProfile,
+  archiveRideMlProfile,
 } = require('../services/ml/ml-ride-profile.service');
+const { AuditLogService } = require('../services/audit-log.service');
 
-function parseQueryEnabled(raw) {
+const audit = new AuditLogService();
+
+/** Parse `true`/`false` from query strings like enabled=1 or includeArchived=true */
+function parseOptionalBooleanQuery(raw) {
   if (raw === true || raw === false) return raw;
   const s = String(raw ?? '').trim().toLowerCase();
   if (s === 'true' || s === '1') return true;
@@ -30,8 +36,9 @@ const getParkProfiles = asyncHandler(async (req, res) => {
   const q = req.validated || req.query || {};
   const rows = await listParkMlProfiles({
     parkId,
-    enabled: parseQueryEnabled(q.enabled),
+    enabled: parseOptionalBooleanQuery(q.enabled),
     profileName: q.profileName,
+    includeArchived: parseOptionalBooleanQuery(q.includeArchived),
   });
   res.json({ success: true, data: rows });
 });
@@ -84,6 +91,18 @@ const putParkProfile = asyncHandler(async (req, res) => {
   }
 });
 
+const deleteParkProfileArchive = asyncHandler(async (req, res) => {
+  const parkId = req.parkContext.id;
+  const { id } = req.validated || req.params;
+  const row = await archiveParkMlProfile(parkId, id, req.user?.id || null);
+  await audit.log({
+    action: 'ml_park_profile.archive',
+    entityType: 'MlParkProfile',
+    entityId: id,
+  });
+  res.json({ success: true, data: row });
+});
+
 // ── Ride ─────────────────────────────────────────────────────────────────────
 
 const getRideProfiles = asyncHandler(async (req, res) => {
@@ -91,9 +110,10 @@ const getRideProfiles = asyncHandler(async (req, res) => {
   const q = req.validated || req.query || {};
   const rows = await listRideMlProfiles({
     parkId,
-    enabled: parseQueryEnabled(q.enabled),
+    enabled: parseOptionalBooleanQuery(q.enabled),
     profileName: q.profileName,
     rideId: q.rideId,
+    includeArchived: parseOptionalBooleanQuery(q.includeArchived),
   });
   res.json({ success: true, data: rows });
 });
@@ -150,13 +170,27 @@ const putRideProfile = asyncHandler(async (req, res) => {
   }
 });
 
+const deleteRideProfileArchive = asyncHandler(async (req, res) => {
+  const parkId = req.parkContext.id;
+  const { id } = req.validated || req.params;
+  const row = await archiveRideMlProfile(parkId, id, req.user?.id || null);
+  await audit.log({
+    action: 'ml_ride_profile.archive',
+    entityType: 'MlRideProfile',
+    entityId: id,
+  });
+  res.json({ success: true, data: row });
+});
+
 module.exports = {
   getParkProfiles,
   getParkProfileOne,
   postParkProfile,
   putParkProfile,
+  deleteParkProfileArchive,
   getRideProfiles,
   getRideProfileOne,
   postRideProfile,
   putRideProfile,
+  deleteRideProfileArchive,
 };

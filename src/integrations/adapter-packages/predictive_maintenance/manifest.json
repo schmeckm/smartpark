@@ -1,0 +1,61 @@
+{
+  "adapterKey": "predictive_maintenance",
+  "name": "Predictive maintenance",
+  "description": "Enables the Predictive Maintenance operator UI (asset rules, Sparkplug DDATA evaluation, and the dedicated board). Install this adapter to show the menu entry and route; core evaluation APIs may still be used from other surfaces when wired separately.",
+  "version": "1.0.0",
+  "category": "Operations",
+  "qualityTier": "CORE",
+  "tags": ["maintenance", "pdm", "sparkplug", "assets"],
+  "runtime": "NODE",
+  "entrypoint": "index.js",
+  "adapterType": "PREDICTIVE_MAINTENANCE",
+  "iotClass": "cloud_polling",
+  "capabilities": ["DISCOVERY", "POLLING"],
+  "providedDomains": ["operations"],
+  "providedMetrics": [],
+  "defaultContextJson": {},
+  "defaultScheduleCron": null,
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "notes": {
+        "type": "string",
+        "description": "Optional operator notes (ignored by runtime)."
+      },
+      "parkSlug": {
+        "type": "string",
+        "description": "Park slug for demo telemetry scan (also OK in contextJson)."
+      },
+      "demoTelemetryEnabled": {
+        "type": "boolean",
+        "description": "When true, poll emits deterministic synthetic OT observations for demo/lab only (see README)."
+      },
+      "demoMetricProfile": {
+        "type": "string",
+        "enum": ["standard_pdm", "extended_pdm"],
+        "description": "Metric bundle preset when metrics[] omitted."
+      },
+      "metrics": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Explicit metric names (motor_rpm, pump_rpm, …)."
+      },
+      "maxAssets": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 500,
+        "description": "Cap ride assets scanned per poll."
+      },
+      "scanEntityTypes": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Entity types for park_assets filter (e.g. ride, attraction)."
+      }
+    }
+  },
+  "permissions": {
+    "network": false,
+    "mqttPublish": false,
+    "databaseWrite": false
+  }
+}

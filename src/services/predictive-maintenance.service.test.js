@@ -4,10 +4,20 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const proxyquire = require('proxyquire').noCallThru();
 
-test('evaluatePredictiveMaintenanceForAsset aggregates CRITICAL over WARN', () => {
+test('evaluatePredictiveMaintenanceForAsset aggregates CRITICAL over WARN', async () => {
   const {
     evaluatePredictiveMaintenanceForAsset,
   } = proxyquire('./predictive-maintenance.service', {
+    './pdm-sparkplug-edge-resolve.service': {
+      resolvePdmSparkplugEdgeCandidatesForAsset: async () => ({
+        resolvedEdgeNodeId: 'park_gateway',
+        edgeResolutionSource: 'HARDCODED',
+        attemptedEdgeNodeIds: ['park_gateway'],
+        edgeCandidates: [],
+        resolverReason: '',
+        zoneSlug: null,
+      }),
+    },
     './mqtt-sparkplug-live-buffer.service': {
       findLatestSparkplugLiveMetricRow: () => ({ value: 95, receivedAt: '2026-01-01T00:00:00.000Z' }),
     },
@@ -19,7 +29,7 @@ test('evaluatePredictiveMaintenanceForAsset aggregates CRITICAL over WARN', () =
     },
   });
 
-  const asset = { assetId: 'a', slug: 'ride-a', name: 'Ride A' };
+  const asset = { assetId: 'a', parkId: 'p', slug: 'ride-a', name: 'Ride A' };
   const rules = [
     {
       id: '1',
@@ -32,15 +42,25 @@ test('evaluatePredictiveMaintenanceForAsset aggregates CRITICAL over WARN', () =
       criticalBelow: null,
     },
   ];
-  const out = evaluatePredictiveMaintenanceForAsset(asset, 'park', rules);
+  const out = await evaluatePredictiveMaintenanceForAsset(asset, 'park', rules);
   assert.equal(out.riskLevel, 'CRITICAL');
   assert.equal(out.signals[0].status, 'CRITICAL');
 });
 
-test('evaluatePredictiveMaintenanceForAsset NO_DATA yields MEDIUM when rules exist', () => {
+test('evaluatePredictiveMaintenanceForAsset NO_DATA yields MEDIUM when rules exist', async () => {
   const {
     evaluatePredictiveMaintenanceForAsset,
   } = proxyquire('./predictive-maintenance.service', {
+    './pdm-sparkplug-edge-resolve.service': {
+      resolvePdmSparkplugEdgeCandidatesForAsset: async () => ({
+        resolvedEdgeNodeId: 'park_gateway',
+        edgeResolutionSource: 'HARDCODED',
+        attemptedEdgeNodeIds: ['park_gateway'],
+        edgeCandidates: [],
+        resolverReason: '',
+        zoneSlug: null,
+      }),
+    },
     './mqtt-sparkplug-live-buffer.service': {
       findLatestSparkplugLiveMetricRow: () => null,
     },
@@ -52,8 +72,8 @@ test('evaluatePredictiveMaintenanceForAsset NO_DATA yields MEDIUM when rules exi
     },
   });
 
-  const out = evaluatePredictiveMaintenanceForAsset(
-    { assetId: 'a', slug: 'x', name: 'X' },
+  const out = await evaluatePredictiveMaintenanceForAsset(
+    { assetId: 'a', parkId: 'p', slug: 'x', name: 'X' },
     'park',
     [{ id: '1', metricName: 'x', enabled: true, warnAbove: 1, criticalAbove: null, warnBelow: null, criticalBelow: null }]
   );
@@ -64,6 +84,9 @@ test('evaluatePredictiveMaintenanceForAsset NO_DATA yields MEDIUM when rules exi
 test('pdmEvaluationFingerprint ignores signal order and live numeric values', () => {
   const { pdmEvaluationFingerprint } = proxyquire('./predictive-maintenance.service', {
     './mqtt-sparkplug-live-buffer.service': {},
+    './pdm-sparkplug-edge-resolve.service': {
+      resolvePdmSparkplugEdgeCandidatesForAsset: async () => ({}),
+    },
     '../models': {
       ParkAsset: {},
       ParkAssetPdmRule: {},

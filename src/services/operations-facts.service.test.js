@@ -72,6 +72,7 @@ test('evaluateRegistryPathUsable: registry publish preview used when present', a
     './mqtt-sparkplug-live-buffer.service': {
       findLatestTpunsLiveRowForTopic: () => null,
       findLatestSparkplugLiveMetricRow: () => null,
+      probeSparkplugLiveMetricForRide: async () => null,
     },
   });
 
@@ -106,6 +107,7 @@ test('evaluateRegistryPathUsable: uns_latest_states fills gap when publish previ
     './mqtt-sparkplug-live-buffer.service': {
       findLatestTpunsLiveRowForTopic: () => null,
       findLatestSparkplugLiveMetricRow: () => null,
+      probeSparkplugLiveMetricForRide: async () => null,
     },
   });
   const activeTopic = { id: 't2', get: () => true };
@@ -179,6 +181,7 @@ test('sourceBreakdown shape: getRideFacts exposes source + confidence on KPI que
     './mqtt-sparkplug-live-buffer.service': {
       findLatestTpunsLiveRowForTopic: () => null,
       findLatestSparkplugLiveMetricRow: () => null,
+      probeSparkplugLiveMetricForRide: async () => null,
     },
     './ride-signal-capability.service': {
       resolveRideContext: async () => ({
@@ -268,6 +271,7 @@ test('getRideFacts: legacy fallback disabled yields MISSING and skips uns_latest
     './mqtt-sparkplug-live-buffer.service': {
       findLatestTpunsLiveRowForTopic: () => null,
       findLatestSparkplugLiveMetricRow: () => null,
+      probeSparkplugLiveMetricForRide: async () => null,
     },
     './ride-signal-capability.service': {
       resolveRideContext: async () => ({

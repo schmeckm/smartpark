@@ -6,13 +6,15 @@ const { assertPlainObject } = require('./ml-park-profile.service');
 const { normalizeFeatureWeights } = require('./ml-feature-weight.util');
 
 /**
- * @param {{ parkId: string, rideId?: string, enabled?: boolean, profileName?: string }} filters
+ * @param {{ parkId: string, rideId?: string, enabled?: boolean, profileName?: string, includeArchived?: boolean }} filters
  */
 async function listRideMlProfiles(filters) {
   const where = { parkId: String(filters.parkId) };
   if (filters.rideId) where.rideId = String(filters.rideId);
   if (typeof filters.enabled === 'boolean') where.enabled = filters.enabled;
   if (filters.profileName) where.profileName = { [Op.iLike]: `%${String(filters.profileName)}%` };
+  const includeArchived = filters.includeArchived === true || filters.includeArchived === 'true';
+  if (!includeArchived) where.archivedAt = { [Op.is]: null };
   const rows = await MlRideProfile.findAll({
     where,
     order: [
@@ -102,10 +104,34 @@ async function upsertRideMlProfile(parkId, payload) {
   return createRideMlProfile(parkId, payload);
 }
 
+/**
+ * @param {string} parkId
+ * @param {string} id
+ * @param {string|null} [userId]
+ */
+async function archiveRideMlProfile(parkId, id, userId = null) {
+  const { AppError } = require('../../utils/app-error');
+  const row = await MlRideProfile.findOne({
+    where: { id: String(id), parkId: String(parkId) },
+  });
+  if (!row) throw new AppError('Ride ML profile not found', 404, { code: 'NOT_FOUND' });
+  if (row.archivedAt) return row.get({ plain: true });
+  if (row.enabled) {
+    throw new AppError('Disable profile before archiving', 409, { code: 'PROFILE_ENABLED' });
+  }
+  await row.update({
+    archivedAt: new Date(),
+    archivedBy: userId || null,
+  });
+  const fresh = await MlRideProfile.findByPk(row.id);
+  return fresh ? fresh.get({ plain: true }) : row.get({ plain: true });
+}
+
 module.exports = {
   listRideMlProfiles,
   getRideMlProfile,
   createRideMlProfile,
   updateRideMlProfile,
   upsertRideMlProfile,
+  archiveRideMlProfile,
 };

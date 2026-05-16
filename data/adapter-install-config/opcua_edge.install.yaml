@@ -2,7 +2,7 @@
 schemaVersion: 1
 adapterKey: opcua_edge
 installedAt: '2026-05-03T17:46:25.958Z'
-updatedAt: '2026-05-08T10:51:05.286Z'
+updatedAt: '2026-05-15T08:40:00.931Z'
 configJson:
   live: false
   securityMode: None

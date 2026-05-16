@@ -1,0 +1,62 @@
+'/traffic/snapshots/poll':
+  post:
+    tags:
+      - TrafficSnapshots
+    summary: Poll TomTom for all enabled traffic corridors (optional park filter)
+    description: >
+      Triggers a TomTom Routing "Calculate Route" call per enabled corridor that has complete origin/destination coordinates.
+      Persists normalized snapshots (`source=tomtom` vendor tag). Requires TomTom to be **enabled** with a stored API key under the **traffic_tomtom** adapter (Devices & Services) or **Integration settings → Traffic providers** (not via `.env` credentials).
+    security:
+      -
+        bearerAuth: []
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/TrafficSnapshotPollBody'
+    responses:
+      '200':
+        description: OK (per-corridor errors are returned inside `data.results`)
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeTrafficSnapshotPollResult'
+      '403':
+        description: TomTom disabled or missing API key in integration settings
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+      '503':
+        description: TomTom API key missing / not decryptable while integration is enabled
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+
+'/traffic/snapshots/latest':
+  get:
+    tags:
+      - TrafficSnapshots
+    summary: Latest traffic snapshot per corridor for a park (normalized envelope)
+    security:
+      -
+        bearerAuth: []
+    parameters:
+      -
+        name: parkId
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeTrafficSnapshotLatestList'
+      '422':
+        $ref: '#/components/responses/ValidationError'

@@ -1,7 +1,7 @@
 # Express route inventory (generated)
 
-- **Generated:** 2026-05-13T05:31:13.852Z
-- **Route count:** 383
+- **Generated:** 2026-05-16T12:35:00.253Z
+- **Route count:** 444
 
 | Method | Path | Mount origin | In OpenAPI |
 |--------|------|--------------|------------|
@@ -65,23 +65,30 @@
 | GET | `/api/v1/ai/ml-profiles` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/ai/ml-profiles` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/ai/ml/dataset/rides` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/ai/ml/feature-store-readiness` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/ai/ml/feature-store-snapshot-debug` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/ai/ml/forecast-accuracy/:id` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/ai/ml/forecast-accuracy/kpis` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/ai/ml/forecast-accuracy/model-win-rates` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/ai/ml/forecast-accuracy/retro-lookback` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/ai/ml/forecast-accuracy` | src/routes/v1/index.js | yes |
-| GET | `/api/v1/ai/ml/park-profiles/:id` | src/routes/v1/index.js | no |
-| PUT | `/api/v1/ai/ml/park-profiles/:id` | src/routes/v1/index.js | no |
-| GET | `/api/v1/ai/ml/park-profiles` | src/routes/v1/index.js | no |
-| POST | `/api/v1/ai/ml/park-profiles` | src/routes/v1/index.js | no |
+| DELETE | `/api/v1/ai/ml/park-profiles/:id` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/ai/ml/park-profiles/:id` | src/routes/v1/index.js | yes |
+| PUT | `/api/v1/ai/ml/park-profiles/:id` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/ai/ml/park-profiles` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/ai/ml/park-profiles` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/ai/ml/predict/park-summary` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/ai/ml/predict/rides/:rideId` | src/routes/v1/index.js | yes |
-| GET | `/api/v1/ai/ml/prediction-traces/:predictionId/coefficients` | src/routes/v1/index.js | no |
+| GET | `/api/v1/ai/ml/prediction-traces/:predictionId/coefficients` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/ai/ml/prediction-traces/:predictionId` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/ai/ml/prediction-traces/filter-options` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/ai/ml/prediction-traces` | src/routes/v1/index.js | yes |
-| GET | `/api/v1/ai/ml/ride-profiles/:id` | src/routes/v1/index.js | no |
-| PUT | `/api/v1/ai/ml/ride-profiles/:id` | src/routes/v1/index.js | no |
-| GET | `/api/v1/ai/ml/ride-profiles` | src/routes/v1/index.js | no |
-| POST | `/api/v1/ai/ml/ride-profiles` | src/routes/v1/index.js | no |
+| DELETE | `/api/v1/ai/ml/registry/entries/:id` | src/routes/v1/index.js | yes |
+| DELETE | `/api/v1/ai/ml/ride-profiles/:id` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/ai/ml/ride-profiles/:id` | src/routes/v1/index.js | yes |
+| PUT | `/api/v1/ai/ml/ride-profiles/:id` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/ai/ml/ride-profiles` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/ai/ml/ride-profiles` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/ai/ml/train/wait-time/global` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/ai/ml/train/wait-time/rides/:rideId` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/ai/parks/:externalParkId/entities/forecast/summary` | src/routes/v1/index.js | yes |
@@ -102,10 +109,17 @@
 | GET | `/api/v1/ai/studio/feature-drafts` | src/routes/v1/index.js | yes |
 | PUT | `/api/v1/ai/studio/feature-drafts` | src/routes/v1/index.js | yes |
 | PATCH | `/api/v1/ai/studio/models/:id/activate` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/ai/studio/models/:id/restore` | src/routes/v1/index.js | yes |
+| DELETE | `/api/v1/ai/studio/models/:id` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/ai/studio/models/:id` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/ai/studio/models/batch-apply` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/ai/studio/models/batch-train-rides` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/ai/studio/models/batch-train-status` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/ai/studio/models/train` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/ai/studio/models/validate-features` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/ai/studio/models` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/ai/studio/predict` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/ai/studio/runtime-resolution` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/ai/timeseries/calendar` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/ai/timeseries/rides-current` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/ai/timeseries/rides/:assetId` | src/routes/v1/index.js | yes |
@@ -123,6 +137,7 @@
 | PATCH | `/api/v1/assets/:assetId/pdm-rules/:ruleId` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/assets/:assetId/pdm-rules` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/assets/:assetId/pdm-rules` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/assets/:assetId/pdm-sparkplug-metric-series` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/assets/:assetId/pdm-sparkplug-metrics` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/assets/:assetId/predictive-maintenance` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/assets/:assetId/ride-master/enrich-template` | src/routes/v1/index.js | yes |
@@ -132,8 +147,8 @@
 | POST | `/api/v1/assets/:assetId/runtime-overrides` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/assets/:assetId` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/assets/oee/reason-codes` | src/routes/v1/index.js | yes |
-| POST | `/api/v1/assets/zone-normalization/apply` | src/routes/v1/index.js | no |
-| GET | `/api/v1/assets/zone-normalization/preview` | src/routes/v1/index.js | no |
+| POST | `/api/v1/assets/zone-normalization/apply` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/assets/zone-normalization/preview` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/assets` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/audit-logs` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/auth/login` | src/routes/v1/index.js | yes |
@@ -156,6 +171,22 @@
 | PATCH | `/api/v1/incidents/:id` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/incidents` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/incidents` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/integration-flows/:id/run` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/integration-flows/:id/runs` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/integration-flows/:id/schedule/recalculate` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/integration-flows/:id/validate` | src/routes/v1/index.js | yes |
+| DELETE | `/api/v1/integration-flows/:id` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/integration-flows/:id` | src/routes/v1/index.js | yes |
+| PATCH | `/api/v1/integration-flows/:id` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/integration-flows/failures` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/integration-flows/from-template` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/integration-flows/runs/:runId/acknowledge` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/integration-flows/runs/:runId/retry` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/integration-flows/runs/:runId` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/integration-flows/templates` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/integration-flows` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/integration-flows` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/integration-nodes` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/integration/logs` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/integrations/:provider/destinations` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/integrations/:provider/entity/:entityId/children` | src/routes/v1/index.js | yes |
@@ -199,6 +230,11 @@
 | GET | `/api/v1/integrations/providers` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/integrations/settings` | src/routes/v1/index.js | yes |
 | PATCH | `/api/v1/integrations/settings` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/integrations/traffic-providers/tomtom/test` | src/routes/v1/index.js | yes |
+| PUT | `/api/v1/integrations/traffic-providers/tomtom` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/integrations/traffic-providers/traffic_tomtom/test` | src/routes/v1/index.js | yes |
+| PUT | `/api/v1/integrations/traffic-providers/traffic_tomtom` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/integrations/traffic-providers` | src/routes/v1/index.js | yes |
 | DELETE | `/api/v1/integrations/uns/manual/:id` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/integrations/uns/manual` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/integrations/uns/manual` | src/routes/v1/index.js | yes |
@@ -235,10 +271,10 @@
 | GET | `/api/v1/master-data/rides/:id/signal-capabilities` | src/app.js | yes |
 | PUT | `/api/v1/master-data/rides/:id/signal-capabilities` | src/app.js | yes |
 | GET | `/api/v1/master-data/rides/:id/topic-activation-status` | src/app.js | yes |
-| DELETE | `/api/v1/master-data/signal-catalog/:catalogId` | src/app.js | no |
-| PATCH | `/api/v1/master-data/signal-catalog/:catalogId` | src/app.js | no |
-| GET | `/api/v1/master-data/signal-catalog` | src/app.js | no |
-| POST | `/api/v1/master-data/signal-catalog` | src/app.js | no |
+| DELETE | `/api/v1/master-data/signal-catalog/:catalogId` | src/app.js | yes |
+| PATCH | `/api/v1/master-data/signal-catalog/:catalogId` | src/app.js | yes |
+| GET | `/api/v1/master-data/signal-catalog` | src/app.js | yes |
+| POST | `/api/v1/master-data/signal-catalog` | src/app.js | yes |
 | GET | `/api/v1/master-data/templates/:id` | src/app.js | yes |
 | GET | `/api/v1/master-data/templates` | src/app.js | yes |
 | GET | `/api/v1/mdm/parks/:parkId/zones` | src/routes/v1/index.js | yes |
@@ -277,8 +313,12 @@
 | GET | `/api/v1/operations-facts/rides/:id` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/operations-facts/rides` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/park-rides` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/parks/:parkId/attendance-risk-forecast/history` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/parks/:parkId/attendance-risk-forecast/latest` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/parks/:parkId/attendance-risk-forecast/run` | src/routes/v1/index.js | yes |
 | PATCH | `/api/v1/parks/:parkId/level0` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/parks/:parkId/operational-context` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/parks/:parkId/pdm-operations-overview` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/parks/:parkId/shift-handovers/:entryId/acknowledge` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/parks/:parkId/shift-handovers/:entryId/pdf` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/parks/:parkId/shift-handovers/:entryId/reminders/mark-sent` | src/routes/v1/index.js | yes |
@@ -286,7 +326,9 @@
 | GET | `/api/v1/parks/:parkId/shift-handovers/reminders/due` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/parks/:parkId/shift-handovers` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/parks/:parkId/shift-handovers` | src/routes/v1/index.js | yes |
-| GET | `/api/v1/parks/:parkId/zones` | src/routes/v1/index.js | no |
+| GET | `/api/v1/parks/:parkId/traffic-corridors` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/parks/:parkId/traffic-corridors` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/parks/:parkId/zones` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/parks/:parkSlug/geo/entities` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/parks/:parkSlug/geo/flow/events/batch` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/parks/:parkSlug/geo/flow/simulation` | src/routes/v1/index.js | yes |
@@ -342,6 +384,12 @@
 | GET | `/api/v1/templates/maintenance` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/templates/ride` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/templates/staffing` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/traffic-corridors/:corridorId/snapshots/latest/debug` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/traffic-corridors/:corridorId/snapshots/manual` | src/routes/v1/index.js | yes |
+| DELETE | `/api/v1/traffic-corridors/:corridorId` | src/routes/v1/index.js | yes |
+| PATCH | `/api/v1/traffic-corridors/:corridorId` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/traffic/snapshots/latest` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/traffic/snapshots/poll` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/uns-registry/entities` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/uns-registry/mirror/summary` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/uns-registry/mirror/sync` | src/routes/v1/index.js | yes |
@@ -363,12 +411,16 @@
 | GET | `/api/v1/uns/parks/:parkId/mqtt-live/status` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/uns/parks/:parkId/mqtt-live/test-event` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/uns/parks/:parkId/nodes` | src/routes/v1/index.js | yes |
-| GET | `/api/v1/uns/parks/:parkId/sparkplug-topic-preview` | src/routes/v1/index.js | no |
+| GET | `/api/v1/uns/parks/:parkId/sparkplug-topic-preview` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/uns/parks/:parkId/topics` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/uns/parks/:parkId/tree` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/uns/test/publish` | src/routes/v1/index.js | yes |
+| DELETE | `/api/v1/users/:id` | src/routes/v1/index.js | no |
+| PUT | `/api/v1/users/:id` | src/routes/v1/index.js | no |
 | GET | `/api/v1/users/me/settings` | src/routes/v1/index.js | yes |
 | PATCH | `/api/v1/users/me/settings` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/users` | src/routes/v1/index.js | no |
+| POST | `/api/v1/users` | src/routes/v1/index.js | no |
 | GET | `/api/v1/visit-actuals/:actualYear` | src/app.js | yes |
 | PUT | `/api/v1/visit-actuals/:actualYear` | src/app.js | yes |
 | GET | `/api/v1/visit-plans/:id/export/xlsx` | src/app.js | yes |
@@ -381,6 +433,15 @@
 | POST | `/api/v1/visit-plans` | src/app.js | yes |
 | GET | `/api/v1/weather/current` | src/routes/v1/index.js | yes |
 | POST | `/api/v1/weather/observations` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/widget-runtime/data-sources` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/widget-runtime/instances/:id/data` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/widget-runtime/instances/:id/validate` | src/routes/v1/index.js | yes |
+| DELETE | `/api/v1/widget-runtime/instances/:id` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/widget-runtime/instances/:id` | src/routes/v1/index.js | yes |
+| PATCH | `/api/v1/widget-runtime/instances/:id` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/widget-runtime/instances` | src/routes/v1/index.js | yes |
+| POST | `/api/v1/widget-runtime/instances` | src/routes/v1/index.js | yes |
+| GET | `/api/v1/widget-runtime/widgets` | src/routes/v1/index.js | yes |
 | DELETE | `/api/v1/zones/:id` | src/routes/v1/index.js | yes |
 | GET | `/api/v1/zones/:id` | src/routes/v1/index.js | yes |
 | PATCH | `/api/v1/zones/:id` | src/routes/v1/index.js | yes |

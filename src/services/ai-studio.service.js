@@ -15,7 +15,28 @@ const {
   buildRideStudioRows,
   mapSnapshotRowToStudioFeatures,
   summarizeRideFeatureStoreRows,
+  computeRideFeatureStoreCoverage,
 } = require('./ai-studio-dataset.service');
+const { buildStudioResolutionExplanation } = require('./ai-studio-runtime-resolution.util');
+const { trainWithAlgorithm, predictFeatureStorePayload } = require('./ai-studio-feature-store-ml.util');
+
+function studioSlotKey(p) {
+  return `${p.modelScope}|${p.entityType}|${p.entityId ?? ''}|${p.targetVariable}`;
+}
+
+function studioGovernanceStatus(row) {
+  if (row.archivedAt) return 'ARCHIVED';
+  if (row.activeFlag) return 'ACTIVE';
+  return 'CANDIDATE';
+}
+
+function mapStudioModelRow(plain) {
+  if (!plain) return plain;
+  const out = { ...plain, governanceStatus: studioGovernanceStatus(plain) };
+  if (plain.deploymentStatus != null) out.deploymentStatus = plain.deploymentStatus;
+  if (typeof plain.bestMaeInSlot === 'boolean') out.bestMaeInSlot = plain.bestMaeInSlot;
+  return out;
+}
 
 const STUDIO_FEATURES = [
   'weather',
@@ -71,61 +92,6 @@ function clamp(n, lo, hi) {
   return Math.min(hi, Math.max(lo, n));
 }
 
-/** Gaussian elimination (partial pivot) for β in (ZᵀZ + λI)β ≈ Zᵀy — small p only. */
-function solveLinearSystemAugmented(A, b) {
-  const n = b.length;
-  const M = A.map((row, i) => [...row, b[i]]);
-  for (let i = 0; i < n; i += 1) {
-    let maxRow = i;
-    for (let k = i + 1; k < n; k += 1) {
-      if (Math.abs(M[k][i]) > Math.abs(M[maxRow][i])) maxRow = k;
-    }
-    [M[i], M[maxRow]] = [M[maxRow], M[i]];
-    const piv = M[i][i];
-    if (Math.abs(piv) < 1e-14) continue;
-    for (let j = i; j <= n; j += 1) M[i][j] /= piv;
-    for (let k = 0; k < n; k += 1) {
-      if (k === i) continue;
-      const c = M[k][i];
-      for (let j = i; j <= n; j += 1) M[k][j] -= c * M[i][j];
-    }
-  }
-  const x = Array(n).fill(0);
-  for (let i = 0; i < n; i += 1) x[i] = M[i][n];
-  return x;
-}
-
-/**
- * OLS with ridge on design matrix Z (first column intercept). Returns beta length p+1.
- */
-function fitRidgeOLS(Z, y, ridge = 1e-6) {
-  const n = Z.length;
-  const p1 = Z[0].length;
-  const ZtZ = Array.from({ length: p1 }, () => Array(p1).fill(0));
-  const Zty = Array(p1).fill(0);
-  for (let i = 0; i < n; i += 1) {
-    for (let j = 0; j < p1; j += 1) {
-      Zty[j] += Z[i][j] * y[i];
-      for (let k = 0; k < p1; k += 1) {
-        ZtZ[j][k] += Z[i][j] * Z[i][k];
-      }
-    }
-  }
-  for (let i = 0; i < p1; i += 1) ZtZ[i][i] += ridge;
-  return solveLinearSystemAugmented(ZtZ, Zty);
-}
-
-function buildDesignRow(features, featureKeys, normalization) {
-  const zrow = [1];
-  for (const k of featureKeys) {
-    const raw = features[k];
-    const m = normalization[k].mean;
-    const s = normalization[k].std;
-    zrow.push((raw - m) / s);
-  }
-  return zrow;
-}
-
 function filterCompleteStudioRows(rows, featureKeys) {
   return rows.filter(
     (r) =>
@@ -133,44 +99,6 @@ function filterCompleteStudioRows(rows, featureKeys) {
       Number.isFinite(r.targetWaitPlusHorizon) &&
       featureKeys.every((k) => Number.isFinite(r.features[k]))
   );
-}
-
-function computeZScoreStats(trainRows, featureKeys) {
-  const normalization = {};
-  for (const k of featureKeys) {
-    const vals = trainRows.map((r) => r.features[k]);
-    const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
-    const variance = vals.reduce((a, b) => a + (b - mean) ** 2, 0) / vals.length;
-    let std = Math.sqrt(Math.max(0, variance));
-    if (!Number.isFinite(std) || std < 1e-9) std = 1;
-    normalization[k] = { mean, std };
-  }
-  return normalization;
-}
-
-function maeRmseR2(actual, predicted) {
-  const n = actual.length;
-  if (!n) return { mae: null, rmse: null, r2: null };
-  let sumAbs = 0;
-  let sumSq = 0;
-  const meanY = actual.reduce((a, b) => a + b, 0) / n;
-  let ssTot = 0;
-  let ssRes = 0;
-  for (let i = 0; i < n; i += 1) {
-    const d = predicted[i] - actual[i];
-    sumAbs += Math.abs(d);
-    sumSq += d * d;
-    ssTot += (actual[i] - meanY) ** 2;
-    ssRes += (actual[i] - predicted[i]) ** 2;
-  }
-  const mae = sumAbs / n;
-  const rmse = Math.sqrt(sumSq / n);
-  const r2 = ssTot > 1e-9 ? 1 - ssRes / ssTot : null;
-  return {
-    mae: Number(mae.toFixed(4)),
-    rmse: Number(rmse.toFixed(4)),
-    r2: r2 != null ? Number(r2.toFixed(4)) : null,
-  };
 }
 
 class AiStudioService {
@@ -189,7 +117,7 @@ class AiStudioService {
       featureStoreTrainFeatures: [...FEATURE_STORE_TRAIN_FEATURES],
       datasets: [
         { code: 'SANDBOX', description: 'Synthetic stub learner (backwards compatible)' },
-        { code: 'FEATURE_STORE', description: 'Real rows from ride_feature_snapshots_5m; X = same map as ride Ridge (RIDE, Phase 1)' },
+        { code: 'FEATURE_STORE', description: 'Real rows from ride_feature_snapshots_5m; z-scored supervised training (RIDE, Phase 2)' },
       ],
       manualAlgorithms: MANUAL_ALGORITHMS.map((code) => ({
         code,
@@ -201,6 +129,45 @@ class AiStudioService {
         { scope: 'park', description: 'Whole-park aggregate models' },
       ],
       predictionOrder: ['entity', 'category', 'park', 'rules_fallback'],
+      /** Where algorithm choice is enforced: training payload (no post-hoc PATCH). */
+      algorithmSupport: {
+        SANDBOX: {
+          implementationNote:
+            'Training uses deterministic stub learners (seeded pseudo-metrics) for algorithm comparison — not production-grade fits.',
+          selectableAlgorithms: MANUAL_ALGORITHMS.map((code) => ({
+            code,
+            label: code.replace(/_/g, ' '),
+            implementationKind: 'sandbox_stub',
+          })),
+          autoStrategySupported: true,
+        },
+        FEATURE_STORE: {
+          implementationNote:
+            'Phase 2 trains on ride_feature_snapshots_5m with z-score normalization: ridge linear regression, random forest, gradient boosting (stumps+), or small ReLU MLP — same feature keys as production ride Ridge.',
+          selectableAlgorithms: MANUAL_ALGORITHMS.map((code) => ({
+            code,
+            label: code.replace(/_/g, ' '),
+            implementationKind:
+              code === 'linear_regression'
+                ? 'ridge_ols_trained'
+                : code === 'random_forest'
+                  ? 'random_forest_js'
+                  : code === 'gradient_boosting'
+                    ? 'gradient_boosting_js'
+                    : 'mlp_relu_js',
+          })),
+          autoStrategySupported: true,
+        },
+      },
+      /** Productive ML (ride wait) — separate from AI Studio registry. */
+      productionMlRuntime: {
+        modelStore: 'ml_model_registry',
+        algorithmFamily: 'ridge_linear',
+        summary:
+          'Ride wait production combines active RIDE_SPECIFIC_MODEL and GLOBAL_RIDE_MODEL Ridge payloads per horizon; when both predict, the implementation prefers the lower in-registry MAE (champion) — still from active registry rows only.',
+        studioVsProduction:
+          'AI Studio models (ai_studio_models) are used only by POST /ai/studio/predict unless separately integrated; they do not replace production registry resolution.',
+      },
     };
   }
 
@@ -347,8 +314,28 @@ class AiStudioService {
     const missingRate = clamp(0.22 - Math.log10(rowCount + 10) * 0.04, 0.03, 0.38);
 
     let featureStorePreview = null;
+    let featureStoreFeatureCoverage = null;
+    let featureStoreCoverageRowsAnalyzed = 0;
+    let featureCompleteness = null;
+    let featureCompletenessRowsAnalyzed = 0;
     if (opts.dataset === 'FEATURE_STORE' && entityType === 'RIDE' && resolvedEntityId) {
       featureStorePreview = await summarizeRideFeatureStoreRows(parkId, resolvedEntityId, 15);
+      const cov = await computeRideFeatureStoreCoverage(parkId, resolvedEntityId, { limit: 8000 });
+      featureStoreFeatureCoverage = cov.coverage;
+      featureStoreCoverageRowsAnalyzed = cov.rowsAnalyzed;
+      // Canonical name for frontend: share of rows with non-null raw X sources / total rows analyzed.
+      featureCompleteness = cov.coverage;
+      featureCompletenessRowsAnalyzed = cov.rowsAnalyzed;
+    }
+
+    /** Rows that matter for the *selected* asset (when entityId resolves). FEATURE_STORE uses ride_feature_snapshots; SANDBOX / heuristics use ride_wait_time_samples or other entity counters. */
+    let heuristicRowsSelectedEntity = null;
+    if (resolvedEntityId) {
+      if (opts.dataset === 'FEATURE_STORE' && entityType === 'RIDE' && featureStorePreview) {
+        heuristicRowsSelectedEntity = featureStorePreview.snapshotBucketRows;
+      } else {
+        heuristicRowsSelectedEntity = entitySampleCount;
+      }
     }
 
     return {
@@ -358,11 +345,53 @@ class AiStudioService {
       rowCount,
       parkSnapshotCount: parkSnapCount,
       entitySampleCount,
+      heuristicRowsSelectedEntity,
       missingRate,
       seasonalityScore,
       volatilityScore,
       windowDays: 30,
       featureStorePreview,
+      featureStoreFeatureCoverage,
+      featureStoreCoverageRowsAnalyzed,
+      featureCompleteness,
+      featureCompletenessRowsAnalyzed,
+    };
+  }
+
+  /**
+   * FEATURE_STORE — per-X share of snapshot rows with raw (non-null) sources before imputation.
+   *
+   * @param {string[]|null|undefined} featureKeys - optional filter; defaults to all train features
+   */
+  async validateFeatureStoreFeatures(parkId, entityType, entityId, featureKeys = null) {
+    if (entityType !== 'RIDE') {
+      throw new AppError('FEATURE_STORE feature validation requires entityType RIDE', 422, {
+        code: 'FEATURE_STORE_VALIDATE_SCOPE',
+      });
+    }
+    if (!entityId || String(entityId).trim() === '') {
+      throw new AppError('entityId required for feature validation', 422, { code: 'ENTITY_REQUIRED' });
+    }
+    const resolvedEntityId = await this.lookupCanonicalAssetId(parkId, entityType, entityId);
+    const { coverage: fullCoverage, rowsAnalyzed } = await computeRideFeatureStoreCoverage(parkId, resolvedEntityId, {
+      limit: 8000,
+    });
+    const allowed = new Set(FEATURE_STORE_TRAIN_FEATURES);
+    const keys =
+      Array.isArray(featureKeys) && featureKeys.length
+        ? featureKeys.filter((k) => allowed.has(k))
+        : [...FEATURE_STORE_TRAIN_FEATURES];
+    const featureCoverage = {};
+    for (const k of keys) {
+      featureCoverage[k] = fullCoverage[k] ?? 0;
+    }
+    return {
+      entityType,
+      entityId: resolvedEntityId,
+      rowsAnalyzed,
+      featureCoverage,
+      featureCompleteness: featureCoverage,
+      featureCompletenessRowsAnalyzed: rowsAnalyzed,
     };
   }
 
@@ -446,9 +475,9 @@ class AiStudioService {
   }
 
   /**
-   * Train z-score linear regression on snapshot rows; last 20% holdout.
+   * Train selected algorithm on snapshot rows; last 20% holdout; deterministic RNG from seed.
    */
-  async trainFeatureStoreLinear(parkId, internalAssetId, featureKeys, horizonMinutes) {
+  async trainFeatureStoreTrain(parkId, internalAssetId, featureKeys, horizonMinutes, algorithm, rng, trainingOptions) {
     const rawRows = await buildRideStudioRows(parkId, {
       internalAssetId,
       horizonMinutes,
@@ -473,73 +502,20 @@ class AiStudioService {
     const trainRows = complete.slice(0, splitIdx);
     const holdRows = complete.slice(splitIdx);
 
-    const normalization = computeZScoreStats(trainRows, featureKeys);
-    const Ztrain = trainRows.map((r) => buildDesignRow(r.features, featureKeys, normalization));
-    const yTrain = trainRows.map((r) => r.targetWaitPlusHorizon);
-    const beta = fitRidgeOLS(Ztrain, yTrain, 1e-6);
-
-    const intercept = beta[0];
-    const weights = {};
-    for (let j = 0; j < featureKeys.length; j += 1) {
-      weights[featureKeys[j]] = beta[j + 1];
-    }
-
-    const Zhold = holdRows.map((r) => buildDesignRow(r.features, featureKeys, normalization));
-    const yHold = holdRows.map((r) => r.targetWaitPlusHorizon);
-    const predHold = Zhold.map((zrow) => zrow.reduce((acc, z, idx) => acc + z * beta[idx], 0));
-
-    const { mae, rmse, r2 } = maeRmseR2(yHold, predHold);
-
-    const absW = featureKeys.map((k) => Math.abs(weights[k] || 0));
-    const sumAbs = absW.reduce((a, b) => a + b, 0) || 1;
-    const featureImportance = {};
-    for (let i = 0; i < featureKeys.length; i += 1) {
-      featureImportance[featureKeys[i]] = Number((absW[i] / sumAbs).toFixed(4));
-    }
-
-    const points = holdRows.map((r, idx) => ({
-      i: idx,
-      actual: Number(yHold[idx].toFixed(2)),
-      predicted: Number(predHold[idx].toFixed(2)),
-    }));
-
-    const t0 = trainRows[0].snapshotAt;
-    const t1 = trainRows[trainRows.length - 1].snapshotAt;
-    const modelPayload = {
-      stub: false,
-      algorithm: 'linear_regression',
-      dataset: 'FEATURE_STORE',
+    const trained = trainWithAlgorithm(
+      trainRows,
+      holdRows,
+      featureKeys,
+      algorithm,
+      rng,
       horizonMinutes,
-      normalization,
-      intercept: Number(intercept.toFixed(6)),
-      weights,
-      featureKeys: [...featureKeys],
-      trainingRowsUsed: trainRows.length,
-      holdoutRowsUsed: holdRows.length,
-      trainDateFrom: t0 instanceof Date ? t0.toISOString() : new Date(t0).toISOString(),
-      trainDateTo: t1 instanceof Date ? t1.toISOString() : new Date(t1).toISOString(),
-      completeRowsTotal: complete.length,
-    };
-
-    return {
-      mae,
-      rmse,
-      r2,
-      featureImportance,
-      modelPayload,
-      evalHoldout: { points, holdoutRows: holdRows.length },
-      datasetSnapshotJson: {
-        dataset: 'FEATURE_STORE',
-        horizonMinutes,
-        trainingRowsUsed: trainRows.length,
-        holdoutRowsUsed: holdRows.length,
-        completeRowsTotal: complete.length,
-        trainDateFrom: modelPayload.trainDateFrom,
-        trainDateTo: modelPayload.trainDateTo,
-        labelDateFrom: complete[0].snapshotAt.toISOString(),
-        labelDateTo: complete[complete.length - 1].snapshotAt.toISOString(),
-      },
-    };
+      trainingOptions && typeof trainingOptions === 'object' ? trainingOptions : {}
+    );
+    trained.datasetSnapshotJson.completeRowsTotal = complete.length;
+    trained.datasetSnapshotJson.labelDateFrom = complete[0].snapshotAt.toISOString();
+    trained.datasetSnapshotJson.labelDateTo = complete[complete.length - 1].snapshotAt.toISOString();
+    trained.modelPayload.completeRowsTotal = complete.length;
+    return trained;
   }
 
   async nextVersion(parkId, modelScope, entityType, entityId, targetVariable) {
@@ -550,6 +526,7 @@ class AiStudioService {
         entityType,
         entityId: entityId || { [Op.is]: null },
         targetVariable,
+        archivedAt: { [Op.is]: null },
       },
       order: [['version', 'DESC']],
       attributes: ['version'],
@@ -567,7 +544,14 @@ class AiStudioService {
       algorithm: manualAlgorithm = null,
       dataset = 'SANDBOX',
       horizonMinutes = 15,
+      featureStoreTrainingOptions = undefined,
+      batchTrainId: batchTrainIdRaw = null,
     } = body;
+
+    const batchTrainId =
+      batchTrainIdRaw != null && String(batchTrainIdRaw).trim() !== ''
+        ? String(batchTrainIdRaw).trim()
+        : null;
 
     if (!ENTITY_TYPES.includes(entityType)) {
       throw new AppError('Invalid entity type', 422, { code: 'INVALID_ENTITY_TYPE' });
@@ -603,14 +587,51 @@ class AiStudioService {
         });
       }
       if (targetVariable !== 'wait_time_plus_15') {
-        throw new AppError('Phase 1 FEATURE_STORE supports target wait_time_plus_15 only', 422, {
+        throw new AppError('FEATURE_STORE supports target wait_time_plus_15 only', 422, {
           code: 'FEATURE_STORE_TARGET',
         });
       }
-      const hm = 15;
-      const trained = await this.trainFeatureStoreLinear(parkId, entityIdResolved, features, hm);
+      const hm = Number(horizonMinutes) || 15;
+
+      let algorithm = manualAlgorithm;
+      if (strategy === 'AUTO' || !algorithm) {
+        algorithm = this.pickAutoAlgorithm(stats, targetVariable);
+      }
+      if (!MANUAL_ALGORITHMS.includes(algorithm)) {
+        throw new AppError('Invalid algorithm', 422, { code: 'INVALID_ALGORITHM' });
+      }
 
       const version = await this.nextVersion(parkId, modelScope, entityType, entityIdResolved, targetVariable);
+      const fsOpts =
+        featureStoreTrainingOptions && typeof featureStoreTrainingOptions === 'object'
+          ? featureStoreTrainingOptions
+          : {};
+      const rng = mulberry32(
+        hashSeed([
+          String(parkId),
+          String(entityIdResolved),
+          features.slice().sort().join(','),
+          String(version),
+          algorithm,
+          'FEATURE_STORE',
+          JSON.stringify(fsOpts),
+        ])
+      );
+      const trained = await this.trainFeatureStoreTrain(
+        parkId,
+        entityIdResolved,
+        features,
+        hm,
+        algorithm,
+        rng,
+        fsOpts
+      );
+
+      const modelPayload = {
+        ...trained.modelPayload,
+        ...(batchTrainId ? { batchTrainId } : {}),
+      };
+
       const row = await AiStudioModel.create({
         parkId,
         modelScope,
@@ -618,20 +639,20 @@ class AiStudioService {
         entityId: entityIdResolved,
         targetVariable,
         featuresJson: features,
-        strategy: 'MANUAL',
-        algorithm: 'linear_regression',
+        strategy: strategy === 'AUTO' ? 'AUTO' : 'MANUAL',
+        algorithm: trained.modelPayload.algorithm || algorithm,
         version,
         mae: trained.mae,
         rmse: trained.rmse,
         r2: trained.r2,
         lastTrainingAt: new Date(),
         activeFlag: false,
-        modelPayload: trained.modelPayload,
+        modelPayload,
         featureImportanceJson: trained.featureImportance,
         evalHoldoutJson: trained.evalHoldout,
         datasetSnapshotJson: { ...stats, ...trained.datasetSnapshotJson },
       });
-      return row.get({ plain: true });
+      return mapStudioModelRow(row.get({ plain: true }));
     }
 
     let algorithm = manualAlgorithm;
@@ -667,7 +688,7 @@ class AiStudioService {
       datasetSnapshotJson: { ...stats, dataset: 'SANDBOX' },
     });
 
-    return row.get({ plain: true });
+    return mapStudioModelRow(row.get({ plain: true }));
   }
 
   async listModels(parkId, query = {}) {
@@ -676,6 +697,10 @@ class AiStudioService {
     if (query.targetVariable) where.targetVariable = query.targetVariable;
     if (query.modelScope) where.modelScope = query.modelScope;
     if (query.activeOnly === true || query.activeOnly === 'true') where.activeFlag = true;
+    const includeArchived = query.includeArchived === true || query.includeArchived === 'true';
+    if (!includeArchived) {
+      where.archivedAt = { [Op.is]: null };
+    }
 
     const rows = await AiStudioModel.findAll({
       where,
@@ -687,13 +712,45 @@ class AiStudioService {
       ],
       limit: Math.min(Number(query.limit) || 200, 500),
     });
-    return rows.map((r) => r.get({ plain: true }));
+    const plains = rows.map((r) => r.get({ plain: true }));
+    return this.enrichStudioRowsWithSlotMeta(plains).map((p) => mapStudioModelRow(p));
+  }
+
+  /**
+   * Per-slot best MAE among non-archived rows; deploymentStatus + bestMaeInSlot for registry transparency.
+   */
+  enrichStudioRowsWithSlotMeta(plains) {
+    const slotToBestId = new Map();
+    const bySlot = new Map();
+    for (const p of plains) {
+      if (p.archivedAt) continue;
+      const k = studioSlotKey(p);
+      if (!bySlot.has(k)) bySlot.set(k, []);
+      bySlot.get(k).push(p);
+    }
+    for (const [, arr] of bySlot) {
+      const withMae = arr.filter((x) => x.mae != null && Number.isFinite(Number(x.mae)));
+      if (!withMae.length) continue;
+      const best = [...withMae].sort((a, b) => Number(a.mae) - Number(b.mae))[0];
+      if (best?.id) slotToBestId.set(studioSlotKey(best), best.id);
+    }
+    return plains.map((p) => {
+      const slot = studioSlotKey(p);
+      const enriched = {
+        ...p,
+        deploymentStatus: p.archivedAt ? 'archived' : p.activeFlag ? 'active_deployment' : 'candidate',
+        bestMaeInSlot: !p.archivedAt && slotToBestId.get(slot) === p.id,
+      };
+      return enriched;
+    });
   }
 
   async getModel(parkId, id) {
     const row = await AiStudioModel.findOne({ where: { id, parkId } });
     if (!row) throw new AppError('Model not found', 404, { code: 'NOT_FOUND' });
-    return row.get({ plain: true });
+    const plain = row.get({ plain: true });
+    const [enriched] = this.enrichStudioRowsWithSlotMeta([plain]);
+    return mapStudioModelRow(enriched);
   }
 
   slotWhereClause(row) {
@@ -706,6 +763,18 @@ class AiStudioService {
     };
   }
 
+  /**
+   * Drop AiParkForecastService in-memory resolve cache for this park so ride-grid picks up new active models immediately.
+   */
+  invalidateParkForecastRideModelCache(parkId) {
+    try {
+      const { clearStudioRideFsModelResolveCacheForPark } = require('./ai-park-forecast.service');
+      clearStudioRideFsModelResolveCacheForPark(parkId);
+    } catch {
+      /* avoid hard-fail if module graph changes */
+    }
+  }
+
   async setActive(parkId, id, activeFlag) {
     const row = await AiStudioModel.findOne({ where: { id, parkId } });
     if (!row) throw new AppError('Model not found', 404, { code: 'NOT_FOUND' });
@@ -714,13 +783,72 @@ class AiStudioService {
       if (activeFlag) {
         await AiStudioModel.update(
           { activeFlag: false },
-          { where: this.slotWhereClause(row), transaction: t }
+          {
+            where: { ...this.slotWhereClause(row), parkId, archivedAt: { [Op.is]: null } },
+            transaction: t,
+          }
         );
       }
       await row.update({ activeFlag: !!activeFlag }, { transaction: t });
     });
 
     return this.getModel(parkId, id);
+  }
+
+  async archiveStudioModel(parkId, id, userId = null) {
+    const row = await AiStudioModel.findOne({ where: { id, parkId } });
+    if (!row) throw new AppError('Model not found', 404, { code: 'NOT_FOUND' });
+    const plain = row.get({ plain: true });
+    if (plain.archivedAt) return mapStudioModelRow(plain);
+    if (plain.activeFlag) {
+      throw new AppError('Cannot archive an active registry model', 409, { code: 'MODEL_ACTIVE' });
+    }
+    const others = await AiStudioModel.count({
+      where: {
+        ...this.slotWhereClause(row),
+        parkId,
+        archivedAt: { [Op.is]: null },
+        id: { [Op.ne]: row.id },
+      },
+    });
+    if (others === 0) {
+      throw new AppError('Cannot archive the last studio model version for this slot', 409, {
+        code: 'MODEL_LAST_DEPLOYABLE_VERSION',
+      });
+    }
+    await row.update({
+      archivedAt: new Date(),
+      archivedBy: userId || null,
+      activeFlag: false,
+    });
+    return this.getModel(parkId, id);
+  }
+
+  async restoreStudioModel(parkId, id, _userId = null) {
+    const row = await AiStudioModel.findOne({ where: { id, parkId } });
+    if (!row) throw new AppError('Model not found', 404, { code: 'NOT_FOUND' });
+    if (!row.archivedAt) return this.getModel(parkId, id);
+    await row.update({ archivedAt: null, archivedBy: null });
+    return this.getModel(parkId, id);
+  }
+
+  /**
+   * Hard-delete a studio row after soft-archive. Keeps governance: active or non-archived rows cannot be purged.
+   */
+  async permanentlyDeleteStudioModel(parkId, id) {
+    const row = await AiStudioModel.findOne({ where: { id, parkId } });
+    if (!row) throw new AppError('Model not found', 404, { code: 'NOT_FOUND' });
+    const plain = row.get({ plain: true });
+    if (!plain.archivedAt) {
+      throw new AppError('Only archived models can be permanently deleted. Archive first.', 409, {
+        code: 'MODEL_NOT_ARCHIVED',
+      });
+    }
+    if (plain.activeFlag) {
+      throw new AppError('Cannot delete an active model', 409, { code: 'MODEL_ACTIVE' });
+    }
+    await row.destroy();
+    return { id: plain.id, deleted: true };
   }
 
   async findActiveCandidate(parkId, modelScope, entityType, entityId, targetVariable) {
@@ -730,6 +858,7 @@ class AiStudioService {
       entityType,
       targetVariable,
       activeFlag: true,
+      archivedAt: { [Op.is]: null },
     };
     if (modelScope === 'entity') {
       where.entityId = entityId;
@@ -739,14 +868,124 @@ class AiStudioService {
     return AiStudioModel.findOne({ where });
   }
 
+  async findSlotCandidatesForResolution(parkId, modelScope, entityType, entityId, targetVariable) {
+    const where = {
+      parkId,
+      modelScope,
+      entityType,
+      targetVariable,
+      archivedAt: { [Op.is]: null },
+    };
+    if (modelScope === 'entity') {
+      where.entityId = entityId;
+    } else {
+      where.entityId = { [Op.is]: null };
+    }
+    const rows = await AiStudioModel.findAll({ where, order: [['version', 'DESC']] });
+    return rows.map((r) => r.get({ plain: true }));
+  }
+
+  /**
+   * Explain which model POST /ai/studio/predict would use (active-only; best MAE is informational).
+   */
+  async explainRuntimeResolution(parkId, body) {
+    const { entityType, entityId = null, targetVariable } = body;
+    if (!ENTITY_TYPES.includes(entityType)) {
+      throw new AppError('Invalid entity type', 422, { code: 'INVALID_ENTITY_TYPE' });
+    }
+    this.assertValidTarget(entityType, targetVariable);
+
+    let canonicalEntityId = null;
+    if (entityId && entityType !== 'WHOLE_PARK') {
+      canonicalEntityId = await this.lookupCanonicalAssetId(parkId, entityType, entityId);
+    }
+
+    let entityCandidates = [];
+    if (entityType !== 'WHOLE_PARK' && canonicalEntityId) {
+      entityCandidates = await this.findSlotCandidatesForResolution(
+        parkId,
+        'entity',
+        entityType,
+        canonicalEntityId,
+        targetVariable
+      );
+    }
+
+    let categoryCandidates = [];
+    if (entityType !== 'WHOLE_PARK') {
+      categoryCandidates = await this.findSlotCandidatesForResolution(
+        parkId,
+        'category',
+        entityType,
+        null,
+        targetVariable
+      );
+    }
+
+    const parkCandidates = await this.findSlotCandidatesForResolution(
+      parkId,
+      'park',
+      'WHOLE_PARK',
+      null,
+      targetVariable
+    );
+
+    const explanation = buildStudioResolutionExplanation({
+      canonicalEntityId,
+      entityType,
+      entityCandidates,
+      categoryCandidates,
+      parkCandidates,
+    });
+
+    return {
+      parkId,
+      entityType,
+      entityIdRequested: entityId || null,
+      targetVariable,
+      canonicalEntityId,
+      ...explanation,
+    };
+  }
+
   /**
    * SANDBOX: raw feature values. FEATURE_STORE: z-score using payload.normalization.
    */
   predictWithModel(modelRow, featuresInput) {
     const payload = modelRow.modelPayload || {};
-    const weights = payload.weights || {};
     const feats = modelRow.featuresJson || [];
-    const isNormalized = payload.stub === false && payload.normalization && typeof payload.normalization === 'object';
+
+    const fsPayload =
+      payload.stub === false &&
+      payload.normalization &&
+      typeof payload.normalization === 'object' &&
+      (payload.dataset === 'FEATURE_STORE' ||
+        payload.algorithm === 'random_forest' ||
+        payload.algorithm === 'gradient_boosting' ||
+        payload.algorithm === 'neural_network' ||
+        payload.rf ||
+        payload.gbm ||
+        payload.mlp ||
+        (payload.weights && typeof payload.weights === 'object'));
+
+    if (fsPayload) {
+      const featureOrder =
+        Array.isArray(payload.featureKeys) && payload.featureKeys.length > 0
+          ? payload.featureKeys
+          : Array.isArray(feats) && feats.length > 0
+            ? feats
+            : [];
+      if (featureOrder.length > 0) {
+        const pv = predictFeatureStorePayload(payload, featuresInput, featureOrder);
+        if (pv != null && Number.isFinite(pv)) {
+          return Number(Math.max(0, pv).toFixed(4));
+        }
+      }
+    }
+
+    const weights = payload.weights || {};
+    const isNormalized =
+      payload.stub === false && payload.normalization && typeof payload.normalization === 'object';
 
     let v = Number(payload.intercept) || 0;
     if (isNormalized) {

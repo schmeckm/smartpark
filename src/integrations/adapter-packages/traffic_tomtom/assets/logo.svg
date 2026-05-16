@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+  <defs>
+    <linearGradient id="tt-bg" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fdf2f8"/>
+      <stop offset="1" stop-color="#fce7f3"/>
+    </linearGradient>
+    <linearGradient id="tt-pin" x1="22" y1="12" x2="42" y2="52" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ec4899"/>
+      <stop offset="1" stop-color="#be185d"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#tt-bg)"/>
+  <!-- route curve (abstract road) -->
+  <path
+    d="M12 44c10-18 22-22 40-14"
+    stroke="#cbd5e1"
+    stroke-width="3"
+    stroke-linecap="round"
+    fill="none"
+  />
+  <circle cx="14" cy="43" r="3" fill="#94a3b8"/>
+  <circle cx="50" cy="32" r="3" fill="#94a3b8"/>
+  <!-- pin / routing marker -->
+  <path
+    d="M32 14c-6.6 0-12 5.2-12 11.6 0 8.4 12 24.4 12 24.4s12-16 12-24.4C44 19.2 38.6 14 32 14z"
+    fill="url(#tt-pin)"
+  />
+  <circle cx="32" cy="26" r="4.5" fill="#fff" opacity="0.95"/>
+</svg>

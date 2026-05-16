@@ -28,6 +28,7 @@ import { numMetric, resolveRawMqttSparkplugGroupKey, slugifyUnsParkKey } from '@
 import { useAuthStore } from '@/stores/auth'
 import { useParkContextStore } from '@/stores/parkContext'
 import { setApiParkContextId } from '@/utils/apiParkContext'
+import { resolveApiOrigin } from '@/utils/apiOrigin'
 import { useRegionalDateTime } from '@/composables/useRegionalDateTime'
 import { useToast } from '@/composables/useToast'
 import { useI18n } from 'vue-i18n'
@@ -38,7 +39,7 @@ const auth = useAuthStore()
 const { formatDateTime } = useRegionalDateTime()
 const { push } = useToast()
 
-const apiOrigin = import.meta.env.VITE_API_URL || undefined
+const apiOrigin = resolveApiOrigin()
 
 /** Local copy of UNS live buffer rows (HTTP seed + Socket.IO `uns:mqtt:live:events`). */
 const mqttLiveBuffer = ref<UnsMqttLiveEvent[]>([])

@@ -27,7 +27,7 @@ test('loadConfig: returns a Lifecycle whose steps match DEFAULT_BOOT_STEP_ORDER 
 
 test('loadConfig: registers expected boot step count', () => {
   const { lifecycle } = loadConfig({ app: fakeApp(), logger: silentLogger() });
-  assert.equal(lifecycle.steps().length, 13);
+  assert.equal(lifecycle.steps().length, 16);
 });
 
 test('DEFAULT_BOOT_STEP_ORDER: is frozen so reorderings need an explicit code change', () => {
@@ -46,7 +46,8 @@ test('DEFAULT_BOOT_STEP_ORDER: critical pre/post-listen ordering invariants hold
 
   assert.ok(idx('boot:feature-flags') < idx('db:sequelize'));
   assert.ok(idx('db:sequelize') < idx('cache:platform-settings'));
-  assert.ok(idx('cache:platform-settings') < idx('http:server-init'));
+  assert.ok(idx('cache:platform-settings') < idx('cache:influx-streaming-gate'));
+  assert.ok(idx('cache:influx-streaming-gate') < idx('http:server-init'));
   assert.ok(idx('http:server-init') < idx('scheduler:ai-orchestrator'));
   // All schedulers must run before listen so socket.io is bound before any
   // scheduler tries to emit to it (defensive; today no scheduler does).
@@ -56,6 +57,8 @@ test('DEFAULT_BOOT_STEP_ORDER: critical pre/post-listen ordering invariants hold
     'scheduler:adapter-installed',
     'scheduler:weather-open-meteo',
     'scheduler:ml-training',
+    'scheduler:integration-flow',
+    'scheduler:integration-flow-retry',
   ]) {
     assert.ok(idx(s) < idx('http:listen'), `${s} must run before http:listen`);
   }

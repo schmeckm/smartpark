@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
+import { resolveApiOrigin } from '@/utils/apiOrigin'
 
 const fileStaff = ref<File | null>(null)
 const fileRides = ref<File | null>(null)
@@ -11,7 +12,7 @@ const busy = ref(false)
 const { push } = useToast()
 const auth = useAuthStore()
 
-const origin = import.meta.env.VITE_API_URL || ''
+const origin = resolveApiOrigin()
 
 async function post(path: string, f: File | null) {
   if (!f) {

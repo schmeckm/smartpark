@@ -35,11 +35,9 @@ test.describe('UNS Hub', () => {
 
   test('opens UNS hub and renders migration tabs', async ({ page }) => {
     await page.goto('/uns/tree')
-    await expect(page.getByText('UNS', { exact: false }).first()).toBeVisible()
-    await expect(page.getByRole('link', { name: /Namespace Tree/i })).toBeVisible()
-    await expect(page.getByRole('link', { name: /Registry Mirror/i })).toBeVisible()
-    await expect(page.getByRole('link', { name: /Spy Inbox/i })).toBeVisible()
-    await expect(page.getByRole('link', { name: /Signal View/i })).toBeVisible()
+    await expect(page).toHaveURL(/\/realtime\/topics/)
+    await expect(page.getByRole('heading', { name: /Unified Namespace/i })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /Asset hierarchy|Anlagenhierarchie/i })).toBeVisible()
   })
 
   test('Registry Mirror tab loads mirror shell', async ({ page }) => {

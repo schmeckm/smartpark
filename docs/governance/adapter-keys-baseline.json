@@ -5,7 +5,10 @@
     "calendar_school_holidays",
     "macro_tourism_index",
     "opcua_edge",
+    "predictive_maintenance",
     "themeparks_wiki",
+    "traffic_corridors",
+    "traffic_tomtom",
     "wartezeiten_app",
     "weather_open_meteo"
   ],
@@ -28,6 +31,10 @@
       "runtime": "src/integrations/adapter-packages/opcua_edge/index.js",
       "installConfig": "data/adapter-install-config/opcua_edge.install.yaml"
     },
+    "predictive_maintenance": {
+      "manifest": "src/integrations/adapter-packages/predictive_maintenance/manifest.json",
+      "runtime": "src/integrations/adapter-packages/predictive_maintenance/index.js"
+    },
     "themeparks_wiki": {
       "manifest": "src/integrations/adapter-packages/themeparks_wiki/manifest.json",
       "runtime": "src/integrations/adapter-packages/themeparks_wiki/index.js",
@@ -35,6 +42,15 @@
       "syncModule": "src/modules/adapters/themeparks/themeparks-sync.service.js",
       "envFlags": ["EXTERNAL_PARK_DATA_DEFAULT_PROVIDER"],
       "selectedParkService": "src/services/themeparks-wiki-selected-park.service.js"
+    },
+    "traffic_corridors": {
+      "manifest": "src/integrations/adapter-packages/traffic_corridors/manifest.json",
+      "runtime": "src/integrations/adapter-packages/traffic_corridors/index.js"
+    },
+    "traffic_tomtom": {
+      "manifest": "src/integrations/adapter-packages/traffic_tomtom/manifest.json",
+      "runtime": "src/integrations/adapter-packages/traffic_tomtom/index.js",
+      "installConfig": "data/adapter-install-config/traffic_tomtom.install.yaml"
     },
     "wartezeiten_app": {
       "manifest": "src/integrations/adapter-packages/wartezeiten_app/manifest.json",

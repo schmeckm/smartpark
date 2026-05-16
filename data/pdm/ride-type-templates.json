@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "defaults": {
+    "rideType": "ROLLERCOASTER",
+    "expectedMetrics": ["motor_rpm", "motor_power_kw", "bearing_vibration_mm_s", "oil_temperature_c"],
+    "healthWeightOverrides": {},
+    "recommendedThresholdHints": [
+      { "metricName": "bearing_vibration_mm_s", "warnAbove": 4.5, "criticalAbove": 7.5, "label": "Bearing vibration" },
+      { "metricName": "oil_temperature_c", "warnAbove": 75, "criticalAbove": 88, "label": "Oil temperature" }
+    ],
+    "supportedTelemetryTypes": ["Sparkplug.DDATA.numeric"]
+  },
+  "templates": [
+    {
+      "rideType": "ROLLERCOASTER",
+      "displayName": "Roller coaster / launch",
+      "expectedMetrics": ["motor_rpm", "motor_power_kw", "bearing_vibration_mm_s", "oil_temperature_c"],
+      "healthWeightOverrides": { "bearing_vibration_mm_s": 1.25, "motor_power_kw": 1.1 },
+      "defaultRules": [
+        { "metricName": "bearing_vibration_mm_s", "label": "Bearing vibration", "warnAbove": 4.5, "criticalAbove": 7.5 },
+        { "metricName": "oil_temperature_c", "label": "Oil temperature", "warnAbove": 75, "criticalAbove": 88 }
+      ]
+    },
+    {
+      "rideType": "WATER_RIDE",
+      "displayName": "Water ride / pumps",
+      "expectedMetrics": ["pump_rpm", "water_flow_l_min", "hydraulic_pressure_bar", "motor_power_kw"],
+      "healthWeightOverrides": { "pump_rpm": 1.15, "hydraulic_pressure_bar": 1.2 },
+      "defaultRules": [
+        { "metricName": "hydraulic_pressure_bar", "label": "Hydraulic pressure", "warnBelow": 35, "criticalBelow": 28 },
+        { "metricName": "water_flow_l_min", "label": "Flow", "warnBelow": 40, "criticalBelow": 25 }
+      ]
+    },
+    {
+      "rideType": "DARK_RIDE",
+      "displayName": "Dark ride — conveyors & show power",
+      "expectedMetrics": ["motor_rpm", "motor_power_kw", "bearing_vibration_mm_s"],
+      "healthWeightOverrides": { "motor_power_kw": 1.15 },
+      "defaultRules": [
+        { "metricName": "motor_power_kw", "label": "Drive power", "warnAbove": 90, "criticalAbove": 110 }
+      ]
+    },
+    {
+      "rideType": "ROTATING_RIDE",
+      "displayName": "Rotating platform",
+      "expectedMetrics": ["motor_rpm", "motor_power_kw", "hydraulic_pressure_bar", "bearing_vibration_mm_s"],
+      "healthWeightOverrides": { "hydraulic_pressure_bar": 1.15 },
+      "defaultRules": []
+    },
+    {
+      "rideType": "TRANSPORT_RIDE",
+      "displayName": "Transport / people mover",
+      "expectedMetrics": ["motor_rpm", "motor_power_kw", "oil_temperature_c"],
+      "healthWeightOverrides": {},
+      "defaultRules": []
+    }
+  ]
+}

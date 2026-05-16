@@ -1,0 +1,28 @@
+# Smart Park OS — adapter install config (YAML). Managed by PATCH/POST install-local only.
+schemaVersion: 1
+adapterKey: predictive_maintenance
+installedAt: '2026-05-14T20:27:45.306Z'
+updatedAt: '2026-05-16T11:38:14.781Z'
+configJson:
+  parkSlug: europa_park
+  demoTelemetryEnabled: true
+  demoMetricProfile: standard_pdm
+  metrics:
+    - motor_rpm
+    - pump_rpm
+    - motor_power_kw
+    - bearing_vibration_mm_s
+  maxAssets: 50
+  scanEntityTypes:
+    - ride
+    - attraction
+contextJson:
+  parkSlug: europa_park
+  sparkplugGroupId: europa_park
+  sparkplugEdgeNode: predictive_gateway
+outputProfiles:
+  - SPARKPLUG_JSON
+  - CANONICAL_HISTORIAN
+emitEnabled: true
+ingestCanonicalEnabled: false
+scheduleCron: '*/5 * * * *'

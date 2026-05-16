@@ -1,4 +1,5 @@
 import type { RouteRecordRaw } from 'vue-router'
+import { TRAFFIC_CORRIDORS_SURFACE_ADAPTER_KEYS } from '@/stores/installedAdapters'
 
 /**
  * F2-MVP · Operations domain.
@@ -115,17 +116,35 @@ export const opsRoutes: RouteRecordRaw[] = [
       titleKey: 'pdmPage.title',
       domain: 'operations',
       permission: { resource: 'rides', action: 'read' },
+      requiresInstalledAdapter: 'predictive_maintenance',
     },
   },
   {
-    path: 'operations/demand/corridors',
+    path: 'operations/pdm-operations-board',
+    name: 'pdm-operations-board',
+    component: () => import('@/views/operations/PdmOperationsBoardView.vue'),
+    meta: {
+      titleKey: 'pdmOperationsBoardPage.title',
+      domain: 'operations',
+      permission: { resource: 'rides', action: 'read' },
+      requiresInstalledAdapter: 'predictive_maintenance',
+    },
+  },
+  {
+    path: 'operations/traffic-corridors',
     name: 'traffic-corridors',
     component: () => import('@/views/operations/TrafficCorridorsView.vue'),
     meta: {
       title: 'Traffic corridors',
       domain: 'operations',
       permission: { resource: 'rides', action: 'read' },
+      requiresAnyInstalledAdapters: [...TRAFFIC_CORRIDORS_SURFACE_ADAPTER_KEYS],
     },
+  },
+  /** Legacy path — menu + RBAC use `/operations/traffic-corridors`. */
+  {
+    path: 'operations/demand/corridors',
+    redirect: { name: 'traffic-corridors' },
   },
   {
     path: 'planning/hotel-guests',

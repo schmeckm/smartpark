@@ -1,0 +1,17 @@
+# Smart Park OS — adapter install config (YAML). Managed by PATCH/POST install-local only.
+schemaVersion: 1
+adapterKey: traffic_tomtom
+installedAt: '2026-05-14T20:00:00.000Z'
+updatedAt: '2026-05-16T11:38:05.722Z'
+configJson:
+  parkSlug: europa_park
+contextJson:
+  parkSlug: europa_park
+  sparkplugGroupId: europa_park
+  sparkplugEdgeNode: traffic_gateway
+outputProfiles:
+  - SPARKPLUG_JSON
+  - CANONICAL_HISTORIAN
+emitEnabled: true
+ingestCanonicalEnabled: false
+scheduleCron: '*/5 * * * *'

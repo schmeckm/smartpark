@@ -1,0 +1,39 @@
+{
+  "adapterKey": "traffic_tomtom",
+  "name": "TomTom Traffic (routing)",
+  "logoPath": "assets/logo.svg",
+  "website": "https://www.tomtom.com",
+  "documentationUrl": "https://developer.tomtom.com/",
+  "description": "Live traffic routing credentials for corridor snapshots. API keys are stored encrypted in the database (not in install YAML). Configure under this adapter in Devices & Services or on Integration settings — the same backing row. A future provider (e.g. Google) would be a separate adapter package with its own row.",
+  "version": "1.0.0",
+  "category": "Operations",
+  "qualityTier": "CORE",
+  "tags": ["traffic", "tomtom", "routing", "corridors"],
+  "runtime": "NODE",
+  "entrypoint": "index.js",
+  "adapterType": "TRAFFIC",
+  "iotClass": "cloud_polling",
+  "capabilities": ["DISCOVERY", "POLLING"],
+  "providedDomains": ["operations"],
+  "providedMetrics": [],
+  "defaultContextJson": {
+    "parkSlug": "europa_park",
+    "sparkplugGroupId": "europa_park",
+    "sparkplugEdgeNode": "traffic_gateway"
+  },
+  "defaultScheduleCron": null,
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "notes": {
+        "type": "string",
+        "description": "Optional operator notes (ignored by runtime)."
+      }
+    }
+  },
+  "permissions": {
+    "network": true,
+    "mqttPublish": false,
+    "databaseWrite": false
+  }
+}

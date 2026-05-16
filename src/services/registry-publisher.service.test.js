@@ -147,6 +147,7 @@ test('dry-run records DRY_RUN audit for UNS topic and does not call publishMqtt'
     './mqtt-sparkplug-live-buffer.service': {
       findLatestTpunsLiveRowForTopic: () => null,
       findLatestSparkplugLiveMetricRow: () => null,
+      probeSparkplugLiveMetricForRide: async () => null,
     },
     './ml/ride-prediction.service': {
       predictRideWaitTimes: async () => [],
@@ -243,6 +244,7 @@ test('parallel publish touches only active PREPARED_OPERATOR UNS topics (mocked)
     './mqtt-sparkplug-live-buffer.service': {
       findLatestTpunsLiveRowForTopic: () => null,
       findLatestSparkplugLiveMetricRow: () => null,
+      probeSparkplugLiveMetricForRide: async () => null,
     },
     './ml/ride-prediction.service': {
       predictRideWaitTimes: async () => [],
@@ -335,6 +337,12 @@ test('protobuf_ready Sparkplug branch SKIPPED without wire publish', async () =>
     './mqtt-sparkplug-live-buffer.service': {
       findLatestTpunsLiveRowForTopic: () => null,
       findLatestSparkplugLiveMetricRow: () => ({ value: 12, quality: 'GOOD' }),
+      probeSparkplugLiveMetricForRide: async () => ({
+        row: { value: 12, quality: 'GOOD' },
+        edgeNodeId: 'park_gateway',
+        deviceId: RIDE,
+        groupId: 'testpark',
+      }),
     },
     './ml/ride-prediction.service': {
       predictRideWaitTimes: async () => [],

@@ -8,6 +8,7 @@ import { useParkContextStore } from '@/stores/parkContext'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import PredictiveMaintenanceAssetPanel from '@/components/operations/PredictiveMaintenanceAssetPanel.vue'
+import { pdmIndustrialPlatformEnabled, pdmOperationsBoardEnabled } from '@/config/featureFlags'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -22,6 +23,7 @@ const selectedAssetId = ref('')
 
 const parkId = computed(() => parkCtx.activeParkId)
 const canUpdate = computed(() => auth.hasPermission('rides', 'update'))
+const canOpenAiStudio = computed(() => auth.hasPermission('ai', 'read'))
 
 function assetLabel(a: PlatformAsset): string {
   const name = typeof a.name === 'string' && a.name.trim() ? a.name.trim() : ''
@@ -105,6 +107,16 @@ onMounted(() => {
       <p class="mt-1 max-w-2xl text-sm text-slate-400">{{ t('pdmPage.subtitle') }}</p>
       <p class="mt-3 text-xs text-slate-500">
         <RouterLink class="text-brand-400 hover:underline" to="/operations/addon-board">{{ t('pdmPage.linkAddonBoard') }}</RouterLink>
+        <template v-if="pdmOperationsBoardEnabled && pdmIndustrialPlatformEnabled">
+          <span class="text-slate-600"> · </span>
+          <RouterLink class="text-brand-400 hover:underline" :to="{ name: 'pdm-operations-board' }">{{
+            t('pdmPage.operationsBoardLink')
+          }}</RouterLink>
+        </template>
+        <template v-if="canOpenAiStudio">
+          <span class="text-slate-600"> · </span>
+          <RouterLink class="text-brand-400 hover:underline" :to="{ name: 'ai-studio' }">{{ t('pdmPage.linkAiStudio') }}</RouterLink>
+        </template>
       </p>
     </div>
 

@@ -12,3 +12,10 @@ export const operationsFactsRideDashboardPilotEnabled =
  */
 export const addonBoardSignalSourcePickerEnabled =
   import.meta.env.VITE_ADDON_BOARD_SIGNAL_SOURCE_PICKER === 'true'
+
+/** Industrial PdM (health, trends, failure modes). Requires API `PDM_INDUSTRIAL_PLATFORM_ENABLED=true`. */
+export const pdmIndustrialPlatformEnabled = import.meta.env.VITE_PDM_INDUSTRIAL_PLATFORM === 'true'
+
+/** Park PdM operations board (aggregated rides). Requires industrial flag + backend cap. */
+export const pdmOperationsBoardEnabled = import.meta.env.VITE_PDM_OPERATIONS_BOARD !== 'false'
+

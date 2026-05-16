@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   listAssetPdmRules,
@@ -8,12 +8,15 @@ import {
   deleteAssetPdmRule,
   getAssetPredictiveMaintenance,
   getAssetPdmSparkplugMetrics,
+  getAssetPdmSparkplugMetricSeries,
   listAssetPdmEvaluationLogs,
   type AssetPdmRuleRow,
   type AssetPdmSparkplugMetricRow,
   type AssetPredictiveMaintenancePayload,
   type AssetPdmEvaluationLogRow,
+  type PdmIndustrialEvaluation,
 } from '@/api/client'
+import PredictiveMaintenanceMetricSeriesChart from '@/components/operations/PredictiveMaintenanceMetricSeriesChart.vue'
 import { useToast } from '@/composables/useToast'
 import { askConfirm } from '@/composables/useConfirmDialog'
 import { ISO_MEASUREMENT_UNIT_GROUPS, PDM_UNIT_CHOICE_CUSTOM } from '@/constants/isoMeasurementUnits'
@@ -52,6 +55,22 @@ const pdmUnitCustom = ref('')
 const liveMetricPick = ref('')
 const liveMetrics = ref<AssetPdmSparkplugMetricRow[]>([])
 const liveMetricsLoading = ref(false)
+const metricsPayloadSimulated = ref(false)
+
+const seriesPoints = ref<Array<{ t: string; v: number }>>([])
+const seriesSource = ref<'live' | 'simulated' | 'none'>('none')
+const seriesLoading = ref(false)
+const seriesEdgeMeta = shallowRef<{
+  seriesResolvedEdgeNodeId?: string | null
+  attemptedEdgeNodeIds?: string[]
+  simulatedFallback?: boolean
+} | null>(null)
+
+const sparkplugEdgeDebug = shallowRef<{
+  resolvedEdgeNodeId?: string
+  edgeResolutionSource?: string
+  attemptedEdgeNodeIds?: string[]
+} | null>(null)
 
 /** Separates metric name and Sparkplug device id in `<select>` option values (metric names are never expected to contain this character). */
 const LIVE_METRIC_KEY_SEP = '\u001f'
@@ -189,6 +208,11 @@ watch(
   () => {
     liveMetricPick.value = ''
     liveMetrics.value = []
+    metricsPayloadSimulated.value = false
+    seriesPoints.value = []
+    seriesSource.value = 'none'
+    seriesEdgeMeta.value = null
+    sparkplugEdgeDebug.value = null
     void loadPdmRules()
     void loadLiveSparkplugMetrics()
     void (async () => {
@@ -213,19 +237,70 @@ watch(liveMetricPick, (v) => {
 async function loadLiveSparkplugMetrics() {
   if (!props.assetId) {
     liveMetrics.value = []
+    metricsPayloadSimulated.value = false
+    sparkplugEdgeDebug.value = null
     return
   }
   liveMetricsLoading.value = true
   try {
     const data = await getAssetPdmSparkplugMetrics(props.assetId)
     liveMetrics.value = Array.isArray(data.metrics) ? data.metrics : []
+    metricsPayloadSimulated.value = Boolean(data.simulatedFallback)
+    sparkplugEdgeDebug.value = {
+      resolvedEdgeNodeId: data.resolvedEdgeNodeId ?? data.edgeNodeId,
+      edgeResolutionSource: data.edgeResolutionSource,
+      attemptedEdgeNodeIds: data.attemptedEdgeNodeIds,
+    }
   } catch {
     liveMetrics.value = []
+    metricsPayloadSimulated.value = false
+    sparkplugEdgeDebug.value = null
     push(t('pdmPage.knownMetricsLoadFailed'), 'error')
   } finally {
     liveMetricsLoading.value = false
   }
 }
+
+async function loadMetricSeries() {
+  const row = pickedLiveMetricRow.value
+  if (!props.assetId || !row) {
+    seriesPoints.value = []
+    seriesSource.value = 'none'
+    seriesEdgeMeta.value = null
+    return
+  }
+  seriesLoading.value = true
+  try {
+    const res = await getAssetPdmSparkplugMetricSeries(props.assetId, {
+      metricName: row.metricName,
+      sparkplugDeviceId: row.sparkplugDeviceId,
+      points: 72,
+      stepSeconds: 300,
+    })
+    seriesPoints.value = Array.isArray(res.points) ? res.points : []
+    seriesSource.value = res.seriesSource ?? 'none'
+    seriesEdgeMeta.value = {
+      seriesResolvedEdgeNodeId: res.seriesResolvedEdgeNodeId,
+      attemptedEdgeNodeIds: res.attemptedEdgeNodeIds,
+      simulatedFallback: res.simulatedFallback,
+    }
+  } catch {
+    seriesPoints.value = []
+    seriesSource.value = 'none'
+    seriesEdgeMeta.value = null
+    push(t('pdmPage.seriesLoadFailed'), 'error')
+  } finally {
+    seriesLoading.value = false
+  }
+}
+
+watch(
+  () => pickedLiveMetricRow.value,
+  () => {
+    void loadMetricSeries()
+  },
+  { deep: true }
+)
 
 function parseOptionalNum(s: string): number | null {
   const x = s.trim()
@@ -357,6 +432,12 @@ async function togglePdmRuleEnabled(rule: AssetPdmRuleRow, ev: Event) {
 }
 
 const evalBlock = computed(() => displayEvaluation.value)
+
+const industrialBlock = computed((): PdmIndustrialEvaluation | null => {
+  const e = displayEvaluation.value
+  const ind = e && typeof e === 'object' ? e.industrial : null
+  return ind && typeof ind === 'object' ? ind : null
+})
 </script>
 
 <template>
@@ -376,11 +457,75 @@ const evalBlock = computed(() => displayEvaluation.value)
         {{ t('addonBoard.pdmRecommendation') }}: {{ evalBlock.recommendation.title }}
       </p>
       <p class="mt-1 text-xs text-slate-400">{{ evalBlock.recommendation.detail }}</p>
+
+      <div
+        v-if="industrialBlock?.health"
+        class="mt-3 grid gap-2 rounded-md border border-emerald-900/50 bg-emerald-950/20 px-3 py-2 text-xs sm:grid-cols-2"
+        data-testid="pdm-industrial-health"
+      >
+        <div>
+          <span class="text-slate-500">{{ t('pdmPage.industrialHealthTitle') }}</span>
+          <span class="ml-2 font-semibold text-emerald-200">{{ industrialBlock.health.healthScore }}</span>
+          <span class="ml-2 text-slate-400">{{ industrialBlock.health.healthState }}</span>
+        </div>
+        <div class="text-slate-400">
+          {{ t('pdmPage.colTrend') }}: <span class="text-slate-200">{{ industrialBlock.health.healthTrend }}</span> ·
+          {{ industrialBlock.health.confidence }}
+        </div>
+        <div v-if="industrialBlock.rideTelemetryProfile?.rideType" class="sm:col-span-2 text-slate-500">
+          {{ t('pdmPage.industrialProfileLabel') }}:
+          <span class="font-mono text-slate-300">{{ industrialBlock.rideTelemetryProfile.rideType }}</span>
+        </div>
+      </div>
+
+      <div v-if="(industrialBlock?.failureModes || []).length" class="mt-3 text-xs">
+        <p class="font-medium uppercase tracking-wide text-slate-500">{{ t('pdmPage.industrialFailureModes') }}</p>
+        <ul class="mt-1 list-inside list-disc text-slate-400">
+          <li v-for="(fm, i) in industrialBlock?.failureModes || []" :key="i">
+            <span class="text-slate-200">{{ String((fm as Record<string, unknown>).label || (fm as Record<string, unknown>).code) }}</span>
+            <span class="text-slate-500"> — {{ String((fm as Record<string, unknown>).severity || '') }}</span>
+          </li>
+        </ul>
+      </div>
+
+      <div v-if="(industrialBlock?.structuredRecommendations || []).length" class="mt-3 text-xs">
+        <p class="font-medium uppercase tracking-wide text-slate-500">{{ t('pdmPage.industrialRecommendations') }}</p>
+        <ul class="mt-1 space-y-1 text-slate-400">
+          <li v-for="(rec, i) in industrialBlock?.structuredRecommendations || []" :key="i">
+            <span class="font-medium text-slate-200">{{ String((rec as Record<string, unknown>).action) }}</span>
+            <span class="text-slate-500"> ({{ String((rec as Record<string, unknown>).priority) }})</span>
+          </li>
+        </ul>
+      </div>
+
+      <div v-if="industrialBlock?.telemetryQuality" class="mt-3 text-xs text-slate-500">
+        <span class="font-medium uppercase tracking-wide text-slate-500">{{ t('pdmPage.industrialTelemetryQuality') }}:</span>
+        <span class="ml-2 font-mono text-slate-300">{{
+          String((industrialBlock.telemetryQuality as Record<string, unknown>).overall || '')
+        }}</span>
+      </div>
+
+      <details
+        v-if="(industrialBlock?.sparkplugContext as Record<string, unknown> | undefined)?.topicPreview"
+        class="mt-3 text-xs text-slate-500"
+      >
+        <summary class="cursor-pointer text-slate-500 hover:text-slate-400">{{ t('pdmPage.industrialSparkplugTopics') }}</summary>
+        <ul class="mt-2 max-h-40 overflow-auto font-mono text-[10px]">
+          <li
+            v-for="(tp, i) in ((industrialBlock?.sparkplugContext as Record<string, unknown> | undefined)?.topicPreview as unknown[] | undefined) || []"
+            :key="i"
+          >
+            {{ String((tp as Record<string, unknown>).exampleTopic || '') }}
+          </li>
+        </ul>
+      </details>
+
       <div v-if="evalBlock.signals?.length" class="mt-3 overflow-x-auto">
         <table class="min-w-full text-left text-xs">
           <thead>
             <tr class="border-b border-slate-700 text-slate-500">
               <th class="py-1 pr-3">{{ t('addonBoard.pdmMetric') }}</th>
+              <th class="py-1 pr-3">{{ t('pdmPage.colTrend') }}</th>
               <th class="py-1 pr-3">{{ t('addonBoard.pdmLiveValue') }}</th>
               <th class="py-1">{{ t('addonBoard.pdmStatus') }}</th>
             </tr>
@@ -392,6 +537,14 @@ const evalBlock = computed(() => displayEvaluation.value)
               class="border-b border-slate-800/80 text-slate-300"
             >
               <td class="py-1 pr-3 font-mono">{{ s.label || s.metricName }}</td>
+              <td class="py-1 pr-3 font-mono text-slate-400">
+                {{ s.trendArrow || '→' }} {{ s.metricTrend || '—' }}
+                <span
+                  v-if="s.telemetrySource === 'simulated'"
+                  class="ml-1 rounded bg-amber-950/40 px-1 text-[10px] text-amber-300"
+                  >{{ t('pdmPage.metricDemoTag') }}</span
+                >
+              </td>
               <td class="py-1 pr-3">{{ s.value != null ? s.value : '—' }}</td>
               <td
                 class="py-1"
@@ -508,7 +661,8 @@ const evalBlock = computed(() => displayEvaluation.value)
               :key="`${m.sparkplugDeviceId}\0${m.metricName}`"
               :value="liveMetricOptionValue(m)"
             >
-              {{ m.metricName }} — {{ m.sparkplugDeviceId }}
+              {{ m.metricName }} — {{ m.sparkplugDeviceId
+              }}{{ m.source === 'simulated' ? ` (${t('pdmPage.metricDemoTag')})` : '' }}
             </option>
           </select>
         </label>
@@ -522,6 +676,24 @@ const evalBlock = computed(() => displayEvaluation.value)
         </button>
       </div>
       <div
+        v-if="sparkplugEdgeDebug?.resolvedEdgeNodeId && !liveMetricsLoading"
+        class="rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2 text-[11px] text-slate-400 sm:col-span-2 lg:col-span-3"
+        data-testid="pdm-sparkplug-edge-debug"
+      >
+        <span class="font-medium text-slate-300">{{ t('pdmPage.sparkplugResolvedEdge') }}</span>
+        <span class="ml-1 font-mono text-slate-200">{{ sparkplugEdgeDebug.resolvedEdgeNodeId }}</span>
+        <span class="ml-2 text-slate-500">({{ sparkplugEdgeDebug.edgeResolutionSource }})</span>
+        <span v-if="metricsPayloadSimulated" class="ml-2 rounded bg-amber-950/50 px-1.5 py-0.5 text-amber-300">{{
+          t('pdmPage.metricDemoTag')
+        }}</span>
+        <details v-if="(sparkplugEdgeDebug.attemptedEdgeNodeIds || []).length" class="mt-2">
+          <summary class="cursor-pointer text-slate-500 hover:text-slate-400">{{ t('pdmPage.sparkplugEdgeProbeDetails') }}</summary>
+          <p class="mt-1 break-all font-mono text-[10px] leading-relaxed text-slate-500">
+            {{ (sparkplugEdgeDebug.attemptedEdgeNodeIds || []).join(' → ') }}
+          </p>
+        </details>
+      </div>
+      <div
         v-if="pickedLiveMetricRow"
         class="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-md border border-slate-700/80 bg-slate-950/50 px-3 py-2 sm:col-span-2 lg:col-span-3"
       >
@@ -532,14 +704,40 @@ const evalBlock = computed(() => displayEvaluation.value)
           {{ formatEvaluatedAt(pickedLiveMetricRow.lastReceivedAt) }}
         </span>
       </div>
+      <div
+        v-if="pickedLiveMetricRow"
+        class="rounded-md border border-slate-700/80 bg-slate-950/35 p-3 sm:col-span-2 lg:col-span-3"
+      >
+        <p class="text-xs font-medium text-slate-400">{{ t('pdmPage.seriesTitle') }}</p>
+        <p v-if="seriesLoading" class="mt-2 text-xs text-slate-500">…</p>
+        <PredictiveMaintenanceMetricSeriesChart
+          v-else-if="seriesPoints.length"
+          :points="seriesPoints"
+          :value-label="pickedLiveMetricRow.metricName"
+          :series-source="seriesSource"
+        />
+        <p v-else class="mt-2 text-xs text-slate-500">{{ t('pdmPage.seriesEmpty') }}</p>
+        <p
+          v-if="seriesEdgeMeta?.seriesResolvedEdgeNodeId && seriesSource === 'live'"
+          class="mt-2 text-[10px] text-slate-500"
+        >
+          {{ t('pdmPage.seriesLiveEdge', { edge: seriesEdgeMeta.seriesResolvedEdgeNodeId }) }}
+        </p>
+        <p
+          v-if="seriesSource === 'live' && (seriesEdgeMeta?.attemptedEdgeNodeIds || []).length"
+          class="mt-1 text-[10px] text-slate-600"
+        >
+          {{ t('pdmPage.seriesProbedEdges', { path: (seriesEdgeMeta?.attemptedEdgeNodeIds ?? []).join(' → ') }) }}
+        </p>
+      </div>
       <p class="text-[11px] leading-snug text-slate-500 sm:col-span-2 lg:col-span-3">
-        {{ t('pdmPage.knownMetricsHint') }}
+        {{ metricsPayloadSimulated ? t('pdmPage.knownMetricsHintSim') : t('pdmPage.knownMetricsHint') }}
       </p>
       <p
         v-if="!liveMetricsLoading && !liveMetrics.length"
         class="text-[11px] leading-snug text-amber-400/90 sm:col-span-2 lg:col-span-3"
       >
-        {{ t('pdmPage.knownMetricsEmpty') }}
+        {{ t('pdmPage.knownMetricsEmptyNoDemo') }}
       </p>
       <label class="block text-xs text-slate-400 sm:col-span-2 lg:col-span-3">
         {{ t('addonBoard.pdmMetric') }}

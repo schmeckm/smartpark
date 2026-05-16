@@ -1,3 +1,4 @@
+const { Op } = require('sequelize');
 const { User, UserRole } = require('../models');
 
 const userRoleInclude = {
@@ -24,6 +25,57 @@ class UserRepository {
 
   findById(id) {
     return User.findByPk(id, { include: [userRoleInclude] });
+  }
+
+  findByIdForAuth(id) {
+    return User.unscoped().findByPk(id, { include: [userRoleInclude] });
+  }
+
+  listAll() {
+    return User.findAll({
+      include: [userRoleInclude],
+      order: [
+        ['lastName', 'ASC'],
+        ['firstName', 'ASC'],
+        ['email', 'ASC'],
+      ],
+    });
+  }
+
+  async emailExists(email, { excludeUserId = null } = {}) {
+    const normalized = email.toLowerCase().trim();
+    const where = { email: normalized };
+    if (excludeUserId) where.id = { [Op.ne]: excludeUserId };
+    const row = await User.findOne({ where, attributes: ['id'] });
+    return Boolean(row);
+  }
+
+  async createUser(data, { transaction } = {}) {
+    return User.unscoped().create(data, { transaction });
+  }
+
+  async updateUser(id, data, { transaction } = {}) {
+    const user = await User.unscoped().findByPk(id, { transaction });
+    if (!user) return null;
+    await user.update(data, { transaction });
+    return this.findById(id);
+  }
+
+  async deleteUser(id, { transaction } = {}) {
+    const user = await User.unscoped().findByPk(id, { transaction });
+    if (!user) return false;
+    await user.destroy({ transaction });
+    return true;
+  }
+
+  async replaceRoleCodes(userId, roleCodes, { transaction } = {}) {
+    const codes = [...new Set(roleCodes.map((c) => String(c).trim()).filter(Boolean))];
+    await UserRole.destroy({ where: { userId }, transaction });
+    if (!codes.length) return;
+    await UserRole.bulkCreate(
+      codes.map((roleCode) => ({ userId, roleCode })),
+      { transaction }
+    );
   }
 
   async updateLastLogin(id) {

@@ -15,6 +15,11 @@ export const ROLE_CODES = Object.freeze(
 /** Role codes from `shared/rbac.json` (`roles` array). */
 export type RoleCode = (typeof manifest.roles)[number]
 
+/** Role codes assignable via admin user CRUD (excludes legacy `ADMIN` alias). */
+export const ASSIGNABLE_ROLE_CODES = Object.freeze(
+  manifest.roles.filter((code) => code !== 'ADMIN') as RoleCode[],
+)
+
 /** Permission keys from `shared/rbac.json` (`permissions` array, `resource.action`). */
 export type PermissionCode = (typeof manifest.permissions)[number]
 
@@ -42,6 +47,10 @@ export type NavigationManifestItem = {
   labelKeyIfPermission?: { resource: string; action: string; labelKey: string }
   /** If set, only these role codes see the item (e.g. SYSTEM_ADMIN-only entries). */
   requiredRoles?: string[]
+  /** If set, sidebar hides this item unless the adapter is installed (see `useInstalledAdaptersStore`). */
+  requiresInstalledAdapter?: string
+  /** If set, sidebar shows the item when any of these adapters is installed (OR). */
+  requiresAnyInstalledAdapters?: string[]
 }
 
 export type NavigationManifestGroup = {

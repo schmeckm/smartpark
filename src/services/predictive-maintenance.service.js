@@ -7,13 +7,24 @@ const crypto = require('crypto');
 const { Op } = require('sequelize');
 const env = require('../config/env');
 const { AppError } = require('../utils/app-error');
-const {
-  findLatestSparkplugLiveMetricRow,
-  listSparkplugMetricsForDevices,
-} = require('./mqtt-sparkplug-live-buffer.service');
-const { slugifyName } = require('../modules/uns/uns-topic-generator.service');
+const { findLatestSparkplugLiveMetricRow } = require('./mqtt-sparkplug-live-buffer.service');
+const { pdmSimNumericAt, isPdSimMetricName } = require('./pdm-sparkplug-simulator.service');
 const { sparkplugDeviceTopicSegment } = require('../modules/uns/sparkplug-topic-builder.service');
 const { ParkAsset, ParkAssetPdmRule, Park, ParkAssetPdmEvaluationLog } = require('../models');
+const { sparkplugGroupIdForParkSlug } = require('./pdm-sparkplug-group-id.service');
+const {
+  listKnownLiveSparkplugMetricsForAsset,
+  listPdSparkplugMetricSeriesForAsset,
+} = require('./pdm-sparkplug-asset-live.service');
+const pdmSparkplugEdgeResolve = require('./pdm-sparkplug-edge-resolve.service');
+const { resolvePdmSparkplugEdgeCandidatesForAsset } = pdmSparkplugEdgeResolve;
+const { enrichIndustrialPdmEvaluation } = require('./pdm-evaluation-industrial.service');
+const { confidenceLabelToNumeric } = require('./pdm-ml-foundation.service');
+const { writeMlMetricPoint } = require('./influx-ot-metrics.service');
+
+function trimEdgeId(v) {
+  return v == null ? '' : String(v).trim();
+}
 
 /** Allowed origins for persisted evaluation snapshots (stored verbatim in `source`). */
 const PDM_EVAL_SOURCES = Object.freeze(['pdm_api', 'addon_board']);
@@ -30,50 +41,78 @@ function pdmEvaluationFingerprint(evaluation) {
   return crypto.createHash('sha256').update(raw, 'utf8').digest('hex');
 }
 
-function sparkplugGroupIdForParkSlug(parkSlug) {
-  const fromEnv = env.sparkplugGroupId && String(env.sparkplugGroupId).trim();
-  if (fromEnv) return fromEnv;
-  return slugifyName(parkSlug || 'park');
-}
-
 /**
- * Resolve latest numeric Sparkplug metric for a park asset (same device candidates as add-on board OEE).
- * @param {Record<string, unknown>} assetPlain
+ * Resolve latest numeric Sparkplug metric for a park asset (multi-edge probe order from Sparkplug Edge UI profile).
+ * @param {Record<string, unknown>} assetPlain must include assetId; parkId strongly recommended
  * @param {string} parkSlug
  * @param {string} metricName
- * @returns {{ value: number|null; deviceId: string|null; receivedAt: string|null }}
+ * @returns {Promise<{ value: number|null; deviceId: string|null; receivedAt: string|null; resolvedEdgeNodeId?: string|null; telemetrySource: 'live'|'simulated'|'none' }>}
  */
-function resolveSparkplugMetricForAsset(assetPlain, parkSlug, metricName) {
+async function resolveSparkplugMetricForAsset(assetPlain, parkSlug, metricName) {
   const groupId = sparkplugGroupIdForParkSlug(parkSlug);
-  const edgeNodeId = String(env.sparkplugEdgeNode || 'park_gateway');
   const slug = assetPlain.slug != null ? String(assetPlain.slug) : '';
   const name = assetPlain.name != null ? String(assetPlain.name) : '';
   const aid = assetPlain.assetId != null ? String(assetPlain.assetId) : '';
-  const candidates = [
+  const parkId = assetPlain.parkId != null ? String(assetPlain.parkId).trim() : '';
+
+  const deviceCandidates = [
     sparkplugDeviceTopicSegment(slug),
     sparkplugDeviceTopicSegment(name),
     sparkplugDeviceTopicSegment(aid),
   ].filter((x, i, a) => x && a.indexOf(x) === i);
 
   const m = String(metricName || '').trim();
-  if (!m) return { value: null, deviceId: null, receivedAt: null };
+  if (!m) {
+    return { value: null, deviceId: null, receivedAt: null, resolvedEdgeNodeId: null, telemetrySource: 'none' };
+  }
 
-  for (const deviceId of candidates) {
-    const row = findLatestSparkplugLiveMetricRow({
-      groupId,
-      edgeNodeId,
-      deviceId,
-      metricName: m,
-    });
-    if (row?.value != null && Number.isFinite(Number(row.value))) {
-      return {
-        value: Number(row.value),
+  /** @type {{ attemptedEdgeNodeIds: string[] }} */
+  let edgeMeta = { attemptedEdgeNodeIds: [trimEdgeId(env.sparkplugEdgeNode) || 'park_gateway'] };
+  if (parkId && aid) {
+    edgeMeta = await resolvePdmSparkplugEdgeCandidatesForAsset(aid, parkId);
+  }
+
+  const edgeNodeIds = edgeMeta.attemptedEdgeNodeIds.length
+    ? edgeMeta.attemptedEdgeNodeIds
+    : [trimEdgeId(env.sparkplugEdgeNode) || 'park_gateway'];
+
+  for (const edgeNodeId of edgeNodeIds) {
+    const e = trimEdgeId(edgeNodeId);
+    if (!e) continue;
+    for (const deviceId of deviceCandidates) {
+      const row = findLatestSparkplugLiveMetricRow({
+        groupId,
+        edgeNodeId: e,
         deviceId,
-        receivedAt: row.receivedAt != null ? String(row.receivedAt) : null,
+        metricName: m,
+      });
+      if (row?.value != null && Number.isFinite(Number(row.value))) {
+        return {
+          value: Number(row.value),
+          deviceId,
+          receivedAt: row.receivedAt != null ? String(row.receivedAt) : null,
+          resolvedEdgeNodeId: e,
+          telemetrySource: /** @type {const} */ ('live'),
+        };
+      }
+    }
+  }
+
+  if (isPdSimMetricName(m)) {
+    const now = Date.now();
+    const dev = deviceCandidates[0] || aid || 'ride';
+    const v = pdmSimNumericAt(aid, m, now);
+    if (v != null && Number.isFinite(v)) {
+      return {
+        value: v,
+        deviceId: dev,
+        receivedAt: new Date(now).toISOString(),
+        resolvedEdgeNodeId: edgeMeta.resolvedEdgeNodeId != null ? String(edgeMeta.resolvedEdgeNodeId) : null,
+        telemetrySource: /** @type {const} */ ('simulated'),
       };
     }
   }
-  return { value: null, deviceId: null, receivedAt: null };
+  return { value: null, deviceId: null, receivedAt: null, resolvedEdgeNodeId: null, telemetrySource: 'none' };
 }
 
 /**
@@ -102,6 +141,41 @@ function signalStatusForRule(rulePlain, value) {
     return { status: 'WARN', rank: 3 };
   }
   return { status: 'OK', rank: 0 };
+}
+
+/**
+ * Stream computed PdM / ML outputs to Influx (`ml_metric`) when enabled.
+ * @param {string} assetId
+ * @param {Record<string, unknown>} evaluation
+ */
+function streamPdmMlMetricsToInflux(assetId, evaluation) {
+  const aid = assetId != null ? String(assetId).trim() : '';
+  if (!aid || !evaluation || typeof evaluation !== 'object') return;
+
+  const ind = evaluation.industrial;
+  if (!ind || typeof ind !== 'object') return;
+
+  const health = /** @type {Record<string, unknown>|undefined} */ (ind.health);
+  const conf =
+    health && health.confidence != null ? confidenceLabelToNumeric(String(health.confidence)) : null;
+
+  if (health && typeof health.healthScore === 'number' && Number.isFinite(health.healthScore)) {
+    writeMlMetricPoint(aid, 'predictive_health_score', health.healthScore, conf);
+  }
+
+  const ml = /** @type {Record<string, unknown>|undefined} */ (ind.mlReadiness);
+  if (ml && typeof ml.anomalyScore === 'number' && Number.isFinite(ml.anomalyScore)) {
+    writeMlMetricPoint(aid, 'predictive_anomaly_score', ml.anomalyScore, conf);
+  }
+  if (ml && typeof ml.rulDays === 'number' && Number.isFinite(ml.rulDays)) {
+    writeMlMetricPoint(aid, 'predictive_rul_days', ml.rulDays, conf);
+  }
+
+  const modes = Array.isArray(ind.failureModes) ? ind.failureModes : [];
+  const top = modes[0];
+  if (top && typeof top.score === 'number' && Number.isFinite(top.score)) {
+    writeMlMetricPoint(aid, 'predictive_failure_mode_score', top.score, conf);
+  }
 }
 
 function recommendationFromSignals(signals, riskLevel) {
@@ -133,12 +207,12 @@ function recommendationFromSignals(signals, riskLevel) {
 }
 
 /**
- * @param {Record<string, unknown>} assetPlain - park_assets plain row (slug, name, assetId)
+ * @param {Record<string, unknown>} assetPlain - park_assets plain row (slug, name, assetId, parkId)
  * @param {string} parkSlug
  * @param {Array<Record<string, unknown>>} enabledRulesPlain
- * @returns {Record<string, unknown>|null}
+ * @returns {Promise<Record<string, unknown>|null>}
  */
-function evaluatePredictiveMaintenanceForAsset(assetPlain, parkSlug, enabledRulesPlain) {
+async function evaluatePredictiveMaintenanceForAsset(assetPlain, parkSlug, enabledRulesPlain) {
   const rules = Array.isArray(enabledRulesPlain) ? enabledRulesPlain.filter((r) => r && r.enabled !== false) : [];
   if (!rules.length) return null;
 
@@ -147,7 +221,7 @@ function evaluatePredictiveMaintenanceForAsset(assetPlain, parkSlug, enabledRule
   let maxRank = 0;
   for (const r of rules) {
     const metricName = String(r.metricName || '').trim();
-    const live = resolveSparkplugMetricForAsset(assetPlain, parkSlug, metricName);
+    const live = await resolveSparkplugMetricForAsset(assetPlain, parkSlug, metricName);
     const sev = signalStatusForRule(r, live.value);
     maxRank = Math.max(maxRank, sev.rank);
     signals.push({
@@ -158,6 +232,9 @@ function evaluatePredictiveMaintenanceForAsset(assetPlain, parkSlug, enabledRule
       value: live.value,
       liveReceivedAt: live.receivedAt,
       sparkplugDeviceId: live.deviceId,
+      sparkplugEdgeNodeId: live.resolvedEdgeNodeId != null ? String(live.resolvedEdgeNodeId) : null,
+      telemetrySource: live.telemetrySource != null ? String(live.telemetrySource) : 'none',
+      trendArrow: '→',
       status: sev.status,
       thresholds: {
         warnAbove: r.warnAbove,
@@ -174,13 +251,40 @@ function evaluatePredictiveMaintenanceForAsset(assetPlain, parkSlug, enabledRule
   else if (maxRank >= 2) riskLevel = 'MEDIUM';
 
   const rec = recommendationFromSignals(signals, riskLevel);
-  return {
+  const parkId = assetPlain.parkId != null ? String(assetPlain.parkId).trim() : '';
+  /** @type {Record<string, unknown>} */
+  const evaluation = {
     riskLevel,
     recommendation: rec,
     evaluatedAt: new Date().toISOString(),
     enabledRuleCount: rules.length,
     signals,
   };
+
+  const industrial = await enrichIndustrialPdmEvaluation({
+    baseEvaluation: evaluation,
+    assetPlain,
+    parkSlug,
+    parkId,
+  });
+  if (industrial && typeof industrial === 'object') {
+    evaluation.industrial = industrial;
+    const trendByMetric = new Map(
+      (Array.isArray(industrial.metricTrends) ? industrial.metricTrends : []).map((t) => [String(t.metricName || ''), t])
+    );
+    evaluation.signals = signals.map((s) => {
+      const tr = trendByMetric.get(String(s.metricName || ''));
+      const trend = tr && typeof tr === 'object' ? String(tr.trend || '') : '';
+      let trendArrow = '→';
+      if (trend === 'IMPROVING') trendArrow = '↑';
+      else if (trend === 'DECLINING') trendArrow = '↓';
+      else if (trend === 'UNSTABLE') trendArrow = '⟳';
+      return { ...s, trendArrow, metricTrend: trend || null };
+    });
+    streamPdmMlMetricsToInflux(assetPlain.assetId != null ? String(assetPlain.assetId) : '', evaluation);
+  }
+
+  return evaluation;
 }
 
 async function assertAssetInPark(assetId, parkId) {
@@ -293,50 +397,6 @@ async function deleteRule(ruleId, assetId, parkId) {
 }
 
 /**
- * @param {string} parkId
- * @param {string[]} assetIds
- * @returns {Promise<Map<string, Array<Record<string, unknown>>>>}
- */
-/**
- * Metric names recently seen on Sparkplug (in-memory buffer of this Node process) for the asset's device-id candidates.
- * @param {string} assetId
- * @param {string} parkId
- * @returns {Promise<{ groupId: string; edgeNodeId: string; deviceCandidates: string[]; metrics: Array<{ metricName: string; sparkplugDeviceId: string; lastReceivedAt: string; lastValue: unknown }>; bufferHint: string }>}
- */
-async function listKnownLiveSparkplugMetricsForAsset(assetId, parkId) {
-  const asset = await ParkAsset.findOne({
-    where: { assetId, parkId },
-    attributes: ['assetId', 'parkId', 'name', 'slug'],
-  });
-  if (!asset) {
-    throw new AppError('Asset not found for this park', 404, { code: 'ASSET_NOT_FOUND' });
-  }
-  const park = await Park.findByPk(parkId, { attributes: ['slug', 'name', 'id'] });
-  const parkSlug = park?.slug || park?.name || String(parkId);
-  const plain = asset.get({ plain: true });
-  const groupId = sparkplugGroupIdForParkSlug(parkSlug);
-  const edgeNodeId = String(env.sparkplugEdgeNode || 'park_gateway');
-  const slug = plain.slug != null ? String(plain.slug) : '';
-  const name = plain.name != null ? String(plain.name) : '';
-  const aid = plain.assetId != null ? String(plain.assetId) : '';
-  const deviceCandidates = [
-    sparkplugDeviceTopicSegment(slug),
-    sparkplugDeviceTopicSegment(name),
-    sparkplugDeviceTopicSegment(aid),
-  ].filter((x, i, a) => x && a.indexOf(x) === i);
-
-  const metrics = listSparkplugMetricsForDevices({ groupId, edgeNodeId, deviceIds: deviceCandidates });
-  return {
-    groupId,
-    edgeNodeId,
-    deviceCandidates,
-    metrics,
-    bufferHint:
-      'Metrics come from this server process Sparkplug live buffer (recent MQTT only). If empty, no traffic matched group/edge/device mapping yet.',
-  };
-}
-
-/**
  * Persist evaluation snapshot when risk/signal outcome changed vs last stored row.
  * @param {{ assetId: string; parkId: string; source: string; evaluation: Record<string, unknown> }} args
  */
@@ -431,6 +491,7 @@ module.exports = {
   sparkplugGroupIdForParkSlug,
   resolveSparkplugMetricForAsset,
   evaluatePredictiveMaintenanceForAsset,
+  streamPdmMlMetricsToInflux,
   signalStatusForRule,
   PDM_EVAL_SOURCES,
   pdmEvaluationFingerprint,
@@ -442,4 +503,9 @@ module.exports = {
   deleteRule,
   loadEnabledRulesByAssetIds,
   listKnownLiveSparkplugMetricsForAsset,
+  listPdSparkplugMetricSeriesForAsset,
+  /** @type {typeof import('./pdm-sparkplug-edge-resolve.service').resolvePdmSparkplugEdgeCandidatesForAsset} */
+  resolvePdmSparkplugEdgeCandidatesForAsset: pdmSparkplugEdgeResolve.resolvePdmSparkplugEdgeCandidatesForAsset,
+  /** @type {typeof import('./pdm-sparkplug-edge-resolve.service').buildPdmEdgeCandidateOrder} */
+  buildPdmEdgeCandidateOrder: pdmSparkplugEdgeResolve.buildPdmEdgeCandidateOrder,
 };

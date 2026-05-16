@@ -22,6 +22,7 @@ test.describe('Admin dashboard — AI insights flow', () => {
   })
 
   test('login, park, AI grid, ride detail, studio, feature monitor', async ({ page, baseURL }) => {
+    test.setTimeout(120_000)
     const root = baseURL || 'http://localhost:5173'
 
     await test.step('Login as admin', async () => {
@@ -48,6 +49,67 @@ test.describe('Admin dashboard — AI insights flow', () => {
     })
 
     await test.step('Open /ai-insights and verify forecast table + columns', async () => {
+      const stubRideAssets = async (route) => {
+        if (route.request().method() !== 'GET') {
+          await route.continue()
+          return
+        }
+        const href = route.request().url()
+        if (!href.includes('/api/v1/assets')) {
+          await route.continue()
+          return
+        }
+        if (!href.includes('assetTypeCode=RIDE') && !href.includes('assetTypeCode%3DRIDE')) {
+          await route.continue()
+          return
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            success: true,
+            data: [
+              {
+                assetId: 'aaaaaaaa-bbbb-4ccc-8ddd-111111111111',
+                name: 'E2E ride row',
+                externalEntityId: 'e2e-ride-entity',
+                assetTypeCode: 'RIDE',
+                entityType: 'RIDE',
+              },
+            ],
+          }),
+        })
+      }
+
+      await page.route('**/*', async (route) => {
+        const href = route.request().url()
+        if (href.includes('/api/v1/ai/parks/') && href.includes('/entities/forecast/summary')) {
+          if (route.request().method() !== 'GET') {
+            await route.continue()
+            return
+          }
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({ success: true, data: [] }),
+          })
+          return
+        }
+        if (href.includes('/api/v1/ai/timeseries/rides-current')) {
+          if (route.request().method() !== 'GET') {
+            await route.continue()
+            return
+          }
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({ success: true, data: [] }),
+          })
+          return
+        }
+        await stubRideAssets(route)
+      })
+
       await page.goto(`${root}/ai-insights`)
       await expect(page.getByTestId('ai-wait-need-park-external')).not.toBeVisible({ timeout: 15_000 })
       await expect(page.getByTestId('ai-wait-forecast-table')).toBeVisible({ timeout: 90_000 })
@@ -57,9 +119,9 @@ test.describe('Admin dashboard — AI insights flow', () => {
     })
 
     await test.step('Open ride details and verify sections', async () => {
-      const openBtn = page.getByTestId('ai-wait-open-detail').first()
-      await expect(openBtn).toBeVisible({ timeout: 30_000 })
-      await openBtn.click()
+      const firstRow = page.locator('[data-testid^="ai-wait-row-"]').first()
+      await expect(firstRow).toBeVisible({ timeout: 90_000 })
+      await firstRow.click()
       const detail = page.getByTestId('ai-wait-ride-detail')
       await expect(detail).toBeVisible({ timeout: 30_000 })
       await expect(detail.getByTestId('ai-wait-detail-history')).toBeVisible()

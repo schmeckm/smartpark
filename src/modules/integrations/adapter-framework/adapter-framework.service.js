@@ -36,6 +36,9 @@ class AdapterFrameworkService {
     for (const item of loaded) {
       this.runtimeMap.set(item.manifest.adapterKey, item);
       const key = item.manifest.adapterKey;
+      if (this.installConfigRepo.isMarkedRemoved(key)) {
+        continue;
+      }
       const existing = await this.repo.findByAdapterKey(key);
       const prevMeta = existing?.metadata && typeof existing.metadata === 'object' ? { ...existing.metadata } : {};
       await this.repo.upsertByAdapterKey(key, {
@@ -234,15 +237,7 @@ class AdapterFrameworkService {
   }
 
   async getInstalledPackageRecord(idOrKey) {
-    let raw = await this._findInstalledRowByIdOrKey(idOrKey);
-    if (!raw && !looksLikeUuidPk(idOrKey)) {
-      const key = String(idOrKey || '').trim();
-      if (key && this.unifiedLoader.loadByAdapterKey(key)?.manifest) {
-        // Keep details route resilient: if the package exists on disk but the DB row
-        // was not created yet, materialize it on-demand from defaults/YAML.
-        raw = await this.installLocalPackage({ adapterKey: key });
-      }
-    }
+    const raw = await this._findInstalledRowByIdOrKey(idOrKey);
     if (!raw) return null;
     return this.hydrateInstallConfig(raw);
   }

@@ -6,6 +6,7 @@ const { AdapterRunLogRepository } = require('../../../repositories/adapter-run-l
 const { normalizeOutputProfiles } = require('./adapter-output-profile-names');
 const { logAdapterPipeline } = require('./adapter-pipeline-log.service');
 const { mergeAdapterInstallConfig } = require('../../../utils/adapter-install-config-merge');
+const { mergePredictiveMaintenancePollEmitContext } = require('../../../services/predictive-maintenance-demo-config.service');
 
 const DEMO_STATIC_ADAPTER_KEY = 'demo_static_adapter';
 
@@ -419,6 +420,16 @@ class AdapterRuntimeService {
     };
 
     const mergedConfig = mergeAdapterInstallConfig(config, context);
+    const emitContext =
+      manifest.adapterKey === 'predictive_maintenance'
+        ? mergePredictiveMaintenancePollEmitContext(
+            context && typeof context === 'object' ? { ...context } : {},
+            config && typeof config === 'object' ? config : {}
+          )
+        : context && typeof context === 'object'
+          ? { ...context }
+          : {};
+
     let cfg = await runtime.validateConfig(mergedConfig, context);
     if (cfg && typeof cfg === 'object' && cfg.valid === false) {
       const msg = cfg.errors?.length ? cfg.errors.join('; ') : 'validateConfig failed';
@@ -463,7 +474,7 @@ class AdapterRuntimeService {
     let pollDebug = null;
     let pollShapeOk = false;
     try {
-      const pollResult = await runtime.poll(mergedConfig, context);
+      const pollResult = await runtime.poll(config, context);
       if (Array.isArray(pollResult)) {
         rawList = pollResult;
         pollShapeOk = true;
@@ -560,11 +571,11 @@ class AdapterRuntimeService {
     const emittedOutputs = [];
 
     for (const obs of valid) {
-      const encoded = this.outputRouter.encodeAll(obs, context, profiles);
+      const encoded = this.outputRouter.encodeAll(obs, emitContext, profiles);
       encodedOutputs.push(encoded);
 
       if (emitMqtt || ingestCanonical) {
-        const emitted = await this.outputRouter.emit(obs, context, {
+        const emitted = await this.outputRouter.emit(obs, emitContext, {
           profiles,
           emitMqtt,
           ingestCanonical,

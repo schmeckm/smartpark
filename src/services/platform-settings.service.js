@@ -264,6 +264,14 @@ class PlatformSettingsService {
       });
     }
     this.invalidateCache();
+    if (key === 'INFLUX_OT_STREAMING_ENABLED') {
+      try {
+        const { refreshInfluxStreamingGate } = require('./influx-ot-metrics.service');
+        refreshInfluxStreamingGate().catch(() => {});
+      } catch {
+        /* influx service optional at load */
+      }
+    }
     const rows = this.rowMap(await this._loadRowsForce());
     if (meta.valueType === 'boolean') return this.resolveBoolean(key, rows);
     if (meta.valueType === 'number') return this.resolveNumber(key, rows);

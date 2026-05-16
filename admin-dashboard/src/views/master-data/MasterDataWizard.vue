@@ -11,6 +11,7 @@ import {
   getMlProfiles,
   getPlatformParkZones,
   getRideSignalCapabilities,
+  getPlatformAsset,
   listEntityTypeTemplates,
   patchMasterData,
   putAssetMlProfile,
@@ -86,6 +87,8 @@ const effectiveMlPreviewJson = computed(() => {
 const mlProfileOptions = ref<MlProfileRow[]>([])
 const selectedMlProfileId = ref('')
 const effectiveMl = ref<Record<string, unknown> | null>(null)
+/** FEATURE_STORE / AI Studio batch `evaluated_algorithm` on park_assets (rides only). */
+const rideEvaluatedAlgorithm = ref('')
 const mlStepLoading = ref(false)
 const signalUsageLoading = ref(false)
 const signalUsageCounts = ref<{ ml: number; forecast: number } | null>(null)
@@ -97,6 +100,7 @@ async function loadMlStep(force = false) {
     mlProfileOptions.value = []
     effectiveMl.value = null
     selectedMlProfileId.value = ''
+    rideEvaluatedAlgorithm.value = ''
     return
   }
   mlStepLoading.value = true
@@ -104,10 +108,25 @@ async function loadMlStep(force = false) {
     const et = mlListEntityType.value
     if (!et) {
       mlProfileOptions.value = []
+      rideEvaluatedAlgorithm.value = ''
       return
     }
-    mlProfileOptions.value = await getMlProfiles({ entityType: et, activeFlag: true })
-    effectiveMl.value = (await getEffectiveMlConfig(effectiveId.value)) as Record<string, unknown>
+    const aid = effectiveId.value
+    const [profiles, eff, platformAsset] = await Promise.all([
+      getMlProfiles({ entityType: et, activeFlag: true }),
+      getEffectiveMlConfig(aid) as Promise<Record<string, unknown>>,
+      props.tab === 'rides' ? getPlatformAsset(aid).catch(() => null) : Promise.resolve(null),
+    ])
+    mlProfileOptions.value = profiles
+    effectiveMl.value = eff
+    if (props.tab === 'rides' && platformAsset && typeof platformAsset === 'object') {
+      const pl = platformAsset as Record<string, unknown>
+      const raw = pl.evaluatedAlgorithm ?? pl.evaluated_algorithm
+      rideEvaluatedAlgorithm.value =
+        raw != null && String(raw).trim() !== '' ? String(raw).trim() : ''
+    } else {
+      rideEvaluatedAlgorithm.value = ''
+    }
     if (props.tab === 'rides') {
       signalUsageLoading.value = true
       try {
@@ -138,6 +157,7 @@ async function loadMlStep(force = false) {
     selectedMlProfileId.value = ''
     signalUsageCounts.value = null
     signalUsageLoading.value = false
+    rideEvaluatedAlgorithm.value = ''
   } finally {
     mlStepLoading.value = false
   }
@@ -911,6 +931,24 @@ async function saveAll(final: boolean) {
                 <template v-else>
                   <p v-if="!effectiveId" class="text-xs text-amber-500">{{ t('wizardMl.saveBasicsFirst') }}</p>
                   <div v-else class="space-y-3 rounded border border-slate-700/60 bg-slate-950/40 p-3">
+                    <div
+                      v-if="tab === 'rides'"
+                      class="rounded border border-slate-800/90 bg-slate-900/60 px-3 py-2.5"
+                    >
+                      <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                        {{ t('wizardMl.studioAlgoTitle') }}
+                      </div>
+                      <p class="mt-1 text-[11px] leading-relaxed text-slate-500">{{ t('wizardMl.studioAlgoHint') }}</p>
+                      <div class="mt-2 font-mono text-sm text-slate-100">
+                        {{ rideEvaluatedAlgorithm || t('wizardMl.studioAlgoEmpty') }}
+                      </div>
+                      <RouterLink
+                        :to="{ name: 'ai-studio' }"
+                        class="mt-2 inline-block text-xs font-medium text-brand-400 hover:text-brand-300"
+                      >
+                        {{ t('wizardMl.studioAlgoOpenStudio') }} →
+                      </RouterLink>
+                    </div>
                     <div class="flex flex-wrap items-center justify-between gap-2">
                       <span class="text-[11px] uppercase tracking-wide text-slate-500">{{ mlListEntityType }}</span>
                       <RouterLink

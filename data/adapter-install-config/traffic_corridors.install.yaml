@@ -1,0 +1,12 @@
+# Smart Park OS — adapter install config (YAML). Managed by PATCH/POST install-local only.
+schemaVersion: 1
+adapterKey: traffic_corridors
+installedAt: '2026-05-15T09:23:43.733Z'
+updatedAt: '2026-05-16T11:39:25.322Z'
+configJson: {}
+contextJson: {}
+outputProfiles:
+  - UNS_JSON
+emitEnabled: false
+ingestCanonicalEnabled: false
+scheduleCron: null

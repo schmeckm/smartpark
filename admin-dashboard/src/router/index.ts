@@ -28,6 +28,10 @@ declare module 'vue-router' {
     domain?: 'operations' | 'realtime' | 'ai' | 'assets' | 'admin'
     /** When true, `personaGuard` requires `domain` to be listed in the user's persona `navDomains`. */
     enforcePersonaDomain?: boolean
+    /** When set, `rbacGuard` requires this adapter key in `useInstalledAdaptersStore` (after hydrate). */
+    requiresInstalledAdapter?: string
+    /** When set, at least one of these adapter keys must be installed (OR). Checked after hydrate. */
+    requiresAnyInstalledAdapters?: string[]
   }
 }
 

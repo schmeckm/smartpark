@@ -3,7 +3,7 @@
  * Feature columns use the same mapping as ride wait Ridge / `ride-feature-vector.util.js`
  * (`snapshotToFeatureMap`, `TRAINING_FEATURE_NAMES`) so training matches the Prognosen ML path.
  *
- * Y = wait at t+horizon (nearest 5m bucket). Phase 1: horizon 15, target `wait_time_plus_15`.
+ * Y = wait at t+horizon (nearest 5m bucket). FEATURE_STORE: horizon 15, target `wait_time_plus_15`.
  *
  * @see docs/adr/0001-forecast-architecture.md
  */
@@ -116,9 +116,114 @@ async function summarizeRideFeatureStoreRows(parkId, internalAssetId, horizonMin
   };
 }
 
+/**
+ * Whether the raw snapshot row has a non-imputed source for this training feature key
+ * (before `snapshotToFeatureMap` defaults). Used for FEATURE_STORE X quality / gap rates.
+ *
+ * @param {Record<string, unknown>} plain - ride_feature_snapshots_5m plain row (camelCase)
+ * @param {string} featureKey - member of TRAINING_FEATURE_NAMES
+ */
+function rawStudioFeaturePresent(plain, featureKey) {
+  if (!plain || typeof plain !== 'object') return false;
+  switch (featureKey) {
+    case 'current_wait_time':
+      return plain.waitTime != null || plain.currentWaitTimeMin != null;
+    case 'wait_time_trend_30m':
+      if (plain.waitTimeDelta5m != null) return true;
+      if (plain.rollingAvgWait15m != null) return true;
+      if (plain.rollingAvgWait60m != null) return true;
+      return plain.waitTime != null || plain.currentWaitTimeMin != null;
+    case 'ride_status_num':
+      if (plain.status != null && String(plain.status).trim() !== '') return true;
+      return plain.isOpen === true || plain.isOpen === false;
+    case 'park_crowd_index':
+      return plain.parkCrowdIndex != null;
+    case 'zone_congestion_score': {
+      const ex = plain.xFeaturesExtras && typeof plain.xFeaturesExtras === 'object' ? plain.xFeaturesExtras : {};
+      if (ex.zoneCongestionScore != null && Number.isFinite(Number(ex.zoneCongestionScore))) return true;
+      if (ex.zone_congestion_score != null && Number.isFinite(Number(ex.zone_congestion_score))) return true;
+      return plain.parkCrowdIndex != null;
+    }
+    case 'rain_mm':
+      return plain.precipitationMm != null;
+    case 'temperature_c':
+      return plain.temperatureC != null;
+    case 'school_holiday':
+      return plain.isSchoolHoliday === true || plain.isSchoolHoliday === false;
+    case 'time_of_day':
+      return plain.snapshotAt != null;
+    default:
+      return false;
+  }
+}
+
+/**
+ * Single bulk read — no per-row horizon lookups. Shares eligibility filter with training rows.
+ *
+ * @returns {Promise<{ coverage: Record<string, number>, rowsAnalyzed: number }>}
+ * `coverage` keys are completeness ratios in [0,1]: (rows with raw non-null X) / (total rows).
+ */
+async function computeRideFeatureStoreCoverage(parkId, internalAssetId, options = {}) {
+  const limit = Math.min(10000, Math.max(1, Number(options.limit) || 8000));
+  if (!parkId || !internalAssetId) {
+    const empty = {};
+    for (const k of TRAINING_FEATURE_NAMES) empty[k] = 0;
+    return { coverage: empty, rowsAnalyzed: 0 };
+  }
+
+  const rows = await RideFeatureSnapshot.findAll({
+    where: {
+      internalParkId: parkId,
+      internalAssetId: String(internalAssetId),
+      trainingEligible: true,
+    },
+    order: [['snapshotAt', 'ASC']],
+    limit,
+    attributes: [
+      'snapshotAt',
+      'waitTime',
+      'currentWaitTimeMin',
+      'waitTimeDelta5m',
+      'rollingAvgWait15m',
+      'rollingAvgWait60m',
+      'status',
+      'isOpen',
+      'parkCrowdIndex',
+      'xFeaturesExtras',
+      'precipitationMm',
+      'temperatureC',
+      'isSchoolHoliday',
+    ],
+    raw: true,
+  });
+
+  const n = rows.length;
+  const counts = Object.fromEntries(TRAINING_FEATURE_NAMES.map((k) => [k, 0]));
+  for (let i = 0; i < n; i += 1) {
+    const plain = rows[i];
+    for (const k of TRAINING_FEATURE_NAMES) {
+      if (rawStudioFeaturePresent(plain, k)) counts[k] += 1;
+    }
+  }
+
+  const coverage = {};
+  if (n === 0) {
+    for (const k of TRAINING_FEATURE_NAMES) coverage[k] = 0;
+  } else {
+    const inv = 1 / n;
+    for (const k of TRAINING_FEATURE_NAMES) {
+      coverage[k] = Number((counts[k] * inv).toFixed(4));
+    }
+  }
+
+  return { coverage, rowsAnalyzed: n };
+}
+
 module.exports = {
   FEATURE_STORE_TRAIN_FEATURES,
   mapSnapshotRowToStudioFeatures,
   buildRideStudioRows,
   summarizeRideFeatureStoreRows,
+  computeRideFeatureStoreCoverage,
+  rawStudioFeaturePresent,
 };

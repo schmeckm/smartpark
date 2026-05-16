@@ -39,12 +39,15 @@ import {
 } from '@/config/featureFlags'
 import { useParkContextStore } from '@/stores/parkContext'
 import { useAuthStore } from '@/stores/auth'
+import { PREDICTIVE_MAINTENANCE_ADAPTER_KEY, useInstalledAdaptersStore } from '@/stores/installedAdapters'
 import { useToast } from '@/composables/useToast'
 import { askConfirm } from '@/composables/useConfirmDialog'
 
 const { t } = useI18n()
 const parkCtx = useParkContextStore()
 const auth = useAuthStore()
+const installedAdapters = useInstalledAdaptersStore()
+const showPdmBoardLink = computed(() => installedAdapters.isInstalled(PREDICTIVE_MAINTENANCE_ADAPTER_KEY))
 const { push } = useToast()
 
 const tab = ref<'l0' | 'l1' | 'l3'>('l0')
@@ -1172,7 +1175,7 @@ function swdecPillWrapClass(pillKey: string) {
           </p>
         </div>
 
-        <p v-if="rideId" class="text-xs text-slate-500">
+        <p v-if="rideId && showPdmBoardLink" class="text-xs text-slate-500">
           {{ t('addonBoard.pdmBoardHint') }}
           <RouterLink
             class="text-brand-400 hover:underline"

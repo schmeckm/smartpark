@@ -20,10 +20,9 @@ const {
 } = require('./ai-snapshot-x-context.service');
 const { loadActiveProfileCodesByAssetIds } = require('./ml-effective-config.service');
 const { ParkOperatingSnapshotRepository } = require('../repositories/park-operating-snapshot.repository');
-const { evaluateScheduledOperatingHours } = require('../utils/operating-hours-eval.util');
-const { syntheticScheduleFromParkEnrichment } = require('../utils/master-operating-hours.util');
 const { snapshotEligibilityDefaultsForSchedule } = require('../utils/ride-snapshot-eligibility.util');
 const { coerceNumericWaitMinutes } = require('../utils/canonical-wait-payload.util');
+const { computeParkScheduledOperatingForMeta } = require('./ai-feature-store-park-scheduled.helper');
 
 function toNum(v, d = 0) {
   const n = Number(v);
@@ -141,48 +140,6 @@ const PARK_SNAPSHOT_UPDATE_FIELDS = [
   'scheduledOperatingSnapshotAt',
   'updatedAt',
 ];
-
-/**
- * @param {object} meta - parkXByKey entry with park, parkX, externalParkId, provider
- * @param {Date} bucketUtc
- * @param {import('../repositories/park-operating-snapshot.repository').ParkOperatingSnapshotRepository} operatingRepo
- */
-async function computeParkScheduledOperatingForMeta(meta, bucketUtc, operatingRepo) {
-  let withinScheduledOperatingHours = null;
-  let scheduledOperatingSnapshotAt = null;
-  const { externalParkId, parkX } = meta;
-  if (parkX.localDate && meta.park) {
-    const parkPlain =
-      meta.park && typeof meta.park.get === 'function' ? meta.park.get({ plain: true }) : meta.park || {};
-    const masterSchedule = syntheticScheduleFromParkEnrichment(parkPlain.enrichment, parkX.localDate);
-    if (masterSchedule) {
-      const ev = evaluateScheduledOperatingHours(masterSchedule, bucketUtc, parkX.timezone);
-      withinScheduledOperatingHours = ev.within;
-      scheduledOperatingSnapshotAt = parkPlain.updatedAt ? new Date(parkPlain.updatedAt) : null;
-    } else {
-      const extCandidates = [
-        ...new Set(
-          [externalParkId, parkPlain.externalEntityId, parkPlain.slug]
-            .filter((x) => x != null && String(x).trim() !== '')
-            .map((x) => String(x).trim())
-        ),
-      ];
-      if (extCandidates.length) {
-        const opRow = await operatingRepo.findLatestOpeningRowForLocalDateFirstMatching(
-          meta.provider || 'themeparks_wiki',
-          extCandidates,
-          parkX.localDate
-        );
-        if (opRow) {
-          const ev = evaluateScheduledOperatingHours(opRow.openingTimes, bucketUtc, parkX.timezone);
-          withinScheduledOperatingHours = ev.within;
-          scheduledOperatingSnapshotAt = opRow.sampledAt || null;
-        }
-      }
-    }
-  }
-  return { withinScheduledOperatingHours, scheduledOperatingSnapshotAt };
-}
 
 class AiFeatureStoreService {
   async buildSnapshots({ now = new Date() } = {}) {

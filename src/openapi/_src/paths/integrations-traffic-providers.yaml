@@ -1,0 +1,148 @@
+/integrations/traffic-providers:
+  get:
+    tags:
+      - Integrations
+    summary: List traffic provider configurations (masked secrets only)
+    description: Returns persisted traffic routing providers (e.g. TomTom). API keys are never returned — only `maskedApiKey` suffix hints.
+    security:
+      -
+        bearerAuth: []
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeTrafficProviderConfigList'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+
+'/integrations/traffic-providers/traffic_tomtom':
+  put:
+    tags:
+      - Integrations
+    summary: Create or update TomTom traffic provider configuration
+    description: Encrypts and stores the API key server-side. Omit `apiKey` to keep the existing secret. Requires **integrations.manage**.
+    security:
+      -
+        bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PutTomTomTrafficProviderBody'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeTrafficProviderConfig'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '422':
+        $ref: '#/components/responses/ValidationError'
+
+'/integrations/traffic-providers/traffic_tomtom/test':
+  post:
+    tags:
+      - Integrations
+    summary: Test TomTom routing connectivity (server-side)
+    description: Calls TomTom using stored credentials and default or supplied coordinates. Requires **integrations.manage**.
+    security:
+      -
+        bearerAuth: []
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/TestTomTomTrafficProviderBody'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeTomTomTrafficTestResult'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '422':
+        $ref: '#/components/responses/ValidationError'
+      '503':
+        description: TomTom API key missing while integration is enabled
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+
+'/integrations/traffic-providers/tomtom':
+  put:
+    tags:
+      - Integrations
+    summary: '[Deprecated] Same as PUT /integrations/traffic-providers/traffic_tomtom'
+    description: Legacy URL alias for TomTom configuration. Prefer **traffic_tomtom** (adapter key).
+    security:
+      -
+        bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PutTomTomTrafficProviderBody'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeTrafficProviderConfig'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '422':
+        $ref: '#/components/responses/ValidationError'
+
+'/integrations/traffic-providers/tomtom/test':
+  post:
+    tags:
+      - Integrations
+    summary: '[Deprecated] Same as POST /integrations/traffic-providers/traffic_tomtom/test'
+    description: Legacy URL alias. Prefer **traffic_tomtom/test**.
+    security:
+      -
+        bearerAuth: []
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/TestTomTomTrafficProviderBody'
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeTomTomTrafficTestResult'
+      '401':
+        description: Unauthorized
+      '403':
+        description: Forbidden
+      '422':
+        $ref: '#/components/responses/ValidationError'
+      '503':
+        description: TomTom API key missing while integration is enabled
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'

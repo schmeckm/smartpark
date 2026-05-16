@@ -61,7 +61,13 @@ tags:
     description: "Park-level **geo pressure** (wait hotspots, forecasts) and **guest flow** simulation / journey event ingest.\n`{parkSlug}` resolves like master-data (internal UUID, URL slug, or external entity id).\n"
   -
     name: AttendanceRisk
-    description: 'Manual traffic corridor snapshots as leading indicators for attendance risk (MVP; no external routing APIs).'
+    description: 'Traffic corridor snapshots as leading indicators for attendance risk (MVP); optional TomTom live routing polls are documented under TrafficSnapshots.'
+  -
+    name: TrafficSnapshots
+    description: 'TomTom-backed traffic corridor routing snapshots (external demand pressure signal only; not visitor counts).'
+  -
+    name: 'Widget Runtime'
+    description: 'Governed operational widget registry, data sources, and instances (MVP foundation for future dashboard runtime).'
 security:
   -
     bearerAuth: []
@@ -1725,8 +1731,114 @@ components:
           type: boolean
         data:
           $ref: '#/components/schemas/MlPredictionTraceCoefficientsPayload'
-      description: 'Mirrors `trainBody` in `ai-studio.validators.js` (dataset FEATURE_STORE \| SANDBOX, entityType, features, targetVariable, strategy, algorithm, horizonMinutes rules). Additional server-side constraints apply.'
+    AiStudioFeatureStoreTrainingOptions:
+      type: object
+      description: 'Optional hyperparameters when `dataset` is **FEATURE_STORE** (Phase 2 JS trainers). Omitted keys use server defaults.'
+      additionalProperties: false
+      properties:
+        ridgeLambda:
+          type: number
+          description: 'Ridge penalty λ for linear_regression only (default 1e-6).'
+          minimum: 1e-12
+          maximum: 1
+        randomForest:
+          type: object
+          additionalProperties: false
+          properties:
+            nTrees:
+              type: integer
+              minimum: 8
+              maximum: 256
+            maxDepth:
+              type: integer
+              minimum: 2
+              maximum: 24
+            minLeaf:
+              type: integer
+              minimum: 2
+              maximum: 200
+            maxSplitCandidates:
+              type: integer
+              minimum: 4
+              maximum: 80
+        gradientBoosting:
+          type: object
+          additionalProperties: false
+          properties:
+            rounds:
+              type: integer
+              minimum: 8
+              maximum: 400
+            shrinkage:
+              type: number
+              minimum: 0.01
+              maximum: 0.5
+            treeDepth:
+              type: integer
+              minimum: 1
+              maximum: 12
+            minLeaf:
+              type: integer
+              minimum: 2
+              maximum: 200
+            maxSplitCandidates:
+              type: integer
+              minimum: 4
+              maximum: 80
+        neuralNetwork:
+          type: object
+          additionalProperties: false
+          properties:
+            hidden:
+              type: integer
+              minimum: 8
+              maximum: 128
+            epochs:
+              type: integer
+              minimum: 50
+              maximum: 2000
+            lr:
+              type: number
+              minimum: 0.001
+              maximum: 0.5
+    AiStudioTrainRequest:
+      type: object
+      description: 'Mirrors `trainBody` in `ai-studio.validators.js`. **FEATURE_STORE** (Phase 2): real rows from `ride_feature_snapshots_5m`, strategy AUTO/MANUAL, all manual algorithms; optional `featureStoreTrainingOptions`. **SANDBOX**: stub learners.'
       additionalProperties: true
+      properties:
+        dataset:
+          type: string
+          enum:
+            - FEATURE_STORE
+            - SANDBOX
+          default: SANDBOX
+        entityType:
+          type: string
+        entityId:
+          type: string
+          format: uuid
+          nullable: true
+        targetVariable:
+          type: string
+        features:
+          type: array
+          items:
+            type: string
+        strategy:
+          type: string
+          enum:
+            - AUTO
+            - MANUAL
+          default: MANUAL
+        algorithm:
+          type: string
+          nullable: true
+        horizonMinutes:
+          type: integer
+          description: 'FEATURE_STORE: must be **15** (wait_time_plus_15 horizon).'
+          default: 15
+        featureStoreTrainingOptions:
+          $ref: '#/components/schemas/AiStudioFeatureStoreTrainingOptions'
     AiStudioPredictRequest:
       type: object
       description: 'Mirrors `predictBody` — entityType, targetVariable, featureSource, optional entityId, features map.'
@@ -1753,6 +1865,22 @@ components:
           type: object
           additionalProperties:
             type: number
+    AiStudioRuntimeResolutionRequest:
+      type: object
+      description: 'Mirrors `runtimeResolutionBody` in `ai-studio.validators.js` — entityType, targetVariable, optional entityId (no feature payload).'
+      additionalProperties: true
+      required:
+        - entityType
+        - targetVariable
+      properties:
+        entityType:
+          type: string
+        entityId:
+          type: string
+          format: uuid
+          nullable: true
+        targetVariable:
+          type: string
     AiParkCalendarUpsertBody:
       type: object
       required:
@@ -3967,6 +4095,12 @@ components:
             - warn_only
             - enforce
           description: 'Mirrors env MQTT_CAPABILITY_GUARD_MODE (Phase 13)'
+        integrationFlowEngineEnabled:
+          type: boolean
+          description: 'Mirrors env INTEGRATION_FLOW_ENGINE_ENABLED (Integration Flow Engine API + Studio)'
+        widgetRuntimeEnabled:
+          type: boolean
+          description: 'Mirrors env WIDGET_RUNTIME_ENABLED (governed widget registry + instances)'
     EnvelopeIntegrationFeatureFlags:
       type: object
       properties:
@@ -4413,6 +4547,32 @@ components:
         latestSnapshot:
           $ref: '#/components/schemas/TrafficCorridorSnapshot5m'
           nullable: true
+        latestSnapshotDetail:
+          $ref: '#/components/schemas/TrafficCorridorLatestSnapshotDetail'
+          nullable: true
+        lastPollResult:
+          type: object
+          nullable: true
+          description: 'Latest TomTom routing poll outcome for this corridor (written by poll endpoint / adapter poll).'
+          properties:
+            polledAt:
+              type: string
+              format: date-time
+            ok:
+              type: boolean
+            code:
+              type: string
+              nullable: true
+            message:
+              type: string
+              nullable: true
+            snapshotId:
+              type: string
+              format: uuid
+              nullable: true
+            httpStatus:
+              type: integer
+              nullable: true
         createdAt:
           type: string
           format: date-time
@@ -4451,6 +4611,57 @@ components:
           nullable: true
         inboundPressureScore:
           type: number
+          nullable: true
+    TrafficCorridorLatestSnapshotDetail:
+      type: object
+      description: 'Derived transparency fields for the latest snapshot (no raw provider body).'
+      properties:
+        routeDistanceMeters:
+          type: number
+          nullable: true
+        travelTimeSeconds:
+          type: number
+          nullable: true
+        trafficDelaySeconds:
+          type: number
+          nullable: true
+        delayPercent:
+          type: number
+        delayMinutes:
+          type: number
+        currentTravelTimeMinutes:
+          type: number
+          nullable: true
+        baselineTravelTimeMinutes:
+          type: number
+          nullable: true
+        providerStatus:
+          type: string
+        providerErrorCode:
+          type: string
+          nullable: true
+        providerErrorMessage:
+          type: string
+          nullable: true
+        sampledAt:
+          type: string
+          format: date-time
+          nullable: true
+        routeLooksUnrealistic:
+          type: boolean
+    TrafficCorridorSnapshotDebugResponse:
+      type: object
+      properties:
+        corridor:
+          $ref: '#/components/schemas/TrafficCorridor'
+        latestSnapshot:
+          $ref: '#/components/schemas/TrafficCorridorSnapshot5m'
+          nullable: true
+        latestSnapshotDetail:
+          $ref: '#/components/schemas/TrafficCorridorLatestSnapshotDetail'
+          nullable: true
+        providerRawResponse:
+          description: 'Sanitized TomTom JSON (debug only; API keys stripped).'
           nullable: true
     ParkDemandForecast5m:
       type: object
@@ -4501,6 +4712,31 @@ components:
             - elevated
             - high
             - critical
+        riskLevel:
+          type: string
+          description: 'Alias of status for API consumers.'
+          enum:
+            - normal
+            - elevated
+            - high
+            - critical
+        knownRegisteredDemand:
+          type: integer
+          description: 'Alias of knownRegisteredExpected.'
+        estimatedAdditionalDemandLow:
+          type: integer
+        estimatedAdditionalDemandMid:
+          type: integer
+        estimatedAdditionalDemandHigh:
+          type: integer
+        totalExpectedAttendanceLow:
+          type: integer
+        totalExpectedAttendanceMid:
+          type: integer
+        totalExpectedAttendanceHigh:
+          type: integer
+        explanation:
+          description: 'Alias of explanationJson (object).'
         confidenceScore:
           type: number
         recommendationsJson:
@@ -4532,6 +4768,13 @@ components:
           type: boolean
         data:
           $ref: '#/components/schemas/TrafficCorridorSnapshot5m'
+    EnvelopeTrafficSnapshotDebug:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/TrafficCorridorSnapshotDebugResponse'
     EnvelopeParkDemandForecast:
       type: object
       properties:
@@ -4671,6 +4914,1045 @@ components:
           type: number
           minimum: 0
           maximum: 100
+    TrafficSnapshotPollBody:
+      type: object
+      properties:
+        parkId:
+          type: string
+          format: uuid
+          nullable: true
+          description: 'When set, only corridors for this park are polled.'
+    TrafficSnapshotNormalized:
+      type: object
+      properties:
+        corridorId:
+          type: string
+          format: uuid
+        provider:
+          type: string
+          example: tomtom
+        originLat:
+          type: number
+        originLng:
+          type: number
+        destinationLat:
+          type: number
+        destinationLng:
+          type: number
+        routeDistanceMeters:
+          type: number
+          nullable: true
+        travelTimeSeconds:
+          type: number
+        trafficDelaySeconds:
+          type: number
+        noTrafficTravelTimeSeconds:
+          type: number
+          nullable: true
+        delayPercent:
+          type: number
+        sampledAt:
+          type: string
+          format: date-time
+        providerStatus:
+          type: string
+          example: ok
+        providerRawResponse:
+          type: object
+          additionalProperties: true
+          nullable: true
+          description: 'Raw TomTom JSON when `provider` is `tomtom`; otherwise often null.'
+    TrafficSnapshotPollResultItem:
+      type: object
+      properties:
+        corridorId:
+          type: string
+          format: uuid
+        ok:
+          type: boolean
+        snapshot:
+          $ref: '#/components/schemas/TrafficCorridorSnapshot5m'
+          nullable: true
+        normalized:
+          $ref: '#/components/schemas/TrafficSnapshotNormalized'
+          nullable: true
+        error:
+          type: object
+          nullable: true
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            status:
+              type: integer
+              nullable: true
+    TrafficSnapshotPollResult:
+      type: object
+      properties:
+        polledAt:
+          type: string
+          format: date-time
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrafficSnapshotPollResultItem'
+    EnvelopeTrafficSnapshotPollResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/TrafficSnapshotPollResult'
+    TrafficSnapshotLatestRow:
+      type: object
+      properties:
+        corridorId:
+          type: string
+          format: uuid
+        corridorName:
+          type: string
+        snapshotId:
+          type: string
+          format: uuid
+          nullable: true
+        snapshotTs:
+          type: string
+          format: date-time
+          nullable: true
+        source:
+          type: string
+          nullable: true
+        normalized:
+          $ref: '#/components/schemas/TrafficSnapshotNormalized'
+          nullable: true
+    EnvelopeTrafficSnapshotLatestList:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrafficSnapshotLatestRow'
+    TrafficProviderConfigPublic:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          nullable: true
+        providerKey:
+          type: string
+          example: traffic_tomtom
+        displayName:
+          type: string
+        enabled:
+          type: boolean
+        maskedApiKey:
+          type: string
+          nullable: true
+          description: 'Last few characters only, e.g. ************CW1'
+        pollIntervalMinutes:
+          type: integer
+        timeoutMs:
+          type: integer
+        baseUrl:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+          nullable: true
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdBy:
+          type: string
+          format: uuid
+          nullable: true
+        updatedBy:
+          type: string
+          format: uuid
+          nullable: true
+    EnvelopeTrafficProviderConfigList:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrafficProviderConfigPublic'
+    EnvelopeTrafficProviderConfig:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/TrafficProviderConfigPublic'
+    PutTomTomTrafficProviderBody:
+      type: object
+      required:
+        - enabled
+      properties:
+        enabled:
+          type: boolean
+        apiKey:
+          type: string
+          description: 'When omitted, the previously stored key is kept.'
+          nullable: true
+        displayName:
+          type: string
+          nullable: true
+        pollIntervalMinutes:
+          type: integer
+          minimum: 1
+          maximum: 1440
+        timeoutMs:
+          type: integer
+          minimum: 1000
+          maximum: 120000
+        baseUrl:
+          type: string
+          format: uri
+          maxLength: 500
+    TestTomTomTrafficProviderBody:
+      type: object
+      properties:
+        originLat:
+          type: number
+        originLng:
+          type: number
+        destinationLat:
+          type: number
+        destinationLng:
+          type: number
+    TomTomTrafficTestResult:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        providerStatus:
+          type: string
+        travelTimeSeconds:
+          type: number
+        routeDistanceMeters:
+          type: number
+          nullable: true
+    EnvelopeTomTomTrafficTestResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/TomTomTrafficTestResult'
+    IntegrationFlowJson:
+      type: object
+      required:
+        - nodes
+        - edges
+      additionalProperties: false
+      properties:
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/IntegrationFlowJsonNode'
+        edges:
+          type: array
+          items:
+            $ref: '#/components/schemas/IntegrationFlowJsonEdge'
+    IntegrationFlowJsonNode:
+      type: object
+      required:
+        - id
+        - type
+        - config
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        config:
+          type: object
+          additionalProperties: true
+        position:
+          type: object
+          description: 'Optional UI-only node position (Integration Flow Studio). Ignored by the execution runtime.'
+          additionalProperties: false
+          properties:
+            x:
+              type: number
+            y:
+              type: number
+          required:
+            - x
+            - y
+    IntegrationFlowJsonEdge:
+      type: object
+      required:
+        - source
+        - target
+      properties:
+        source:
+          type: string
+        target:
+          type: string
+    IntegrationFlowDefinition:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        parkId:
+          type: string
+          format: uuid
+          nullable: true
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        enabled:
+          type: boolean
+        triggerType:
+          type: string
+        flowJson:
+          $ref: '#/components/schemas/IntegrationFlowJson'
+        scheduleEnabled:
+          type: boolean
+          description: 'When true, the flow is eligible for interval scheduling (requires enabled=true).'
+        scheduleIntervalSeconds:
+          type: integer
+          nullable: true
+          enum:
+            - 60
+            - 300
+            - 900
+            - 1800
+            - 3600
+          description: 'Interval between scheduled runs in seconds (fixed whitelist).'
+        lastScheduledRunAt:
+          type: string
+          format: date-time
+          nullable: true
+        nextScheduledRunAt:
+          type: string
+          format: date-time
+          nullable: true
+        scheduleLockUntil:
+          type: string
+          format: date-time
+          nullable: true
+        retryEnabled:
+          type: boolean
+          description: 'When true, failed runs may be retried per maxRetryAttempts and retryDelaySeconds (flow must be enabled).'
+        maxRetryAttempts:
+          type: integer
+          enum:
+            - 0
+            - 1
+            - 2
+            - 3
+        retryDelaySeconds:
+          type: integer
+          nullable: true
+          enum:
+            - 60
+            - 300
+            - 900
+        retryOnNodeTypes:
+          type: array
+          nullable: true
+          items:
+            type: string
+        createdBy:
+          type: string
+          nullable: true
+        updatedBy:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    IntegrationFlowRun:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        flowId:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          type: string
+          enum:
+            - pending
+            - running
+            - success
+            - failed
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        finishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        durationMs:
+          type: integer
+          nullable: true
+        errorMessage:
+          type: string
+          nullable: true
+        inputJson: {}
+        outputJson: {}
+        parentRunId:
+          type: string
+          format: uuid
+          nullable: true
+        retryAttempt:
+          type: integer
+        retryOfRunId:
+          type: string
+          format: uuid
+          nullable: true
+        nextRetryAt:
+          type: string
+          format: date-time
+          nullable: true
+        retryStatus:
+          type: string
+          nullable: true
+          enum:
+            - not_applicable
+            - pending_retry
+            - retry_succeeded
+            - retry_failed
+            - retry_exhausted
+        acknowledgedAt:
+          type: string
+          format: date-time
+          nullable: true
+        acknowledgedBy:
+          type: string
+          nullable: true
+        acknowledgementNote:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/IntegrationFlowRunStep'
+        timeline:
+          type: array
+          description: 'Derived from persisted run steps (execution order).'
+          items:
+            $ref: '#/components/schemas/IntegrationFlowTimelineEntry'
+    IntegrationFlowTimelineEntry:
+      type: object
+      properties:
+        nodeId:
+          type: string
+        nodeType:
+          type: string
+        status:
+          type: string
+          enum:
+            - pending
+            - running
+            - success
+            - failed
+            - skipped
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        finishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        durationMs:
+          type: integer
+          nullable: true
+        errorMessage:
+          type: string
+          nullable: true
+    IntegrationFlowRunStep:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        runId:
+          type: string
+          format: uuid
+        nodeId:
+          type: string
+        nodeType:
+          type: string
+        status:
+          type: string
+          enum:
+            - pending
+            - running
+            - success
+            - failed
+            - skipped
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        finishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        durationMs:
+          type: integer
+          nullable: true
+        inputJson: {}
+        outputJson: {}
+        errorMessage:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    IntegrationNodeRegistryEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        nodeKey:
+          type: string
+        nodeType:
+          type: string
+        displayName:
+          type: string
+        category:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        configSchema: {}
+        inputSchema: {}
+        outputSchema: {}
+        enabled:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    IntegrationFlowValidationResult:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        errors:
+          type: array
+          items:
+            type: string
+        warnings:
+          type: array
+          items:
+            type: string
+    IntegrationFlowCreateRequest:
+      type: object
+      required:
+        - name
+        - flowJson
+      properties:
+        parkId:
+          type: string
+          format: uuid
+          nullable: true
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        enabled:
+          type: boolean
+          default: false
+        triggerType:
+          type: string
+          default: MANUAL
+        flowJson:
+          $ref: '#/components/schemas/IntegrationFlowJson'
+        scheduleEnabled:
+          type: boolean
+          default: false
+        scheduleIntervalSeconds:
+          type: integer
+          nullable: true
+          enum:
+            - 60
+            - 300
+            - 900
+            - 1800
+            - 3600
+        retryEnabled:
+          type: boolean
+          default: false
+        maxRetryAttempts:
+          type: integer
+          default: 0
+          enum:
+            - 0
+            - 1
+            - 2
+            - 3
+        retryDelaySeconds:
+          type: integer
+          nullable: true
+          enum:
+            - 60
+            - 300
+            - 900
+        retryOnNodeTypes:
+          type: array
+          nullable: true
+          items:
+            type: string
+    IntegrationFlowTemplate:
+      type: object
+      properties:
+        templateKey:
+          type: string
+        displayName:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+        defaultConfigNotes:
+          type: string
+        flowJson:
+          $ref: '#/components/schemas/IntegrationFlowJson'
+    IntegrationFlowFromTemplateRequest:
+      type: object
+      required:
+        - templateKey
+        - name
+      properties:
+        templateKey:
+          type: string
+        name:
+          type: string
+        parkId:
+          type: string
+          format: uuid
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        enabled:
+          type: boolean
+          default: false
+        configOverrides:
+          type: object
+          properties:
+            nodes:
+              type: object
+              additionalProperties: true
+          additionalProperties: false
+    IntegrationFlowRunRequest:
+      type: object
+      properties:
+        input:
+          type: object
+          additionalProperties: true
+    IntegrationFlowRunResult:
+      type: object
+      properties:
+        runId:
+          type: string
+          format: uuid
+        flowId:
+          type: string
+          format: uuid
+        status:
+          type: string
+        steps:
+          type: array
+          items:
+            type: object
+            properties:
+              nodeId:
+                type: string
+              nodeType:
+                type: string
+              status:
+                type: string
+              errorMessage:
+                type: string
+                nullable: true
+        output: {}
+    IntegrationFlowAcknowledgeRequest:
+      type: object
+      properties:
+        note:
+          type: string
+          maxLength: 1000
+          nullable: true
+    IntegrationFlowFailureInboxItem:
+      type: object
+      properties:
+        runId:
+          type: string
+          format: uuid
+        flowId:
+          type: string
+          format: uuid
+          nullable: true
+        flowName:
+          type: string
+          nullable: true
+        status:
+          type: string
+        retryStatus:
+          type: string
+          nullable: true
+        retryAttempt:
+          type: integer
+        maxRetryAttempts:
+          type: integer
+        retryEnabled:
+          type: boolean
+        nextRetryAt:
+          type: string
+          format: date-time
+          nullable: true
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        finishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        durationMs:
+          type: integer
+          nullable: true
+        errorMessage:
+          type: string
+          nullable: true
+        failedNodeId:
+          type: string
+          nullable: true
+        failedNodeType:
+          type: string
+          nullable: true
+        failedStepErrorMessage:
+          type: string
+          nullable: true
+        acknowledgedAt:
+          type: string
+          format: date-time
+          nullable: true
+        acknowledgedBy:
+          type: string
+          nullable: true
+        acknowledgementNote:
+          type: string
+          nullable: true
+    IntegrationFlowFailureInboxPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/IntegrationFlowFailureInboxItem'
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+    EnvelopeIntegrationFlowFailureInboxPage:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/IntegrationFlowFailureInboxPage'
+    EnvelopeIntegrationFlowFailureInboxItem:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/IntegrationFlowFailureInboxItem'
+    EnvelopeIntegrationFlowDefinition:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/IntegrationFlowDefinition'
+    EnvelopeIntegrationFlowTemplateList:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/IntegrationFlowTemplate'
+    EnvelopeIntegrationFlowDefinitionList:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/IntegrationFlowDefinition'
+    EnvelopeIntegrationFlowRun:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/IntegrationFlowRun'
+    EnvelopeIntegrationFlowRunList:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/IntegrationFlowRun'
+    EnvelopeIntegrationFlowRunResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/IntegrationFlowRunResult'
+    EnvelopeIntegrationFlowValidationResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/IntegrationFlowValidationResult'
+    EnvelopeIntegrationNodeRegistryList:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/IntegrationNodeRegistryEntry'
+    DashboardWidgetRegistryEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        widgetKey:
+          type: string
+        displayName:
+          type: string
+        category:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        componentName:
+          type: string
+        configSchema:
+          type: object
+          nullable: true
+        enabled:
+          type: boolean
+    DashboardDataSourceRegistryEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        dataSourceKey:
+          type: string
+        displayName:
+          type: string
+        category:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        sourceType:
+          type: string
+        endpoint:
+          type: string
+          nullable: true
+        refreshSeconds:
+          type: integer
+        enabled:
+          type: boolean
+    DashboardWidgetInstance:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        widgetKey:
+          type: string
+        title:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        widgetConfig:
+          type: object
+        dataSourceKey:
+          type: string
+          nullable: true
+        enabled:
+          type: boolean
+        createdBy:
+          type: string
+          nullable: true
+        updatedBy:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    DashboardWidgetInstanceCreate:
+      type: object
+      required:
+        - widgetKey
+      properties:
+        widgetKey:
+          type: string
+        title:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        widgetConfig:
+          type: object
+        dataSourceKey:
+          type: string
+          nullable: true
+        enabled:
+          type: boolean
+    DashboardWidgetInstancePatch:
+      type: object
+      minProperties: 1
+      properties:
+        widgetKey:
+          type: string
+        title:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        widgetConfig:
+          type: object
+        dataSourceKey:
+          type: string
+          nullable: true
+        enabled:
+          type: boolean
+    WidgetInstanceValidationResult:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        errors:
+          type: array
+          items:
+            type: string
+        previewData:
+          nullable: true
+    WidgetInstanceData:
+      type: object
+      properties:
+        instance:
+          $ref: '#/components/schemas/DashboardWidgetInstance'
+        widget:
+          $ref: '#/components/schemas/DashboardWidgetRegistryEntry'
+          nullable: true
+        data:
+          nullable: true
+    EnvelopeDashboardWidgetRegistryList:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardWidgetRegistryEntry'
+    EnvelopeDashboardDataSourceRegistryList:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardDataSourceRegistryEntry'
+    EnvelopeDashboardWidgetInstanceList:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardWidgetInstance'
+    EnvelopeDashboardWidgetInstance:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/DashboardWidgetInstance'
+    EnvelopeWidgetInstanceValidation:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/WidgetInstanceValidationResult'
+    EnvelopeWidgetInstanceData:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/WidgetInstanceData'
   parameters:
     IdPath:
       name: id
@@ -5814,6 +7096,15 @@ paths:
               - 'false'
         -
           in: query
+          name: includeArchived
+          description: 'When true, include rows with archivedAt set (governance).'
+          schema:
+            type: string
+            enum:
+              - 'true'
+              - 'false'
+        -
+          in: query
           name: limit
           schema:
             type: integer
@@ -5857,12 +7148,52 @@ paths:
           description: Forbidden
         '404':
           description: 'Not found'
+    delete:
+      tags:
+        - AI
+      summary: 'Archive or permanently delete ML Studio model row'
+      description: "Needs **`ai.refresh`** and **`X-Park-Id`**.\nDefault (no query): **soft-archive** — fails with **`MODEL_ACTIVE`** if still active, or **`MODEL_LAST_DEPLOYABLE_VERSION`** if last non-archived row in slot.\nWith **`permanent=true`**: **hard-delete** the DB row; only allowed when the row is already archived (`archivedAt` set). Otherwise **`MODEL_NOT_ARCHIVED`** (409).\n"
+      parameters:
+        -
+          in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        -
+          in: query
+          name: permanent
+          required: false
+          description: 'If `true`, permanently remove the row from the database (archived rows only).'
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: 'Not found'
+        '409':
+          description: 'Governance conflict (e.g. MODEL_ACTIVE, MODEL_NOT_ARCHIVED)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
   /ai/studio/models/train:
     post:
       tags:
         - AI
       summary: 'Train an ML Studio model (sandbox or feature-store dataset)'
-      description: 'Needs **`ai.refresh`** and **`X-Park-Id`**. Body is validated server-side (dataset, entityType, targetVariable, features, strategy, algorithm). See `ai-studio.validators.js`.'
+      description: "Needs **`ai.refresh`** and **`X-Park-Id`**. Body is validated server-side (`ai-studio.validators.js`).\n**FEATURE_STORE (Phase 2):** supervised training on `ride_feature_snapshots_5m` with optional **`featureStoreTrainingOptions`** (RF / GBM / MLP / ridge λ).\n**SANDBOX:** deterministic stub metrics for algorithm comparison.\n"
       requestBody:
         required: true
         content:
@@ -5882,6 +7213,161 @@ paths:
           description: Forbidden
         '422':
           description: 'Validation / business rules'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+  /ai/studio/models/validate-features:
+    post:
+      tags:
+        - AI
+      summary: 'FEATURE_STORE — raw data coverage per X feature (pre-training quality)'
+      description: "Needs **`ai.read`** and **`X-Park-Id`**. Returns share of eligible snapshot rows (max 8000) where each selected feature has a non-null source before imputation.\n"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - entityType
+                - entityId
+              properties:
+                entityType:
+                  type: string
+                  enum:
+                    - RIDE
+                entityId:
+                  type: string
+                  format: uuid
+                features:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '422':
+          description: 'Validation / business rules'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+  /ai/studio/models/batch-train-status:
+    get:
+      tags:
+        - AI
+      summary: 'Phase 3 — batch FEATURE_STORE training progress for current park'
+      description: 'Needs **`ai.read`** and **`X-Park-Id`**. In-memory status for the last / active park-wide ride batch.'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+  /ai/studio/models/batch-train-rides:
+    post:
+      tags:
+        - AI
+      summary: 'Start park-wide FEATURE_STORE training for all RIDE assets'
+      description: "Needs **`ai.refresh`** and **`X-Park-Id`**. Returns **202** immediately; poll **`/ai/studio/models/batch-train-status`** for progress.\n"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                strategy:
+                  type: string
+                  enum:
+                    - AUTO
+                    - MANUAL
+                algorithm:
+                  type: string
+                features:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '409':
+          description: 'Batch already running'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '422':
+          description: 'Validation / business rules'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+  /ai/studio/models/batch-apply:
+    post:
+      tags:
+        - AI
+      summary: 'Apply last batch algorithms to ride assets and activate FEATURE_STORE models'
+      description: "Needs **`ai.refresh`** and **`X-Park-Id`**. Body **`batchId`** must match the finished batch from **`/ai/studio/models/batch-train-status`**.\nUpdates **`evaluated_algorithm`** on each successful ride row, **activates** the matching **`ai_studio_models`** row for that batch (FEATURE_STORE / `wait_time_plus_15`), deactivating prior active rows in the same slot, clears the ride-forecast resolve cache for the park, then clears in-memory batch state.\n"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - batchId
+              properties:
+                batchId:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: 'Batch not found or batchId mismatch'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '409':
+          description: 'Batch still running'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '422':
+          description: 'Nothing to apply / validation'
           content:
             application/json:
               schema:
@@ -5930,6 +7416,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorBody'
+  '/ai/studio/models/{id}/restore':
+    post:
+      tags:
+        - AI
+      summary: 'Restore archived ML Studio model'
+      description: 'Needs **`ai.refresh`** and **`X-Park-Id`**. Clears **`archivedAt`** / **`archivedBy`**.'
+      parameters:
+        -
+          in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: 'Not found'
   /ai/studio/predict:
     post:
       tags:
@@ -5942,6 +7455,35 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/AiStudioPredictRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '422':
+          description: 'Validation error'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+  /ai/studio/runtime-resolution:
+    post:
+      tags:
+        - AI
+      summary: 'Explain ML Studio predict model resolution (entity → category → park → fallback)'
+      description: 'Needs **`ai.read`** and **`X-Park-Id`**. Active-flag models only for the final pick; best MAE per level is informational. Validated per `runtimeResolutionBody` in `ai-studio.validators.js`.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiStudioRuntimeResolutionRequest'
       responses:
         '200':
           description: OK
@@ -7337,6 +8879,29 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EnvelopeMlPredictionTraceFilterOptions'
+  '/ai/ml/prediction-traces/{predictionId}/coefficients':
+    get:
+      tags:
+        - AI
+      summary: 'Learned ridge coefficients + manual weights for a prediction trace (read-only)'
+      description: "**Read-only.** Resolves the trace’s model registry row and projects coefficient rows when present; requires `ai.read` and `X-Park-Id`.\n"
+      parameters:
+        -
+          in: path
+          name: predictionId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '404':
+          description: 'Not found'
   '/ai/ml/prediction-traces/{predictionId}':
     get:
       tags:
@@ -7411,6 +8976,32 @@ paths:
       responses:
         '200':
           description: OK
+  /ai/ml/forecast-accuracy/model-win-rates:
+    get:
+      tags:
+        - AI
+      summary: 'Forecast accuracy — model win-rate stats (observational)'
+      description: "**Read-only.** Compares which ridge model names win head-to-head for comparable rows in `ml_forecast_accuracy_logs` (current park).\nRequires `ai.read` and `X-Park-Id`.\n"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+  /ai/ml/forecast-accuracy/retro-lookback:
+    get:
+      tags:
+        - AI
+      summary: 'Forecast accuracy — retro lookback window summary'
+      description: "**Read-only.** Returns bounded historical slices for accuracy dashboards; requires `ai.read` and `X-Park-Id`.\n"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
   '/ai/ml/forecast-accuracy/{id}':
     get:
       tags:
@@ -7545,6 +9136,313 @@ paths:
           description: OK
         '422':
           description: 'Missing or invalid rideId / window'
+  /ai/ml/park-profiles:
+    get:
+      tags:
+        - AI
+      summary: 'List ML park metadata profiles (ML_PROFILE_ENABLED)'
+      description: "Requires `ai.read`, `X-Park-Id`, and `ML_PROFILE_ENABLED=true`. Query validated (`parkListQuery`).\n"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '403':
+          description: Forbidden
+        '422':
+          description: 'Validation error'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+    post:
+      tags:
+        - AI
+      summary: 'Create ML park metadata profile'
+      description: 'Requires `ai.refresh`, `X-Park-Id`, and `ML_PROFILE_ENABLED=true`. Body per `parkProfileBody`.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '403':
+          description: Forbidden
+        '422':
+          description: 'Validation error'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+  '/ai/ml/park-profiles/{id}':
+    get:
+      tags:
+        - AI
+      summary: 'Get one ML park metadata profile'
+      description: 'Requires `ai.read`, `X-Park-Id`, and `ML_PROFILE_ENABLED=true`.'
+      parameters:
+        -
+          in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '404':
+          description: 'Not found'
+    put:
+      tags:
+        - AI
+      summary: 'Replace ML park metadata profile'
+      description: 'Requires `ai.refresh`, `X-Park-Id`, and `ML_PROFILE_ENABLED=true`. Body per `parkProfilePutMerged`.'
+      parameters:
+        -
+          in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '404':
+          description: 'Not found'
+        '422':
+          description: 'Validation error'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+    delete:
+      tags:
+        - AI
+      summary: 'Archive ML park metadata profile (soft delete)'
+      description: 'Requires `ai.refresh`, `X-Park-Id`, ML_PROFILE_ENABLED. Profile must have **`enabled=false`** first (`PROFILE_ENABLED` otherwise).'
+      parameters:
+        -
+          in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '404':
+          description: 'Not found'
+        '409':
+          description: Conflict
+  /ai/ml/ride-profiles:
+    get:
+      tags:
+        - AI
+      summary: 'List ML ride metadata profiles (ML_PROFILE_ENABLED)'
+      description: "Requires `ai.read`, `X-Park-Id`, and `ML_PROFILE_ENABLED=true`. Query validated (`rideListQuery`).\n"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '403':
+          description: Forbidden
+        '422':
+          description: 'Validation error'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+    post:
+      tags:
+        - AI
+      summary: 'Create ML ride metadata profile'
+      description: 'Requires `ai.refresh`, `X-Park-Id`, and `ML_PROFILE_ENABLED=true`. Body per `rideProfileBody`.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '403':
+          description: Forbidden
+        '422':
+          description: 'Validation error'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+  '/ai/ml/ride-profiles/{id}':
+    get:
+      tags:
+        - AI
+      summary: 'Get one ML ride metadata profile'
+      description: 'Requires `ai.read`, `X-Park-Id`, and `ML_PROFILE_ENABLED=true`.'
+      parameters:
+        -
+          in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '404':
+          description: 'Not found'
+        '422':
+          description: 'Validation error'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+    put:
+      tags:
+        - AI
+      summary: 'Replace ML ride metadata profile'
+      description: 'Requires `ai.refresh`, `X-Park-Id`, and `ML_PROFILE_ENABLED=true`. Body per `rideProfilePutMerged`.'
+      parameters:
+        -
+          in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '404':
+          description: 'Not found'
+        '422':
+          description: 'Validation error'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+    delete:
+      tags:
+        - AI
+      summary: 'Archive ML ride metadata profile (soft delete)'
+      description: 'Same governance as park profiles — **`enabled=false`** required before archive.'
+      parameters:
+        -
+          in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '404':
+          description: 'Not found'
+        '409':
+          description: Conflict
+  '/ai/ml/registry/entries/{id}':
+    delete:
+      tags:
+        - AI
+      summary: 'Archive or permanently delete ML model registry ridge row'
+      description: "Requires **`ai.refresh`**. Default: **soft-archive** — excludes row from ride **`findActiveModel`** resolution. Fails if **`MODEL_ACTIVE`** or **`MODEL_LAST_DEPLOYABLE_VERSION`**.\nWith **`permanent=true`**: hard-delete from DB (**archived rows only**); otherwise **`MODEL_NOT_ARCHIVED`**.\n"
+      parameters:
+        -
+          in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        -
+          in: query
+          name: permanent
+          required: false
+          description: 'If `true`, permanently remove the row (archived rows only).'
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: 'Not found'
+        '409':
+          description: 'Governance conflict'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
   /assets:
     get:
       tags:
@@ -7581,6 +9479,95 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EnvelopePlatformAssets'
+  /assets/zone-normalization/preview:
+    get:
+      tags:
+        - Platform
+      summary: 'Preview zone assignment normalization for restaurant/show assets'
+      description: 'Requires **`rides.read`**. Query requires `parkSlug`; optional `type` (`RESTAURANT` | `SHOW`, default `RESTAURANT`).'
+      parameters:
+        -
+          in: query
+          name: parkSlug
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 128
+        -
+          in: query
+          name: type
+          schema:
+            type: string
+            enum:
+              - RESTAURANT
+              - SHOW
+            default: RESTAURANT
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '422':
+          description: 'Validation error'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+  /assets/zone-normalization/apply:
+    post:
+      tags:
+        - Platform
+      summary: 'Apply zone normalization (optionally dry-run)'
+      description: 'Requires **`rides.update`**. Body includes `parkSlug`, optional `dryRun` (default true), optional `overrides` asset→zone slug map.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - parkSlug
+              properties:
+                parkSlug:
+                  type: string
+                  minLength: 1
+                  maxLength: 128
+                type:
+                  type: string
+                  enum:
+                    - RESTAURANT
+                    - SHOW
+                  default: RESTAURANT
+                dryRun:
+                  type: boolean
+                  default: true
+                overrides:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      assetId:
+                        type: string
+                        format: uuid
+                      zoneSlug:
+                        type: string
+                        nullable: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '422':
+          description: 'Validation error'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
   /assets/oee/reason-codes:
     get:
       tags:
@@ -7826,6 +9813,54 @@ paths:
           description: OK
         '404':
           $ref: '#/components/responses/NotFound'
+  '/assets/{assetId}/pdm-sparkplug-metric-series':
+    parameters:
+      -
+        in: path
+        name: assetId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      -
+        in: query
+        name: metricName
+        required: true
+        schema:
+          type: string
+      -
+        in: query
+        name: sparkplugDeviceId
+        required: true
+        schema:
+          type: string
+      -
+        in: query
+        name: points
+        required: false
+        schema:
+          type: integer
+          minimum: 12
+          maximum: 240
+      -
+        in: query
+        name: stepSeconds
+        required: false
+        schema:
+          type: integer
+          minimum: 30
+          maximum: 3600
+    get:
+      tags:
+        - Platform
+      summary: 'Time series for one Sparkplug metric on an asset (live buffer or deterministic demo)'
+      responses:
+        '200':
+          description: OK
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
   '/assets/{assetId}/pdm-evaluation-logs':
     parameters:
       -
@@ -7866,10 +9901,45 @@ paths:
     get:
       tags:
         - Platform
-      summary: 'Predictive-maintenance evaluation for asset (rule thresholds vs live signals)'
+      summary: 'Predictive-maintenance evaluation for asset (rule thresholds vs live signals). When **`PDM_INDUSTRIAL_PLATFORM_ENABLED`** is on, `data.evaluation.industrial` adds health score, trends, failure modes, recommendations, telemetry quality, Sparkplug context, and ML readiness metadata.'
       responses:
         '200':
           description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    additionalProperties: true
+                    properties:
+                      rules:
+                        type: array
+                        items:
+                          type: object
+                          additionalProperties: true
+                      evaluation:
+                        type: object
+                        additionalProperties: true
+                        properties:
+                          riskLevel:
+                            type: string
+                          recommendation:
+                            type: object
+                            additionalProperties: true
+                          signals:
+                            type: array
+                            items:
+                              type: object
+                              additionalProperties: true
+                          industrial:
+                            type: object
+                            additionalProperties: true
+                            nullable: true
+                            description: 'Industrial PdM platform envelope (feature-flagged)'
         '404':
           $ref: '#/components/responses/NotFound'
   '/assets/{assetId}/pdm-rules':
@@ -8339,6 +10409,31 @@ paths:
                 $ref: '#/components/schemas/EnvelopeParkDemandForecastList'
         '404':
           $ref: '#/components/responses/NotFound'
+  '/traffic-corridors/{corridorId}/snapshots/latest/debug':
+    parameters:
+      -
+        name: corridorId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - AttendanceRisk
+      summary: 'Latest traffic snapshot debug (includes sanitized provider raw JSON)'
+      security:
+        -
+          bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeTrafficSnapshotDebug'
+        '404':
+          $ref: '#/components/responses/NotFound'
   '/traffic-corridors/{corridorId}':
     parameters:
       -
@@ -8751,6 +10846,543 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EnvelopeGenericData'
+  /integration-flows/failures:
+    get:
+      tags:
+        - Integrations
+      summary: 'List failed integration flow runs (failure inbox)'
+      description: 'Returns failed runs with derived failed-step metadata and flow names. Supports filters and pagination. Requires **integrations.read** and `INTEGRATION_FLOW_ENGINE_ENABLED`.'
+      security:
+        -
+          bearerAuth: []
+      parameters:
+        -
+          name: flowId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        -
+          name: retryStatus
+          in: query
+          schema:
+            type: string
+            enum:
+              - not_applicable
+              - pending_retry
+              - retry_succeeded
+              - retry_failed
+              - retry_exhausted
+        -
+          name: nodeType
+          in: query
+          schema:
+            type: string
+        -
+          name: acknowledged
+          in: query
+          schema:
+            type: string
+            enum:
+              - yes
+              - no
+              - all
+        -
+          name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        -
+          name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        -
+          name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+        -
+          name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeIntegrationFlowFailureInboxPage'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  '/integration-flows/runs/{runId}':
+    get:
+      tags:
+        - Integrations
+      summary: 'Get integration flow run (with steps and timeline)'
+      description: 'Returns a persisted run including `steps` and a derived `timeline` from step rows. Requires `INTEGRATION_FLOW_ENGINE_ENABLED` and **integrations.read**. When the flag is off, responds **404**.'
+      security:
+        -
+          bearerAuth: []
+      parameters:
+        -
+          name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeIntegrationFlowRun'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          $ref: '#/components/responses/NotFound'
+  '/integration-flows/runs/{runId}/acknowledge':
+    post:
+      tags:
+        - Integrations
+      summary: 'Acknowledge a failed integration flow run'
+      description: 'Records acknowledgement metadata without changing run status, retry fields, or step rows. Requires **integrations.manage**.'
+      security:
+        -
+          bearerAuth: []
+      parameters:
+        -
+          name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IntegrationFlowAcknowledgeRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeIntegrationFlowFailureInboxItem'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  '/integration-flows/runs/{runId}/retry':
+    post:
+      tags:
+        - Integrations
+      summary: 'Manually retry a failed integration flow run'
+      description: 'Creates a new run linked to the failed run when the flow is enabled and retry is configured. Requires **integrations.manage**. Does not mutate original step rows.'
+      security:
+        -
+          bearerAuth: []
+      parameters:
+        -
+          name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeIntegrationFlowRunResult'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /integration-flows:
+    get:
+      tags:
+        - Integrations
+      summary: 'List integration flow definitions'
+      description: 'Requires **integrations.read**. Flag-gated: **404** when disabled.'
+      security:
+        -
+          bearerAuth: []
+      parameters:
+        -
+          name: parkId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        -
+          name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+        -
+          name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeIntegrationFlowDefinitionList'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags:
+        - Integrations
+      summary: 'Create integration flow definition'
+      description: 'Validates `flowJson` graph. Requires **integrations.manage**.'
+      security:
+        -
+          bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IntegrationFlowCreateRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeIntegrationFlowDefinition'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /integration-flows/templates:
+    get:
+      tags:
+        - Integrations
+      summary: 'List predefined integration flow templates'
+      description: 'Requires **integrations.read**. Flag-gated: **404** when disabled.'
+      security:
+        -
+          bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeIntegrationFlowTemplateList'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /integration-flows/from-template:
+    post:
+      tags:
+        - Integrations
+      summary: 'Create integration flow from a predefined template'
+      description: 'Merges whitelisted `configOverrides`, validates `flowJson`, then creates a definition. Requires **integrations.manage**.'
+      security:
+        -
+          bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IntegrationFlowFromTemplateRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeIntegrationFlowDefinition'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  '/integration-flows/{id}':
+    get:
+      tags:
+        - Integrations
+      summary: 'Get integration flow definition'
+      security:
+        -
+          bearerAuth: []
+      parameters:
+        -
+          $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeIntegrationFlowDefinition'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags:
+        - Integrations
+      summary: 'Update integration flow definition'
+      security:
+        -
+          bearerAuth: []
+      parameters:
+        -
+          $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              properties:
+                parkId:
+                  type: string
+                  format: uuid
+                  nullable: true
+                name:
+                  type: string
+                description:
+                  type: string
+                  nullable: true
+                enabled:
+                  type: boolean
+                triggerType:
+                  type: string
+                flowJson:
+                  $ref: '#/components/schemas/IntegrationFlowJson'
+                scheduleEnabled:
+                  type: boolean
+                scheduleIntervalSeconds:
+                  type: integer
+                  nullable: true
+                  enum:
+                    - 60
+                    - 300
+                    - 900
+                    - 1800
+                    - 3600
+                retryEnabled:
+                  type: boolean
+                maxRetryAttempts:
+                  type: integer
+                  enum:
+                    - 0
+                    - 1
+                    - 2
+                    - 3
+                retryDelaySeconds:
+                  type: integer
+                  nullable: true
+                  enum:
+                    - 60
+                    - 300
+                    - 900
+                retryOnNodeTypes:
+                  type: array
+                  nullable: true
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeIntegrationFlowDefinition'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    delete:
+      tags:
+        - Integrations
+      summary: 'Delete integration flow definition (historical runs retained; `flowId` nulled)'
+      security:
+        -
+          bearerAuth: []
+      parameters:
+        -
+          $ref: '#/components/parameters/IdPath'
+      responses:
+        '204':
+          description: 'No content'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  '/integration-flows/{id}/schedule/recalculate':
+    post:
+      tags:
+        - Integrations
+      summary: 'Recalculate next scheduled run from now'
+      description: 'Sets `nextScheduledRunAt` to now + interval. Requires an enabled flow with `scheduleEnabled` and a valid `scheduleIntervalSeconds`. Requires **integrations.manage**. Flag-gated **404** when the engine is disabled.'
+      security:
+        -
+          bearerAuth: []
+      parameters:
+        -
+          $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeIntegrationFlowDefinition'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  '/integration-flows/{id}/validate':
+    post:
+      tags:
+        - Integrations
+      summary: 'Validate stored flow graph'
+      security:
+        -
+          bearerAuth: []
+      parameters:
+        -
+          $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeIntegrationFlowValidationResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  '/integration-flows/{id}/run':
+    post:
+      tags:
+        - Integrations
+      summary: 'Run integration flow (manual execution)'
+      security:
+        -
+          bearerAuth: []
+      parameters:
+        -
+          $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IntegrationFlowRunRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeIntegrationFlowRunResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  '/integration-flows/{id}/runs':
+    get:
+      tags:
+        - Integrations
+      summary: 'List runs for a flow'
+      security:
+        -
+          bearerAuth: []
+      parameters:
+        -
+          $ref: '#/components/parameters/IdPath'
+        -
+          name: limit
+          in: query
+          schema:
+            type: integer
+        -
+          name: offset
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeIntegrationFlowRunList'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /integration-nodes:
+    get:
+      tags:
+        - Integrations
+      summary: 'List registered integration flow nodes'
+      security:
+        -
+          bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeIntegrationNodeRegistryList'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /integration/logs:
     get:
       tags:
@@ -8774,6 +11406,150 @@ paths:
       responses:
         '200':
           description: OK
+  /integrations/traffic-providers:
+    get:
+      tags:
+        - Integrations
+      summary: 'List traffic provider configurations (masked secrets only)'
+      description: 'Returns persisted traffic routing providers (e.g. TomTom). API keys are never returned — only `maskedApiKey` suffix hints.'
+      security:
+        -
+          bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeTrafficProviderConfigList'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+  /integrations/traffic-providers/traffic_tomtom:
+    put:
+      tags:
+        - Integrations
+      summary: 'Create or update TomTom traffic provider configuration'
+      description: 'Encrypts and stores the API key server-side. Omit `apiKey` to keep the existing secret. Requires **integrations.manage**.'
+      security:
+        -
+          bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PutTomTomTrafficProviderBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeTrafficProviderConfig'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /integrations/traffic-providers/traffic_tomtom/test:
+    post:
+      tags:
+        - Integrations
+      summary: 'Test TomTom routing connectivity (server-side)'
+      description: 'Calls TomTom using stored credentials and default or supplied coordinates. Requires **integrations.manage**.'
+      security:
+        -
+          bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TestTomTomTrafficProviderBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeTomTomTrafficTestResult'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '503':
+          description: 'TomTom API key missing while integration is enabled'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+  /integrations/traffic-providers/tomtom:
+    put:
+      tags:
+        - Integrations
+      summary: '[Deprecated] Same as PUT /integrations/traffic-providers/traffic_tomtom'
+      description: 'Legacy URL alias for TomTom configuration. Prefer **traffic_tomtom** (adapter key).'
+      security:
+        -
+          bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PutTomTomTrafficProviderBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeTrafficProviderConfig'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /integrations/traffic-providers/tomtom/test:
+    post:
+      tags:
+        - Integrations
+      summary: '[Deprecated] Same as POST /integrations/traffic-providers/traffic_tomtom/test'
+      description: 'Legacy URL alias. Prefer **traffic_tomtom/test**.'
+      security:
+        -
+          bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TestTomTomTrafficProviderBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeTomTomTrafficTestResult'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '503':
+          description: 'TomTom API key missing while integration is enabled'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
   /integrations/logs:
     get:
       tags:
@@ -9907,6 +12683,116 @@ paths:
                 $ref: '#/components/schemas/EnvelopeAdapterUninstall'
         '404':
           $ref: '#/components/responses/NotFound'
+  /master-data/signal-catalog:
+    get:
+      tags:
+        - Admin
+      summary: 'List signal catalog rows (registry admin)'
+      description: 'Requires **`integrations.read`** or **`rides.read`**.'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+    post:
+      tags:
+        - Admin
+      summary: 'Create signal catalog row'
+      description: 'Requires **`integrations.manage`** or **`rides.update`**. Body validated (`postSignalCatalogBody`).'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '422':
+          description: 'Validation error'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+  '/master-data/signal-catalog/{catalogId}':
+    patch:
+      tags:
+        - Admin
+      summary: 'Patch signal catalog row'
+      description: 'Requires **`integrations.manage`** or **`rides.update`**. Body validated (`patchSignalCatalogBody`).'
+      parameters:
+        -
+          in: path
+          name: catalogId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '422':
+          description: 'Validation error'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+    delete:
+      tags:
+        - Admin
+      summary: 'Delete signal catalog row'
+      description: 'Requires **`integrations.manage`** or **`rides.update`**.'
+      parameters:
+        -
+          in: path
+          name: catalogId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: 'Not found'
   '/master-data/rides/{id}/signal-capabilities':
     get:
       tags:
@@ -11748,6 +14634,37 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EnvelopePlatformParks'
+  '/parks/{parkId}/zones':
+    get:
+      tags:
+        - Platform
+      summary: 'List zone assets scoped to a park (platform hierarchy)'
+      description: 'Requires **`rides.read`**. Path `parkId` is the platform park UUID (`park_assets`/canonical parks).'
+      parameters:
+        -
+          in: path
+          name: parkId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '422':
+          description: 'Validation error'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
   '/parks/{parkSlug}/geo/pressure/live':
     parameters:
       -
@@ -12047,6 +14964,42 @@ paths:
       tags:
         - Platform
       summary: 'Park operational view (calendar, scheduled opening hours, latest feature snapshot)'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    additionalProperties: true
+        '404':
+          $ref: '#/components/responses/NotFound'
+  '/parks/{parkId}/pdm-operations-overview':
+    parameters:
+      -
+        in: path
+        name: parkId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      -
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 80
+    get:
+      tags:
+        - Platform
+      summary: 'Park Predictive Maintenance operations overview (enabled rules; requires PDM_INDUSTRIAL_PLATFORM_ENABLED)'
       responses:
         '200':
           description: OK
@@ -13196,6 +16149,65 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EnvelopeMaintenanceTemplates'
+  /traffic/snapshots/poll:
+    post:
+      tags:
+        - TrafficSnapshots
+      summary: 'Poll TomTom for all enabled traffic corridors (optional park filter)'
+      description: "Triggers a TomTom Routing \"Calculate Route\" call per enabled corridor that has complete origin/destination coordinates. Persists normalized snapshots (`source=tomtom` vendor tag). Requires TomTom to be **enabled** with a stored API key under the **traffic_tomtom** adapter (Devices & Services) or **Integration settings → Traffic providers** (not via `.env` credentials).\n"
+      security:
+        -
+          bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrafficSnapshotPollBody'
+      responses:
+        '200':
+          description: 'OK (per-corridor errors are returned inside `data.results`)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeTrafficSnapshotPollResult'
+        '403':
+          description: 'TomTom disabled or missing API key in integration settings'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '503':
+          description: 'TomTom API key missing / not decryptable while integration is enabled'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+  /traffic/snapshots/latest:
+    get:
+      tags:
+        - TrafficSnapshots
+      summary: 'Latest traffic snapshot per corridor for a park (normalized envelope)'
+      security:
+        -
+          bearerAuth: []
+      parameters:
+        -
+          name: parkId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeTrafficSnapshotLatestList'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /uns-registry/mirror/summary:
     get:
       tags:
@@ -13666,6 +16678,56 @@ paths:
           description: 'Event not found'
         '422':
           description: 'Not an adapter-sourced event'
+  '/uns/parks/{parkId}/sparkplug-topic-preview':
+    get:
+      tags:
+        - UNS
+      summary: 'Preview canonical Sparkplug topic for a park asset'
+      description: "Requires **`iotOt.settings.read`** or **`rides.read`**. Provide **`assetId`** or **`assetSlug`** (one required);\noptional **`messageType`** (`DDATA`, `DBIRTH`, `DDEATH`, `NBIRTH`, `NDEATH`).\n"
+      parameters:
+        -
+          in: path
+          name: parkId
+          required: true
+          schema:
+            type: string
+        -
+          in: query
+          name: assetId
+          schema:
+            type: string
+            format: uuid
+        -
+          in: query
+          name: assetSlug
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 240
+        -
+          in: query
+          name: messageType
+          schema:
+            type: string
+            enum:
+              - DDATA
+              - DBIRTH
+              - DDEATH
+              - NBIRTH
+              - NDEATH
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeGenericData'
+        '422':
+          description: 'Validation error'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
   '/uns/parks/{parkId}/tree':
     get:
       tags:
@@ -14243,6 +17305,210 @@ paths:
       responses:
         '201':
           description: Created
+  /widget-runtime/widgets:
+    get:
+      tags:
+        - 'Widget Runtime'
+      summary: 'List enabled widget types'
+      description: 'Governed widget registry. Requires **integrations.read** and `WIDGET_RUNTIME_ENABLED`.'
+      security:
+        -
+          bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeDashboardWidgetRegistryList'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /widget-runtime/data-sources:
+    get:
+      tags:
+        - 'Widget Runtime'
+      summary: 'List enabled data sources'
+      description: 'Governed data source registry (internal_api only). Requires **integrations.read** and `WIDGET_RUNTIME_ENABLED`.'
+      security:
+        -
+          bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeDashboardDataSourceRegistryList'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /widget-runtime/instances:
+    get:
+      tags:
+        - 'Widget Runtime'
+      summary: 'List widget instances'
+      security:
+        -
+          bearerAuth: []
+      parameters:
+        -
+          name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+        -
+          name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeDashboardWidgetInstanceList'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags:
+        - 'Widget Runtime'
+      summary: 'Create widget instance'
+      security:
+        -
+          bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DashboardWidgetInstanceCreate'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeDashboardWidgetInstance'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: 'Validation error'
+  '/widget-runtime/instances/{id}':
+    get:
+      tags:
+        - 'Widget Runtime'
+      summary: 'Get widget instance'
+      security:
+        -
+          bearerAuth: []
+      parameters:
+        -
+          $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeDashboardWidgetInstance'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags:
+        - 'Widget Runtime'
+      summary: 'Update widget instance'
+      security:
+        -
+          bearerAuth: []
+      parameters:
+        -
+          $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DashboardWidgetInstancePatch'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeDashboardWidgetInstance'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: 'Validation error'
+    delete:
+      tags:
+        - 'Widget Runtime'
+      summary: 'Delete widget instance'
+      security:
+        -
+          bearerAuth: []
+      parameters:
+        -
+          $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+        '404':
+          $ref: '#/components/responses/NotFound'
+  '/widget-runtime/instances/{id}/data':
+    get:
+      tags:
+        - 'Widget Runtime'
+      summary: 'Resolve widget instance data'
+      description: 'Fetches governed data for the instance data source (reuses integration flow services).'
+      security:
+        -
+          bearerAuth: []
+      parameters:
+        -
+          $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeWidgetInstanceData'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          description: 'Integration Flow Engine off'
+  '/widget-runtime/instances/{id}/validate':
+    post:
+      tags:
+        - 'Widget Runtime'
+      summary: 'Validate widget instance'
+      security:
+        -
+          bearerAuth: []
+      parameters:
+        -
+          $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeWidgetInstanceValidation'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /zones:
     get:
       tags:

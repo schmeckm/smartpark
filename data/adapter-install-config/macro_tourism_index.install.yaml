@@ -2,13 +2,22 @@
 schemaVersion: 1
 adapterKey: macro_tourism_index
 installedAt: '2026-05-08T15:47:02.566Z'
-updatedAt: '2026-05-13T19:29:49.405Z'
-configJson: {}
+updatedAt: '2026-05-15T08:39:52.253Z'
+configJson:
+  jsonPath: data.index
+  maxIndex: 1
+  minIndex: 0
+  parkSlug: europapark
+  timezone: Europe/Berlin
+  apiMethod: GET
+  defaultIndex: 0.5
 contextJson:
   parkSlug: europapark
+  sparkplugGroupId: europa_park
+  sparkplugEdgeNode: macro_tourism_gateway
 outputProfiles:
   - UNS_JSON
   - CANONICAL_HISTORIAN
-emitEnabled: false
+emitEnabled: true
 ingestCanonicalEnabled: false
-scheduleCron: null
+scheduleCron: '*/5 * * * *'

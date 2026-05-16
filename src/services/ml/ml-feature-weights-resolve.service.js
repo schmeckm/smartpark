@@ -6,6 +6,7 @@
  */
 
 const env = require('../../config/env');
+const { Op } = require('sequelize');
 const { MlParkProfile, MlRideProfile } = require('../../models');
 const { logger } = require('../../utils/logger');
 const { normalizeFeatureWeights, mergeParkAndRideWeights } = require('./ml-feature-weight.util');
@@ -22,11 +23,11 @@ async function loadResolvedWeightsForTrace(parkId, rideId) {
   if (!pid || !rid) return null;
   try {
     const parkRow = await MlParkProfile.findOne({
-      where: { parkId: pid, enabled: true },
+      where: { parkId: pid, enabled: true, archivedAt: { [Op.is]: null } },
       order: [['updatedAt', 'DESC']],
     });
     const rideRow = await MlRideProfile.findOne({
-      where: { parkId: pid, rideId: rid, enabled: true },
+      where: { parkId: pid, rideId: rid, enabled: true, archivedAt: { [Op.is]: null } },
       order: [['updatedAt', 'DESC']],
     });
     const parkPlain = parkRow ? parkRow.get({ plain: true }) : null;

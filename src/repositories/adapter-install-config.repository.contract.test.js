@@ -95,6 +95,29 @@ test('install-config: every YAML file in data/adapter-install-config/ loads, dec
   );
 });
 
+test('install-config: delete writes removed marker; saveFull clears it (temp dir)', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'adapter-install-config-removed-'))
+  const prevEnv = process.env.ADAPTER_INSTALL_CONFIG_DIR
+  process.env.ADAPTER_INSTALL_CONFIG_DIR = tmp
+  try {
+    const repo = new AdapterInstallConfigRepository()
+    repo.saveFull('themeparks_wiki', defaultInstallDocument('themeparks_wiki'))
+    assert.equal(repo.isMarkedRemoved('themeparks_wiki'), false)
+    repo.delete('themeparks_wiki')
+    assert.equal(fs.existsSync(repo.filePath('themeparks_wiki')), false)
+    assert.equal(repo.isMarkedRemoved('themeparks_wiki'), true)
+    repo.saveFull('themeparks_wiki', defaultInstallDocument('themeparks_wiki'))
+    assert.equal(repo.isMarkedRemoved('themeparks_wiki'), false)
+  } finally {
+    if (prevEnv === undefined) {
+      delete process.env.ADAPTER_INSTALL_CONFIG_DIR
+    } else {
+      process.env.ADAPTER_INSTALL_CONFIG_DIR = prevEnv
+    }
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
+});
+
 test('install-config: roundtrip saveFull -> load returns the same document (under a temp ADAPTER_INSTALL_CONFIG_DIR)', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'adapter-install-config-roundtrip-'));
   const prevEnv = process.env.ADAPTER_INSTALL_CONFIG_DIR;

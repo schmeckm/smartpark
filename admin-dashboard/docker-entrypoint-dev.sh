@@ -26,6 +26,22 @@ elif [ ! -f node_modules/echarts/package.json ]; then
   need_ci=1
 elif [ ! -f node_modules/lucide-vue-next/package.json ]; then
   need_ci=1
+elif [ ! -f node_modules/@vue-flow/core/package.json ]; then
+  # Visual Integration Flow Studio (Vue Flow) — stale named volume after adding this dep.
+  need_ci=1
+elif [ ! -f node_modules/@vue-flow/minimap/package.json ]; then
+  need_ci=1
+elif [ ! -f node_modules/@vue-flow/background/package.json ]; then
+  need_ci=1
+elif [ ! -f node_modules/@vue-flow/controls/package.json ]; then
+  need_ci=1
+elif [ ! -f node_modules/@vue-flow/minimap/dist/style.css ]; then
+  # main.ts imports minimap CSS — partial/stale volume can have package.json without dist/
+  need_ci=1
+elif [ ! -f node_modules/@vue-flow/controls/dist/style.css ]; then
+  need_ci=1
+elif [ ! -f node_modules/@vue-flow/core/dist/style.css ]; then
+  need_ci=1
 elif [ ! -f node_modules/leaflet.heat/package.json ] || [ ! -f node_modules/leaflet.heat/dist/leaflet-heat.js ]; then
   need_ci=1
 fi

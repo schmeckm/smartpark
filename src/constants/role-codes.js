@@ -30,6 +30,26 @@ function roleCodesFromLegacyEnum(legacyRole) {
   return code ? [code] : [ROLE_CODES.VIEWER];
 }
 
+/** Maps canonical `role_code` → legacy `users.role` enum for Sequelize writes. */
+const ROLE_CODE_TO_LEGACY_ENUM = Object.freeze({
+  SYSTEM_ADMIN: 'ADMIN',
+  ADMIN: 'ADMIN',
+  OPERATIONS_MANAGER: 'OPERATIONS_MANAGER',
+  PARK_MANAGER: 'SECURITY_MANAGER',
+  SECURITY_MANAGER: 'SECURITY_MANAGER',
+  ANALYST: 'OPERATOR',
+  OPERATOR: 'OPERATOR',
+  VIEWER: 'VIEWER',
+  HR_MANAGER: 'OPERATIONS_MANAGER',
+});
+
+function legacyEnumFromRoleCode(roleCode) {
+  const c = roleCode != null ? String(roleCode).trim() : '';
+  return ROLE_CODE_TO_LEGACY_ENUM[c] || 'VIEWER';
+}
+
+const ASSIGNABLE_ROLE_CODES = Object.freeze(manifest.roles.filter((code) => code !== 'ADMIN'));
+
 /**
  * @param {import('sequelize').Model} user — User instance with optional `userRoles` association
  * @returns {string[]}
@@ -50,6 +70,9 @@ function resolveUserRoleCodes(user) {
 module.exports = {
   ROLE_CODES,
   LEGACY_USER_ROLE_TO_CODE,
+  ROLE_CODE_TO_LEGACY_ENUM,
+  ASSIGNABLE_ROLE_CODES,
   roleCodesFromLegacyEnum,
+  legacyEnumFromRoleCode,
   resolveUserRoleCodes,
 };

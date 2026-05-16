@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "label": "Park default — theme park mechanical rides",
+  "weights": {
+    "criticalViolation": 22,
+    "warnViolation": 11,
+    "noData": 7,
+    "simulatedTelemetryPenalty": 4,
+    "staleTelemetryPenaltyPerMinute": 0.12,
+    "staleThresholdMinutes": 25,
+    "decliningTrendPenalty": 7,
+    "unstableTrendPenalty": 9,
+    "spikeFrequencyPenalty": 5,
+    "rpmInstabilityPenalty": 6,
+    "vibrationSeverityMultiplier": 1.35,
+    "temperatureSeverityMultiplier": 1.2
+  },
+  "healthStateBands": {
+    "criticalMax": 40,
+    "warningMax": 65,
+    "watchMax": 85
+  }
+}

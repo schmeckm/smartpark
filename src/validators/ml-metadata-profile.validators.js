@@ -12,12 +12,14 @@ const enabledQuery = Joi.alternatives().try(
 const parkListQuery = Joi.object({
   profileName: Joi.string().max(255),
   enabled: enabledQuery,
+  includeArchived: Joi.alternatives().try(Joi.boolean(), Joi.string().valid('true', 'false')).optional(),
 });
 
 const rideListQuery = Joi.object({
   profileName: Joi.string().max(255),
   rideId: Joi.string().uuid(),
   enabled: enabledQuery,
+  includeArchived: Joi.alternatives().try(Joi.boolean(), Joi.string().valid('true', 'false')).optional(),
 });
 
 const parkIdParams = Joi.object({

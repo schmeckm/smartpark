@@ -37,6 +37,7 @@ const {
   pdmRuleCreateBody,
   pdmRulePatchBody,
   pdmEvaluationLogsQuery,
+  pdmSparkplugSeriesQuery,
   shiftHandoverListQuery,
   shiftHandoverCreateBody,
   shiftHandoverAcknowledgeBody,
@@ -51,6 +52,7 @@ const {
   geoFlowEventsBatchBody,
   zoneNormalizationPreviewQuery,
   zoneNormalizationApplyBody,
+  pdmOperationsOverviewQuery,
 } = require('./platform.validators');
 
 const platformParksRouter = Router();
@@ -112,6 +114,13 @@ platformParksRouter.get(
   parksCtrl.getOperationalContext
 );
 platformParksRouter.get(
+  '/:parkId/pdm-operations-overview',
+  requirePermission('rides', 'read'),
+  validate(parkIdParam, 'params'),
+  validate(pdmOperationsOverviewQuery, 'query'),
+  parksCtrl.getPdmOperationsOverview
+);
+platformParksRouter.get(
   '/:parkId/zones',
   requirePermission('rides', 'read'),
   validate(parkIdParam, 'params'),
@@ -170,40 +179,6 @@ platformParksRouter.get(
   requirePermission('rides', 'read'),
   validate(handoverEntryParams, 'params'),
   shiftHandoverCtrl.downloadPdf
-);
-
-platformParksRouter.get(
-  '/:parkId/traffic-corridors',
-  requirePermission('rides', 'read'),
-  validate(parkIdParam, 'params'),
-  trafficAttendanceCtrl.listTrafficCorridors
-);
-platformParksRouter.post(
-  '/:parkId/traffic-corridors',
-  requirePermission('rides', 'update'),
-  validate(parkIdParam, 'params'),
-  validate(trafficCorridorCreateBody),
-  trafficAttendanceCtrl.createTrafficCorridor
-);
-platformParksRouter.post(
-  '/:parkId/attendance-risk-forecast/run',
-  requirePermission('rides', 'update'),
-  validate(parkIdParam, 'params'),
-  validate(attendanceRiskForecastRunBody),
-  trafficAttendanceCtrl.runAttendanceRiskForecast
-);
-platformParksRouter.get(
-  '/:parkId/attendance-risk-forecast/latest',
-  requirePermission('rides', 'read'),
-  validate(parkIdParam, 'params'),
-  trafficAttendanceCtrl.getLatestAttendanceRiskForecast
-);
-platformParksRouter.get(
-  '/:parkId/attendance-risk-forecast/history',
-  requirePermission('rides', 'read'),
-  validate(parkIdParam, 'params'),
-  validate(forecastHistoryQuery, 'query'),
-  trafficAttendanceCtrl.getAttendanceRiskForecastHistory
 );
 
 platformParksRouter.get(
@@ -321,6 +296,13 @@ platformAssetsRouter.get(
   requirePermission('rides', 'read'),
   validate(assetIdParam, 'params'),
   assetPdmCtrl.getPdmSparkplugMetrics
+);
+platformAssetsRouter.get(
+  '/:assetId/pdm-sparkplug-metric-series',
+  requirePermission('rides', 'read'),
+  validate(assetIdParam, 'params'),
+  validate(pdmSparkplugSeriesQuery, 'query'),
+  assetPdmCtrl.getPdmSparkplugMetricSeries
 );
 platformAssetsRouter.get(
   '/:assetId/predictive-maintenance',

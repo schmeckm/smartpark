@@ -1324,7 +1324,7 @@ async function loadDetailSeries() {
 }
 
 watch(
-  () => parkCtx.activeParkId,
+  () => [parkCtx.activeParkId, parkCtx.activePark?.externalEntityId ?? null] as const,
   () => {
     void loadGrid()
   },

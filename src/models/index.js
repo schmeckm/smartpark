@@ -73,6 +73,17 @@ const { defineAgentAction } = require('./agent-action.model');
 const { defineTrafficCorridor } = require('./traffic-corridor.model');
 const { defineTrafficCorridorSnapshot5m } = require('./traffic-corridor-snapshot-5m.model');
 const { defineParkDemandForecast5m } = require('./park-demand-forecast-5m.model');
+const { defineTrafficProviderConfig } = require('./traffic-provider-config.model');
+const { defineIntegrationFlowDefinition, IntegrationFlowDefinition } = require('./integration-flow-definition.model');
+const { defineIntegrationFlowRun, IntegrationFlowRun } = require('./integration-flow-run.model');
+const { defineIntegrationFlowRunStep, IntegrationFlowRunStep } = require('./integration-flow-run-step.model');
+const { defineIntegrationNodeRegistry, IntegrationNodeRegistry } = require('./integration-node-registry.model');
+const { defineDashboardWidgetRegistry, DashboardWidgetRegistry } = require('./dashboard-widget-registry.model');
+const {
+  defineDashboardDataSourceRegistry,
+  DashboardDataSourceRegistry,
+} = require('./dashboard-data-source-registry.model');
+const { defineDashboardWidgetInstance, DashboardWidgetInstance } = require('./dashboard-widget-instance.model');
 
 const Zone = defineZone(sequelize);
 const Ride = defineRide(sequelize);
@@ -152,6 +163,7 @@ const MlParkProfile = defineMlParkProfile(sequelize);
 const MlRideProfile = defineMlRideProfile(sequelize);
 const TrafficCorridor = defineTrafficCorridor(sequelize);
 const TrafficCorridorSnapshot5m = defineTrafficCorridorSnapshot5m(sequelize);
+const TrafficProviderConfig = defineTrafficProviderConfig(sequelize);
 const ParkDemandForecast5m = defineParkDemandForecast5m(sequelize);
 const RegistryPublishEvent = defineRegistryPublishEvent(sequelize);
 const RegistrySignalDeprecation = defineRegistrySignalDeprecation(sequelize);
@@ -182,6 +194,14 @@ defineParkAssetPdmEvaluationLog(sequelize);
 const AgentRun = defineAgentRun(sequelize);
 const AgentStep = defineAgentStep(sequelize);
 const AgentAction = defineAgentAction(sequelize);
+
+defineIntegrationFlowDefinition(sequelize);
+defineIntegrationFlowRun(sequelize);
+defineIntegrationFlowRunStep(sequelize);
+defineIntegrationNodeRegistry(sequelize);
+defineDashboardWidgetRegistry(sequelize);
+defineDashboardDataSourceRegistry(sequelize);
+defineDashboardWidgetInstance(sequelize);
 
 const {
   UnsRegistryEntity,
@@ -313,6 +333,13 @@ Incident.belongsTo(User, { foreignKey: 'createdByUserId', as: 'creator' });
 Park.hasMany(AgentRun, { foreignKey: 'parkId', as: 'agentRuns' });
 AgentRun.belongsTo(Park, { foreignKey: 'parkId', as: 'park' });
 User.hasMany(AgentRun, { foreignKey: 'createdByUserId', as: 'agentRunsCreated' });
+
+Park.hasMany(IntegrationFlowDefinition, { foreignKey: 'parkId', as: 'integrationFlowDefinitions' });
+IntegrationFlowDefinition.belongsTo(Park, { foreignKey: 'parkId', as: 'park' });
+IntegrationFlowDefinition.hasMany(IntegrationFlowRun, { foreignKey: 'flowId', as: 'runs' });
+IntegrationFlowRun.belongsTo(IntegrationFlowDefinition, { foreignKey: 'flowId', as: 'flow' });
+IntegrationFlowRun.hasMany(IntegrationFlowRunStep, { foreignKey: 'runId', as: 'steps' });
+IntegrationFlowRunStep.belongsTo(IntegrationFlowRun, { foreignKey: 'runId', as: 'run' });
 AgentRun.belongsTo(User, { foreignKey: 'createdByUserId', as: 'createdByUser' });
 
 AgentRun.hasMany(AgentStep, { foreignKey: 'runId', as: 'steps' });
@@ -462,6 +489,7 @@ module.exports = {
   MlRideProfile,
   TrafficCorridor,
   TrafficCorridorSnapshot5m,
+  TrafficProviderConfig,
   ParkDemandForecast5m,
   RegistryPublishEvent,
   RegistrySignalDeprecation,
@@ -483,4 +511,11 @@ module.exports = {
   AgentRun,
   AgentStep,
   AgentAction,
+  IntegrationFlowDefinition,
+  IntegrationFlowRun,
+  IntegrationFlowRunStep,
+  IntegrationNodeRegistry,
+  DashboardWidgetRegistry,
+  DashboardDataSourceRegistry,
+  DashboardWidgetInstance,
 };

@@ -26,6 +26,8 @@ class TrafficSignalAdapter {
       currentTravelTimeMin: Number(currentTravelTimeMin),
       baselineTravelTimeMin: baseline,
       direction,
+      weight: Number(corridor.weight) || 1,
+      incidentCount: 0,
     });
     const snapshotTs = snapshotTsOpt ? new Date(snapshotTsOpt) : new Date();
     const row = await this.TrafficCorridorSnapshot5m.create({

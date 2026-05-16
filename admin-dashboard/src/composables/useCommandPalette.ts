@@ -2,6 +2,7 @@ import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
+import { useInstalledAdaptersStore } from '@/stores/installedAdapters'
 import { getRides } from '@/api/client'
 import type { Ride } from '@/types/api'
 
@@ -13,6 +14,8 @@ export type PalettePage = {
   titleKey: string
   to: { name: string; params?: Record<string, string>; query?: Record<string, string> }
   canAccess: (auth: { hasPermission: (resource: string, action: string) => boolean }) => boolean
+  /** When set, the row is hidden unless the adapter is installed (see `useInstalledAdaptersStore`). */
+  requiresInstalledAdapter?: string
 }
 
 /** Curated high-value destinations — filtered live by RBAC. */
@@ -46,6 +49,7 @@ export const PALETTE_PAGES: PalettePage[] = [
     titleKey: 'menu.predictiveMaintenance',
     to: { name: 'predictive-maintenance' },
     canAccess: (a) => a.hasPermission('rides', 'read'),
+    requiresInstalledAdapter: 'predictive_maintenance',
   },
   {
     id: 'sqdc',
@@ -105,6 +109,18 @@ export const PALETTE_PAGES: PalettePage[] = [
     canAccess: (a) => a.hasPermission('integrations', 'read'),
   },
   {
+    id: 'integration-flow-studio',
+    titleKey: 'menu.integrationFlowStudio',
+    to: { name: 'integration-flow-studio' },
+    canAccess: (a) => a.hasPermission('integrations', 'read'),
+  },
+  {
+    id: 'widget-runtime-studio',
+    titleKey: 'menu.widgetRuntimeStudio',
+    to: { name: 'widget-runtime-studio' },
+    canAccess: (a) => a.hasPermission('integrations', 'read'),
+  },
+  {
     id: 'devices-services',
     titleKey: 'menu.devicesServices',
     to: { name: 'devices-services' },
@@ -121,6 +137,7 @@ export const PALETTE_PAGES: PalettePage[] = [
 export function useCommandPalette() {
   const router = useRouter()
   const auth = useAuthStore()
+  const installedAdapters = useInstalledAdaptersStore()
   const { t } = useI18n()
 
   const query = ref('')
@@ -140,7 +157,14 @@ export function useCommandPalette() {
     }
   })
 
-  const accessiblePages = computed(() => PALETTE_PAGES.filter((p) => p.canAccess(auth)))
+  const accessiblePages = computed(() =>
+    PALETTE_PAGES.filter((p) => {
+      if (!p.canAccess(auth)) return false
+      const gate = p.requiresInstalledAdapter?.trim()
+      if (gate && !installedAdapters.isInstalled(gate)) return false
+      return true
+    }),
+  )
 
   const qNorm = computed(() => query.value.trim().toLowerCase())
 

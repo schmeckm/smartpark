@@ -242,10 +242,12 @@ class AdapterOperationsService {
       const successRate = runCount24h ? Math.round((runsOk / runCount24h) * 1000) / 10 : null;
 
       const nextRun = active && cron ? computeNextCronIso(cron) : null;
-      const provider =
+      let provider =
         (install.contextJson && typeof install.contextJson === 'object' && install.contextJson.provider) ||
         plain.adapterType ||
         null;
+      /** Grid “Provider” — avoid TRAFFIC-only label for the TomTom traffic package (operators look for “tomtom”). */
+      if (key === 'traffic_tomtom') provider = 'tomtom';
 
       adapters.push({
         adapterKey: key,

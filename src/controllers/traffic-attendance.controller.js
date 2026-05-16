@@ -11,6 +11,22 @@ const corridorService = new TrafficCorridorService();
 const signalAdapter = new TrafficSignalAdapter();
 const forecastService = new ParkDemandForecastService();
 
+function formatAttendanceRiskForecastApi(row) {
+  if (!row) return null;
+  return {
+    ...row,
+    knownRegisteredDemand: row.knownRegisteredExpected,
+    riskLevel: row.status,
+    estimatedAdditionalDemandLow: row.additionalDemandLow,
+    estimatedAdditionalDemandMid: row.additionalDemandMid,
+    estimatedAdditionalDemandHigh: row.additionalDemandHigh,
+    totalExpectedAttendanceLow: row.expectedAttendanceLow,
+    totalExpectedAttendanceMid: row.expectedAttendanceMid,
+    totalExpectedAttendanceHigh: row.expectedAttendanceHigh,
+    explanation: row.explanationJson,
+  };
+}
+
 async function ensurePark(parkId) {
   const park = await Park.findByPk(parkId);
   if (!park) throw new AppError('Park not found', 404, { code: 'NOT_FOUND' });
@@ -34,6 +50,9 @@ const createTrafficCorridor = asyncHandler(async (req, res) => {
         code: 'COORD_PAIR_INCOMPLETE',
       });
     }
+    if (e && e.code === 'COORD_WGS84_INVALID') {
+      throw new AppError(e.message || 'Invalid WGS84 coordinates', 422, { code: 'COORD_WGS84_INVALID' });
+    }
     throw e;
   }
 });
@@ -48,6 +67,9 @@ const patchTrafficCorridor = asyncHandler(async (req, res) => {
       throw new AppError('Origin and destination coordinates must be provided as lat/lng pairs', 422, {
         code: 'COORD_PAIR_INCOMPLETE',
       });
+    }
+    if (e && e.code === 'COORD_WGS84_INVALID') {
+      throw new AppError(e.message || 'Invalid WGS84 coordinates', 422, { code: 'COORD_WGS84_INVALID' });
     }
     throw e;
   }
@@ -80,13 +102,13 @@ const runAttendanceRiskForecast = asyncHandler(async (req, res) => {
     eventScore: Object.prototype.hasOwnProperty.call(raw, 'eventScore'),
     parkingPressureScore: Object.prototype.hasOwnProperty.call(raw, 'parkingPressureScore'),
   };
-  const data = await forecastService.runForecast(req.params.parkId, body, flags);
+  const data = formatAttendanceRiskForecastApi(await forecastService.runForecast(req.params.parkId, body, flags));
   res.status(201).json({ success: true, data });
 });
 
 const getLatestAttendanceRiskForecast = asyncHandler(async (req, res) => {
   await ensurePark(req.params.parkId);
-  const data = await forecastService.getLatest(req.params.parkId);
+  const data = formatAttendanceRiskForecastApi(await forecastService.getLatest(req.params.parkId));
   res.json({ success: true, data });
 });
 
@@ -94,7 +116,14 @@ const getAttendanceRiskForecastHistory = asyncHandler(async (req, res) => {
   await ensurePark(req.params.parkId);
   const q = req.validated || {};
   const limit = q.limit != null ? q.limit : 96;
-  const data = await forecastService.getHistory(req.params.parkId, limit);
+  const rows = await forecastService.getHistory(req.params.parkId, limit);
+  const data = rows.map((r) => formatAttendanceRiskForecastApi(r));
+  res.json({ success: true, data });
+});
+
+const getLatestTrafficSnapshotDebug = asyncHandler(async (req, res) => {
+  const data = await corridorService.getLatestSnapshotDebug(req.params.corridorId);
+  if (!data) throw new AppError('Traffic corridor not found', 404, { code: 'NOT_FOUND' });
   res.json({ success: true, data });
 });
 
@@ -107,4 +136,5 @@ module.exports = {
   runAttendanceRiskForecast,
   getLatestAttendanceRiskForecast,
   getAttendanceRiskForecastHistory,
+  getLatestTrafficSnapshotDebug,
 };

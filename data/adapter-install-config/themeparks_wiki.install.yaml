@@ -2,7 +2,7 @@
 schemaVersion: 1
 adapterKey: themeparks_wiki
 installedAt: '2026-05-08T10:29:37.879Z'
-updatedAt: '2026-05-13T19:29:28.125Z'
+updatedAt: '2026-05-16T11:38:11.643Z'
 configJson:
   parkId: 639738d3-9574-4f60-ab5b-4c392901320b
 contextJson:
@@ -11,5 +11,5 @@ outputProfiles:
   - SPARKPLUG_JSON
   - CANONICAL_HISTORIAN
 emitEnabled: true
-ingestCanonicalEnabled: true
-scheduleCron: null
+ingestCanonicalEnabled: false
+scheduleCron: '*/5 * * * *'

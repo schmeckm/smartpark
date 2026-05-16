@@ -4,6 +4,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   computeSnapshotMetrics,
+  computeInboundPressureMvp,
+  normalizeStoredDelayPercentAs100,
   computeWeightedTrafficPressure,
   computeExternalDemandPressure,
   computeProbabilisticAdditionalDemand,
@@ -18,9 +20,11 @@ test('computeSnapshotMetrics: inbound congestion from delay', () => {
     currentTravelTimeMin: 25,
     baselineTravelTimeMin: 20,
     direction: 'inbound',
+    weight: 1,
+    incidentCount: 0,
   });
   assert.equal(m.delay_min, 5);
-  assert.ok(Math.abs(m.delay_percent - 0.25) < 1e-9);
+  assert.ok(Math.abs(m.delay_percent - 25) < 1e-9);
   assert.equal(m.congestion_score, 25);
   assert.equal(m.inbound_pressure_score, 25);
 });
@@ -30,8 +34,19 @@ test('computeSnapshotMetrics: outbound has zero inbound pressure', () => {
     currentTravelTimeMin: 40,
     baselineTravelTimeMin: 20,
     direction: 'outbound',
+    weight: 1,
   });
   assert.equal(m.inbound_pressure_score, 0);
+});
+
+test('normalizeStoredDelayPercentAs100 maps legacy ratio', () => {
+  assert.equal(normalizeStoredDelayPercentAs100(0.25), 25);
+  assert.equal(normalizeStoredDelayPercentAs100(25), 25);
+});
+
+test('computeInboundPressureMvp snaps to MVP bands', () => {
+  assert.equal(computeInboundPressureMvp({ delayPercent: 0, congestionScore: 0, incidentCount: 0, weight: 1 }), 0);
+  assert.equal(computeInboundPressureMvp({ delayPercent: 55, congestionScore: 55, incidentCount: 0, weight: 1 }), 50);
 });
 
 test('computeWeightedTrafficPressure respects weights', () => {

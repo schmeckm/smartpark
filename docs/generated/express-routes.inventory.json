@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-05-13T05:31:13.848Z",
+  "generatedAt": "2026-05-16T12:35:00.239Z",
   "apiPrefix": "/api/v1",
-  "routeCount": 383,
+  "routeCount": 444,
   "routes": [
     {
       "method": "POST",
@@ -425,6 +425,20 @@
     },
     {
       "method": "GET",
+      "path": "/api/v1/ai/ml/feature-store-readiness",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/ml/feature-store-snapshot-debug",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
       "path": "/api/v1/ai/ml/forecast-accuracy/:id",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
@@ -439,7 +453,28 @@
     },
     {
       "method": "GET",
+      "path": "/api/v1/ai/ml/forecast-accuracy/model-win-rates",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/ml/forecast-accuracy/retro-lookback",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
       "path": "/api/v1/ai/ml/forecast-accuracy",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/ai/ml/park-profiles/:id",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
       "inOpenApi": true
@@ -449,28 +484,28 @@
       "path": "/api/v1/ai/ml/park-profiles/:id",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "PUT",
       "path": "/api/v1/ai/ml/park-profiles/:id",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/ai/ml/park-profiles",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
       "path": "/api/v1/ai/ml/park-profiles",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
@@ -491,7 +526,7 @@
       "path": "/api/v1/ai/ml/prediction-traces/:predictionId/coefficients",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
@@ -515,32 +550,46 @@
       "inOpenApi": true
     },
     {
+      "method": "DELETE",
+      "path": "/api/v1/ai/ml/registry/entries/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/ai/ml/ride-profiles/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
       "method": "GET",
       "path": "/api/v1/ai/ml/ride-profiles/:id",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "PUT",
       "path": "/api/v1/ai/ml/ride-profiles/:id",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/ai/ml/ride-profiles",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
       "path": "/api/v1/ai/ml/ride-profiles",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
@@ -683,6 +732,20 @@
       "inOpenApi": true
     },
     {
+      "method": "POST",
+      "path": "/api/v1/ai/studio/models/:id/restore",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/ai/studio/models/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
       "method": "GET",
       "path": "/api/v1/ai/studio/models/:id",
       "mountOrigin": "src/routes/v1/index.js",
@@ -691,7 +754,35 @@
     },
     {
       "method": "POST",
+      "path": "/api/v1/ai/studio/models/batch-apply",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai/studio/models/batch-train-rides",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/studio/models/batch-train-status",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
       "path": "/api/v1/ai/studio/models/train",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai/studio/models/validate-features",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
       "inOpenApi": true
@@ -706,6 +797,13 @@
     {
       "method": "POST",
       "path": "/api/v1/ai/studio/predict",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai/studio/runtime-resolution",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
       "inOpenApi": true
@@ -831,6 +929,13 @@
     },
     {
       "method": "GET",
+      "path": "/api/v1/assets/:assetId/pdm-sparkplug-metric-series",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
       "path": "/api/v1/assets/:assetId/pdm-sparkplug-metrics",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
@@ -897,14 +1002,14 @@
       "path": "/api/v1/assets/zone-normalization/apply",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/assets/zone-normalization/preview",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
@@ -1056,6 +1161,118 @@
     {
       "method": "POST",
       "path": "/api/v1/incidents",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/integration-flows/:id/run",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/integration-flows/:id/runs",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/integration-flows/:id/schedule/recalculate",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/integration-flows/:id/validate",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/integration-flows/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/integration-flows/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/integration-flows/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/integration-flows/failures",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/integration-flows/from-template",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/integration-flows/runs/:runId/acknowledge",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/integration-flows/runs/:runId/retry",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/integration-flows/runs/:runId",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/integration-flows/templates",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/integration-flows",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/integration-flows",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/integration-nodes",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
       "inOpenApi": true
@@ -1362,6 +1579,41 @@
       "inOpenApi": true
     },
     {
+      "method": "POST",
+      "path": "/api/v1/integrations/traffic-providers/tomtom/test",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/integrations/traffic-providers/tomtom",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/integrations/traffic-providers/traffic_tomtom/test",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/integrations/traffic-providers/traffic_tomtom",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/integrations/traffic-providers",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
       "method": "DELETE",
       "path": "/api/v1/integrations/uns/manual/:id",
       "mountOrigin": "src/routes/v1/index.js",
@@ -1618,28 +1870,28 @@
       "path": "/api/v1/master-data/signal-catalog/:catalogId",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "PATCH",
       "path": "/api/v1/master-data/signal-catalog/:catalogId",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
       "path": "/api/v1/master-data/signal-catalog",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "POST",
       "path": "/api/v1/master-data/signal-catalog",
       "mountOrigin": "src/app.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
@@ -1908,6 +2160,27 @@
       "inOpenApi": true
     },
     {
+      "method": "GET",
+      "path": "/api/v1/parks/:parkId/attendance-risk-forecast/history",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/parks/:parkId/attendance-risk-forecast/latest",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/parks/:parkId/attendance-risk-forecast/run",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
       "method": "PATCH",
       "path": "/api/v1/parks/:parkId/level0",
       "mountOrigin": "src/routes/v1/index.js",
@@ -1917,6 +2190,13 @@
     {
       "method": "GET",
       "path": "/api/v1/parks/:parkId/operational-context",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/parks/:parkId/pdm-operations-overview",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
       "inOpenApi": true
@@ -1972,10 +2252,24 @@
     },
     {
       "method": "GET",
+      "path": "/api/v1/parks/:parkId/traffic-corridors",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/parks/:parkId/traffic-corridors",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
       "path": "/api/v1/parks/:parkId/zones",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
@@ -2364,6 +2658,48 @@
     },
     {
       "method": "GET",
+      "path": "/api/v1/traffic-corridors/:corridorId/snapshots/latest/debug",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/traffic-corridors/:corridorId/snapshots/manual",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/traffic-corridors/:corridorId",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/traffic-corridors/:corridorId",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/traffic/snapshots/latest",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/traffic/snapshots/poll",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
       "path": "/api/v1/uns-registry/entities",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
@@ -2514,7 +2850,7 @@
       "path": "/api/v1/uns/parks/:parkId/sparkplug-topic-preview",
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
-      "inOpenApi": false
+      "inOpenApi": true
     },
     {
       "method": "GET",
@@ -2538,6 +2874,20 @@
       "inOpenApi": true
     },
     {
+      "method": "DELETE",
+      "path": "/api/v1/users/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/users/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
       "method": "GET",
       "path": "/api/v1/users/me/settings",
       "mountOrigin": "src/routes/v1/index.js",
@@ -2550,6 +2900,20 @@
       "mountOrigin": "src/routes/v1/index.js",
       "sourceHint": "express.Router stack",
       "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/users",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/users",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": false
     },
     {
       "method": "GET",
@@ -2636,6 +3000,69 @@
       "inOpenApi": true
     },
     {
+      "method": "GET",
+      "path": "/api/v1/widget-runtime/data-sources",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/widget-runtime/instances/:id/data",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/widget-runtime/instances/:id/validate",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/widget-runtime/instances/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/widget-runtime/instances/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/widget-runtime/instances/:id",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/widget-runtime/instances",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/widget-runtime/instances",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/widget-runtime/widgets",
+      "mountOrigin": "src/routes/v1/index.js",
+      "sourceHint": "express.Router stack",
+      "inOpenApi": true
+    },
+    {
       "method": "DELETE",
       "path": "/api/v1/zones/:id",
       "mountOrigin": "src/routes/v1/index.js",
@@ -2686,8 +3113,8 @@
     }
   ],
   "stats": {
-    "missingFromOpenapiCount": 19,
-    "openapiOperationCount": 364,
+    "missingFromOpenapiCount": 6,
+    "openapiOperationCount": 438,
     "documentedNotLiveCount": 0
   }
 }

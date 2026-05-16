@@ -63,6 +63,39 @@ export const adminRoutes: RouteRecordRaw[] = [
     },
   },
   {
+    path: 'admin/users',
+    name: 'user-management',
+    component: () => import('@/views/admin/UserManagementView.vue'),
+    meta: {
+      title: 'User management',
+      titleKey: 'userManagement.title',
+      domain: 'admin',
+      roles: [ROLE_CODES.SYSTEM_ADMIN],
+    },
+  },
+  {
+    path: 'admin/integration-flow-studio',
+    name: 'integration-flow-studio',
+    component: () => import('@/views/admin/IntegrationFlowStudioView.vue'),
+    meta: {
+      title: 'Integration Flow Studio',
+      titleKey: 'integrationFlowStudio.title',
+      domain: 'admin',
+      permission: { resource: 'integrations', action: 'read' },
+    },
+  },
+  {
+    path: 'admin/widget-runtime-studio',
+    name: 'widget-runtime-studio',
+    component: () => import('@/views/admin/WidgetRuntimeStudioView.vue'),
+    meta: {
+      title: 'Widget Runtime Studio',
+      titleKey: 'widgetRuntimeStudio.title',
+      domain: 'admin',
+      permission: { resource: 'integrations', action: 'read' },
+    },
+  },
+  {
     path: 'integrations',
     name: 'integrations',
     component: () => import('@/views/IntegrationSettingsView.vue'),
@@ -105,7 +138,6 @@ export const adminRoutes: RouteRecordRaw[] = [
 
   // ── F2-MVP namespace (`/admin/*`) ──────────────────────────────────────
   { path: 'admin', name: 'mvp-admin', redirect: { name: 'platform-settings' }, meta: { domain: 'admin' } },
-  { path: 'admin/users', name: 'mvp-admin-users', redirect: { name: 'platform-settings' }, meta: { domain: 'admin' } },
   { path: 'admin/users/audit', name: 'mvp-admin-audit', redirect: { name: 'audit' }, meta: { domain: 'admin' } },
   { path: 'admin/integrations', name: 'mvp-admin-integrations', redirect: { name: 'integrations' }, meta: { domain: 'admin' } },
   { path: 'admin/integrations/installed', name: 'mvp-admin-integrations-installed', redirect: { name: 'devices-services' }, meta: { domain: 'admin' } },
