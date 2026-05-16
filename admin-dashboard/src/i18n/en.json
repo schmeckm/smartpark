@@ -3717,6 +3717,80 @@
       "openIntegrations": "Devices & Services"
     }
   },
+  "platformSetup": {
+    "tab": "First-time setup",
+    "title": "Setup wizard",
+    "subtitle": "After installation, work through these steps in order — from park selection to the UNS registry mirror and signal catalog.",
+    "refresh": "Check progress",
+    "refreshing": "Checking…",
+    "progress": "{done} of {total} required steps complete",
+    "mirrorCount": "Mirror signals (registry): {count}",
+    "catalogMirrored": "Catalog (mirrored): {count}",
+    "status": {
+      "done": "Done",
+      "current": "Next",
+      "pending": "Pending",
+      "optional": "Optional"
+    },
+    "steps": {
+      "park": {
+        "title": "Select park in header",
+        "body": "Choose the active park in the top bar. All API calls and master data use this park (X-Park-Id header).",
+        "bodyActive": "Active park: {name}. Switch in the header if you manage multiple parks."
+      },
+      "masterData": {
+        "title": "Create master data",
+        "body": "Maintain parks, zones, and rides under Master data. Without rides there are no UNS metrics to mirror.",
+        "action": "Open master data"
+      },
+      "integrations": {
+        "title": "Integrations (optional)",
+        "body": "Configure API keys, external live polling, and traffic providers (e.g. TomTom).",
+        "action": "Integrations"
+      },
+      "uns": {
+        "title": "UNS / MQTT topics",
+        "body": "Review the unified namespace and prepared MQTT topics. Metrics attach to rides from master data.",
+        "action": "MQTT topics"
+      },
+      "registryMirror": {
+        "title": "Sync UNS registry mirror",
+        "body": "Open Diagnostics → Registry mirror and run Sync. This copies signals from legacy UNS/metrics into the signal catalog (MIRRORED_FROM_LEGACY).",
+        "hint": "Reload in the signal catalog alone does not run the mirror — use Sync on the registry mirror page after new rides or metrics.",
+        "action": "Registry mirror"
+      },
+      "signalCatalog": {
+        "title": "Review signal catalog",
+        "body": "Inspect mirrored and manual signals. After mirror sync you should see MIRRORED_FROM_LEGACY entries.",
+        "action": "Signal catalog"
+      },
+      "rideCapabilities": {
+        "title": "Map ride signals",
+        "body": "For each ride in master data detail, enable signal capabilities and assign topic sources.",
+        "action": "Rides"
+      },
+      "adapters": {
+        "title": "Adapters & devices (optional)",
+        "body": "Install MQTT adapters, cron schedules, and device services.",
+        "action": "Devices & services"
+      },
+      "platformTabs": {
+        "title": "Platform toggles",
+        "body": "Use the other tabs on this page to enable AI sampling, weather, telemetry/Influx, and the adapter scheduler."
+      }
+    }
+  },
+  "platformSettings": {
+    "tabs": {
+      "ai": "AI",
+      "weather": "Weather",
+      "adapters": "Adapters & integrations",
+      "sqdc": "SQDCP",
+      "telemetry": "Telemetry & Influx",
+      "mqtt": "MQTT",
+      "general": "General"
+    }
+  },
   "persona": {
     "operator": "Operator",
     "engineer": "Engineer",

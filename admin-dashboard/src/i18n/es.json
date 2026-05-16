@@ -2673,6 +2673,31 @@
     "missingFlowForRun": "Sin id de flujo.",
     "showingPartial": "{shown} de {total}."
   },
+  "platformSetup": {
+    "tab": "Configuración inicial",
+    "title": "Asistente de configuración",
+    "subtitle": "Tras la instalación, siga estos pasos en orden — del parque al espejo UNS y catálogo de señales.",
+    "refresh": "Comprobar progreso",
+    "refreshing": "Comprobando…",
+    "progress": "{done} de {total} pasos obligatorios completados",
+    "mirrorCount": "Señales espejo (registro): {count}",
+    "catalogMirrored": "Catálogo (espejo): {count}",
+    "status": { "done": "Hecho", "current": "Siguiente", "pending": "Pendiente", "optional": "Opcional" },
+    "steps": {
+      "park": { "title": "Elegir parque en la cabecera", "body": "Seleccione el parque activo en la barra superior.", "bodyActive": "Parque activo: {name}." },
+      "masterData": { "title": "Datos maestros", "body": "Parques, zonas y atracciones.", "action": "Datos maestros" },
+      "integrations": { "title": "Integraciones (opcional)", "body": "Claves API y proveedores.", "action": "Integraciones" },
+      "uns": { "title": "UNS / temas MQTT", "body": "Namespace unificado y temas MQTT.", "action": "Temas MQTT" },
+      "registryMirror": { "title": "Sincronizar espejo UNS", "body": "Diagnóstico → Espejo de registro → Sincronizar.", "hint": "Recargar el catálogo no ejecuta el espejo.", "action": "Espejo de registro" },
+      "signalCatalog": { "title": "Catálogo de señales", "body": "Comprobar señales MIRRORED_FROM_LEGACY.", "action": "Catálogo" },
+      "rideCapabilities": { "title": "Señales por atracción", "body": "Capacidades por ride.", "action": "Atracciones" },
+      "adapters": { "title": "Adaptadores (opcional)", "body": "Dispositivos y servicios.", "action": "Dispositivos" },
+      "platformTabs": { "title": "Ajustes de plataforma", "body": "Otras pestañas: IA, clima, telemetría." }
+    }
+  },
+  "platformSettings": {
+    "tabs": { "ai": "IA", "weather": "Clima", "adapters": "Adaptadores", "sqdc": "SQDCP", "telemetry": "Telemetría", "mqtt": "MQTT", "general": "General" }
+  },
   "persona": {
     "operator": "Operador",
     "engineer": "Ingeniero",

@@ -51,6 +51,15 @@ async function collectEntities(adapter, rootId, maxDepth = 6) {
   return out;
 }
 
+function parseGeoCoord(v) {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string' && v.trim() !== '') {
+    const n = Number(v);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
 function mapExternalEntity(raw) {
   const id = String(raw.id || '');
   const name = raw.name || 'Unnamed';
@@ -62,8 +71,8 @@ function mapExternalEntity(raw) {
     externalParentId: raw.parentId != null && String(raw.parentId).trim() !== '' ? String(raw.parentId) : null,
     name,
     slug,
-    latitude: loc && typeof loc.latitude === 'number' ? loc.latitude : null,
-    longitude: loc && typeof loc.longitude === 'number' ? loc.longitude : null,
+    latitude: loc ? parseGeoCoord(loc.latitude) : null,
+    longitude: loc ? parseGeoCoord(loc.longitude) : null,
     assetTypeCode: mapExternalEntityType(raw.entityType),
     rawEntityType: String(raw.entityType || ''),
     description: common.description,

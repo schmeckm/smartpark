@@ -1,31 +1,36 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import {
   getAdminPlatformSettings,
   patchAdminPlatformSetting,
   type AdminPlatformSettingsPayload,
   type PlatformSettingRow,
 } from '@/api/client'
+import PlatformSetupWizard from '@/components/admin/PlatformSetupWizard.vue'
 import { usePageSurfaces } from '@/composables/usePageSurfaces'
 import { useToast } from '@/composables/useToast'
 
-type TabId = 'AI' | 'WEATHER' | 'ADAPTERS' | 'SQDC' | 'TELEMETRY' | 'MQTT' | 'GENERAL'
+type TabId = 'SETUP' | 'AI' | 'WEATHER' | 'ADAPTERS' | 'SQDC' | 'TELEMETRY' | 'MQTT' | 'GENERAL'
 
-const tabs: { id: TabId; label: string }[] = [
-  { id: 'AI', label: 'AI' },
-  { id: 'WEATHER', label: 'Weather' },
-  { id: 'ADAPTERS', label: 'Adapters & Integrations' },
-  { id: 'SQDC', label: 'SQDCP' },
-  { id: 'TELEMETRY', label: 'Telemetry & Influx' },
-  { id: 'MQTT', label: 'MQTT' },
-  { id: 'GENERAL', label: 'General' },
+const { t } = useI18n()
+
+const tabs: { id: TabId; labelKey: string }[] = [
+  { id: 'SETUP', labelKey: 'platformSetup.tab' },
+  { id: 'AI', labelKey: 'platformSettings.tabs.ai' },
+  { id: 'WEATHER', labelKey: 'platformSettings.tabs.weather' },
+  { id: 'ADAPTERS', labelKey: 'platformSettings.tabs.adapters' },
+  { id: 'SQDC', labelKey: 'platformSettings.tabs.sqdc' },
+  { id: 'TELEMETRY', labelKey: 'platformSettings.tabs.telemetry' },
+  { id: 'MQTT', labelKey: 'platformSettings.tabs.mqtt' },
+  { id: 'GENERAL', labelKey: 'platformSettings.tabs.general' },
 ]
 
 const { surfaces: ui } = usePageSurfaces()
 const { push } = useToast()
 
-const activeTab = ref<TabId>('AI')
+const activeTab = ref<TabId>('SETUP')
 const loading = ref(false)
 const savingKey = ref<string | null>(null)
 const payload = ref<AdminPlatformSettingsPayload | null>(null)
@@ -97,7 +102,9 @@ async function load() {
   }
 }
 
-watch(activeTab, () => void load(), { immediate: true })
+watch(activeTab, (tab) => {
+  if (tab !== 'SETUP') void load()
+}, { immediate: true })
 
 const mqttBlock = computed(() => payload.value?.mqtt ?? null)
 const telemetryBlock = computed(() => payload.value?.telemetry ?? null)
@@ -180,22 +187,24 @@ function resetRow(row: PlatformSettingRow) {
 
     <div class="flex flex-wrap gap-2 border-b border-slate-700 pb-2">
       <button
-        v-for="t in tabs"
-        :key="t.id"
+        v-for="tab in tabs"
+        :key="tab.id"
         type="button"
         class="rounded-md px-3 py-1.5 text-sm font-medium transition"
         :class="
-          activeTab === t.id
+          activeTab === tab.id
             ? 'bg-brand-600 text-white'
             : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
         "
-        @click="activeTab = t.id"
+        @click="activeTab = tab.id"
       >
-        {{ t.label }}
+        {{ t(tab.labelKey) }}
       </button>
     </div>
 
-    <div v-if="loading" :class="ui.card">Loading…</div>
+    <PlatformSetupWizard v-if="activeTab === 'SETUP'" :ui="ui" />
+
+    <div v-else-if="loading" :class="ui.card">Loading…</div>
 
     <template v-else-if="activeTab === 'TELEMETRY'">
       <div

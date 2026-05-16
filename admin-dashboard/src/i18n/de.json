@@ -94,7 +94,7 @@
     "realtimeSignalHealth": "Signal-Zustand",
     "diagMqttInfrastructure": "MQTT-Infrastruktur",
     "diagSparkplug": "Sparkplug · Edge-Knoten",
-    "diagRegistryMirror": "Registry Mirror",
+    "diagRegistryMirror": "Registry-Spiegel",
     "diagGovernanceRules": "Governance-Regeln",
     "aiMlFeatureMonitor": "Feature monitor",
     "aiMlMetadataProfiles": "Forecast-Profile"
@@ -3614,6 +3614,80 @@
       "scaffoldNotice": "Tiefe Diagnosen bleiben vorerst unter Integrationen und Unified Namespace.",
       "openTopics": "Unified Namespace",
       "openIntegrations": "Geräte & Services"
+    }
+  },
+  "platformSetup": {
+    "tab": "Ersteinrichtung",
+    "title": "Einrichtungs-Assistent",
+    "subtitle": "Nach der Installation diese Schritte der Reihe nach abarbeiten — von der Parkauswahl bis zum UNS-Registry-Spiegel und Signal-Katalog.",
+    "refresh": "Fortschritt prüfen",
+    "refreshing": "Prüfe …",
+    "progress": "{done} von {total} Pflichtschritten erledigt",
+    "mirrorCount": "Spiegel-Signale (Registry): {count}",
+    "catalogMirrored": "Katalog (gespiegelt): {count}",
+    "status": {
+      "done": "Erledigt",
+      "current": "Als Nächstes",
+      "pending": "Ausstehend",
+      "optional": "Optional"
+    },
+    "steps": {
+      "park": {
+        "title": "Park im Header wählen",
+        "body": "Oben in der Leiste den aktiven Park auswählen. Alle API-Aufrufe und Stammdaten beziehen sich auf diesen Park (Header X-Park-Id).",
+        "bodyActive": "Aktiver Park: {name}. Bei mehreren Parks bei Bedarf wechseln."
+      },
+      "masterData": {
+        "title": "Stammdaten anlegen",
+        "body": "Park, Zonen und Attraktionen (Rides) unter Stammdaten pflegen. Ohne Rides gibt es keine UNS-Metriken zum Spiegeln.",
+        "action": "Stammdaten öffnen"
+      },
+      "integrations": {
+        "title": "Integrationen (optional)",
+        "body": "API-Schlüssel, externes Live-Polling und Verkehrsanbieter (z. B. TomTom) konfigurieren.",
+        "action": "Integrationen"
+      },
+      "uns": {
+        "title": "UNS / MQTT-Themen",
+        "body": "Unified Namespace und vorbereitete MQTT-Themen prüfen. Metriken an Rides hängen an den Stammdaten.",
+        "action": "MQTT-Themen"
+      },
+      "registryMirror": {
+        "title": "UNS-Registry-Spiegel synchronisieren",
+        "body": "Diagnostics → Registry-Spiegel öffnen und „Synchronisieren“ ausführen. Damit werden Signale aus Legacy-UNS/Metriken in den Signal-Katalog übernommen (MIRRORED_FROM_LEGACY).",
+        "hint": "Die Seite ist unter Diagnostics erreichbar; ein Klick auf „Synchronisieren“ ist nach neuen Rides/Metriken nötig — „Neu laden“ im Signal-Katalog allein reicht nicht.",
+        "action": "Registry-Spiegel"
+      },
+      "signalCatalog": {
+        "title": "Signal-Katalog prüfen",
+        "body": "Gespiegelte und manuelle Signale einsehen. Nach dem Spiegel-Sync sollten Einträge mit Quelle MIRRORED_FROM_LEGACY sichtbar sein.",
+        "action": "Signal-Katalog"
+      },
+      "rideCapabilities": {
+        "title": "Ride-Signale zuordnen",
+        "body": "Pro Attraktion im Stammdaten-Detail die Signal-Capabilities aktivieren und Topic-Quellen zuweisen.",
+        "action": "Attraktionen"
+      },
+      "adapters": {
+        "title": "Adapter & Geräte (optional)",
+        "body": "MQTT-Adapter installieren, Cron-Läufe und Geräte-Services einrichten.",
+        "action": "Geräte & Services"
+      },
+      "platformTabs": {
+        "title": "Plattform-Schalter",
+        "body": "In den weiteren Tabs dieser Seite KI-Sampling, Wetter, Telemetrie/Influx und Adapter-Scheduler aktivieren."
+      }
+    }
+  },
+  "platformSettings": {
+    "tabs": {
+      "ai": "KI",
+      "weather": "Wetter",
+      "adapters": "Adapter & Integrationen",
+      "sqdc": "SQDCP",
+      "telemetry": "Telemetrie & Influx",
+      "mqtt": "MQTT",
+      "general": "Allgemein"
     }
   },
   "persona": {

@@ -20,12 +20,14 @@ import { useToast } from '@/composables/useToast'
 import { waitMinutesFromAssetSnapshot } from '@/utils/assetWaitSnapshot'
 import { setApiParkContextId } from '@/utils/apiParkContext'
 import { useAuthStore } from '@/stores/auth'
+import { useParkContextStore } from '@/stores/parkContext'
 import type { ParkMapFreqBand } from '@/utils/parkMapFreqThresholds'
 import { parkMapFreqBandFromPph, resolveParkMapFreqThresholds } from '@/utils/parkMapFreqThresholds'
 
 const { push } = useToast()
 const route = useRoute()
 const auth = useAuthStore()
+const parkCtx = useParkContextStore()
 const parks = ref<PlatformPark[]>([])
 const parkId = ref('')
 const assets = ref<PlatformAsset[]>([])
@@ -98,7 +100,37 @@ function assetStatus(a: PlatformAsset): string {
 }
 
 function assetId(a: PlatformAsset): string {
-  return String(a.id ?? '')
+  return String(a.id ?? a.assetId ?? '')
+}
+
+function parseGeoCoord(v: unknown): number | null {
+  if (typeof v === 'number' && Number.isFinite(v)) return v
+  if (typeof v === 'string' && v.trim() !== '') {
+    const n = Number(v)
+    if (Number.isFinite(n)) return n
+  }
+  return null
+}
+
+/** DB columns first; fallback ThemeParks snapshot when latitude/longitude were not persisted. */
+function resolveAssetLatLng(a: PlatformAsset): { lat: number; lng: number } | null {
+  const directLat = parseGeoCoord(a.latitude)
+  const directLng = parseGeoCoord(a.longitude)
+  if (directLat != null && directLng != null) return { lat: directLat, lng: directLng }
+
+  const snap = a.providerSnapshot as
+    | { lastEntity?: { location?: { latitude?: unknown; longitude?: unknown } } }
+    | undefined
+  const loc = snap?.lastEntity?.location
+  if (!loc || typeof loc !== 'object') return null
+  const lat = parseGeoCoord(loc.latitude)
+  const lng = parseGeoCoord(loc.longitude)
+  if (lat == null || lng == null) return null
+  return { lat, lng }
+}
+
+function withCoords(a: PlatformAsset) {
+  return resolveAssetLatLng(a) != null
 }
 
 function assetLabel(a: PlatformAsset): string {
@@ -107,12 +139,6 @@ function assetLabel(a: PlatformAsset): string {
   const slug = a.slug != null ? String(a.slug).trim() : ''
   if (slug) return slug
   return assetId(a) || '—'
-}
-
-function withCoords(a: PlatformAsset) {
-  const lat = a.latitude as number | undefined
-  const lng = a.longitude as number | undefined
-  return typeof lat === 'number' && typeof lng === 'number' && Number.isFinite(lat) && Number.isFinite(lng)
 }
 
 /** Optional standby wait (minutes) from last synced ThemeParks entity snapshot */
@@ -309,9 +335,9 @@ const assetsForSidebar = computed(() => {
       noCoords.push(a)
       continue
     }
-    const la = a.latitude as number
-    const ln = a.longitude as number
-    if (!b || b.contains(L.latLng(la, ln))) inView.push(a)
+    const ll = resolveAssetLatLng(a)
+    if (!ll) continue
+    if (!b || b.contains(L.latLng(ll.lat, ll.lng))) inView.push(a)
   }
   const byLabel = (x: PlatformAsset, y: PlatformAsset) =>
     assetLabel(x).localeCompare(assetLabel(y), undefined, { sensitivity: 'base' })
@@ -321,6 +347,30 @@ const assetsForSidebar = computed(() => {
 })
 
 const withCoordsCount = computed(() => filteredAssets.value.filter(withCoords).length)
+
+const mapDiag = computed(() => {
+  const total = filteredAssets.value.length
+  const onMap = withCoordsCount.value
+  if (total === 0) {
+    return {
+      tone: 'warn' as const,
+      text: 'Keine Assets für diesen Park — unter Integrationen ThemeParks-Park wählen, speichern und „Sync entities“ ausführen. Dann hier den gleichen Park im Dropdown wählen.',
+    }
+  }
+  if (onMap === 0) {
+    return {
+      tone: 'warn' as const,
+      text: `${total} Asset(s) geladen, aber keine GPS-Koordinaten. Erneut „Sync entities“ für den richtigen Park, oder Stammdaten-Import mit latitude/longitude. Prüfen Sie auch den Park im Header und in der Karten-Auswahl.`,
+    }
+  }
+  if (onMap < total) {
+    return {
+      tone: 'info' as const,
+      text: `${onMap} von ${total} Assets haben Koordinaten und erscheinen auf der Karte. Fehlende Einträge stehen in der Liste unter „Ohne Koordinaten“.`,
+    }
+  }
+  return null
+})
 
 const ridesWithWaitSample = computed(() => assets.value.some((a) => assetTypeCode(a) === 'RIDE' && assetWaitMinutes(a) != null))
 
@@ -386,10 +436,10 @@ function syncSelectionHalo() {
   if (!id) return
   const a = findAssetById(id)
   if (!a || !withCoords(a)) return
+  const pos = resolveAssetLatLng(a)
+  if (!pos) return
   ensureSelectionHilitePane(mapInst)
-  const lat = a.latitude as number
-  const lng = a.longitude as number
-  const ll = L.latLng(lat, lng)
+  const ll = L.latLng(pos.lat, pos.lng)
   const haloOpts: L.CircleMarkerOptions = {
     pane: SELECTION_HILITE_PANE,
     stroke: true,
@@ -609,13 +659,13 @@ async function loadPressureHeat() {
 }
 
 const googleMapsHref = computed(() => {
-  const pts = filteredAssets.value.filter(withCoords) as Array<PlatformAsset & { latitude: number; longitude: number }>
+  const pts = filteredAssets.value.map((a) => resolveAssetLatLng(a)).filter((p): p is { lat: number; lng: number } => p != null)
   if (!pts.length) return 'https://www.google.com/maps'
   let s = 0
   let t = 0
   for (const p of pts) {
-    s += p.latitude
-    t += p.longitude
+    s += p.lat
+    t += p.lng
   }
   const lat = s / pts.length
   const lng = t / pts.length
@@ -653,9 +703,9 @@ function refreshWaitHeatmap() {
   const pts: [number, number, number][] = []
   for (const a of filteredAssets.value) {
     if (assetTypeCode(a) !== 'RIDE' || !withCoords(a)) continue
-    const lat = a.latitude as number
-    const lng = a.longitude as number
-    pts.push([lat, lng, waitHeatIntensity(assetWaitMinutes(a), assetStatus(a))])
+    const pos = resolveAssetLatLng(a)
+    if (!pos) continue
+    pts.push([pos.lat, pos.lng, waitHeatIntensity(assetWaitMinutes(a), assetStatus(a))])
   }
   const z = map.value?.getZoom() ?? 14
   const paint = waitHeatPaintOpts(z)
@@ -672,8 +722,13 @@ async function load() {
     const q = parkIdFromRouteQuery()
     if (q && parks.value.some((p) => p.id === q)) {
       parkId.value = q
-    } else if (!parkId.value && parks.value.length) {
-      parkId.value = parks.value[0].id
+    } else {
+      const ctxId = parkCtx.activeParkId
+      if (ctxId && parks.value.some((p) => p.id === ctxId)) {
+        parkId.value = ctxId
+      } else if (parks.value.length) {
+        parkId.value = parks.value[0].id
+      }
     }
     if (!parkId.value) return
     setApiParkContextId(parkId.value)
@@ -748,12 +803,14 @@ function renderMarkers(opts?: { fitToMarkers?: boolean }) {
   if (!map.value || !layer.value) return
   layer.value.clearLayers()
   markerByAssetId.value = new Map()
-  const pts = filteredAssets.value.filter(withCoords) as Array<PlatformAsset & { latitude: number; longitude: number }>
   const fit = Boolean(opts?.fitToMarkers)
-  for (const a of pts) {
+  const markerAssets = filteredAssets.value.filter(withCoords)
+  for (const a of markerAssets) {
+    const pos = resolveAssetLatLng(a)
+    if (!pos) continue
     const id = assetId(a)
     const selected = Boolean(id && id === selectedAssetId.value)
-    const m = L.marker([a.latitude, a.longitude], { icon: buildDivIcon(a, selected) })
+    const m = L.marker([pos.lat, pos.lng], { icon: buildDivIcon(a, selected) })
       .bindPopup(buildPopupHtml(a), { maxWidth: 280, closeButton: true, autoPan: true })
       .addTo(layer.value)
     if (id) {
@@ -764,10 +821,11 @@ function renderMarkers(opts?: { fitToMarkers?: boolean }) {
       })
     }
   }
-  if (fit && pts.length === 1) {
-    map.value.setView([pts[0].latitude, pts[0].longitude], 15)
-  } else   if (fit && pts.length > 1) {
-    const b = L.latLngBounds(pts.map((p) => [p.latitude, p.longitude] as L.LatLngTuple))
+  const fitPts = markerAssets.map((a) => resolveAssetLatLng(a)).filter((p): p is { lat: number; lng: number } => p != null)
+  if (fit && fitPts.length === 1) {
+    map.value.setView([fitPts[0].lat, fitPts[0].lng], 15)
+  } else if (fit && fitPts.length > 1) {
+    const b = L.latLngBounds(fitPts.map((p) => [p.lat, p.lng] as L.LatLngTuple))
     map.value.fitBounds(b.pad(0.15))
   }
   syncSelectionHalo()
@@ -829,10 +887,9 @@ const sidebarOutsideHint = computed(() => {
   const b = viewportBounds.value
   if (!b) return false
   for (const a of filteredAssets.value) {
-    if (!withCoords(a)) continue
-    const la = a.latitude as number
-    const ln = a.longitude as number
-    if (!b.contains(L.latLng(la, ln))) return true
+    const pos = resolveAssetLatLng(a)
+    if (!pos) continue
+    if (!b.contains(L.latLng(pos.lat, pos.lng))) return true
   }
   return false
 })
@@ -1042,6 +1099,17 @@ onUnmounted(() => {
         <span class="text-xs text-slate-500">
           {{ filteredAssets.length }} shown · {{ withCoordsCount }} on map
         </span>
+      <p
+        v-if="mapDiag"
+        class="basis-full rounded-md border px-3 py-2 text-xs leading-relaxed"
+        :class="
+          mapDiag.tone === 'warn'
+            ? 'border-amber-500/40 bg-amber-950/40 text-amber-100'
+            : 'border-slate-600 bg-slate-900/60 text-slate-300'
+        "
+      >
+        {{ mapDiag.text }}
+      </p>
         <label class="ml-1 flex cursor-pointer items-center gap-2 text-[11px] text-slate-300">
           <input v-model="showPressureHeat" type="checkbox" class="rounded border-slate-600" />
           <span>Geo pressure heat</span>

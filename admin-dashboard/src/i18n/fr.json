@@ -2665,6 +2665,31 @@
     "missingFlowForRun": "Pas d’identifiant de flux.",
     "showingPartial": "{shown} sur {total}."
   },
+  "platformSetup": {
+    "tab": "Première installation",
+    "title": "Assistant de configuration",
+    "subtitle": "Après l'installation, suivez ces étapes dans l'ordre — du parc au miroir UNS et au catalogue de signaux.",
+    "refresh": "Vérifier la progression",
+    "refreshing": "Vérification…",
+    "progress": "{done} sur {total} étapes obligatoires terminées",
+    "mirrorCount": "Signaux miroir (registre) : {count}",
+    "catalogMirrored": "Catalogue (miroir) : {count}",
+    "status": { "done": "Terminé", "current": "Suivant", "pending": "En attente", "optional": "Optionnel" },
+    "steps": {
+      "park": { "title": "Choisir le parc dans l'en-tête", "body": "Sélectionnez le parc actif dans la barre supérieure.", "bodyActive": "Parc actif : {name}." },
+      "masterData": { "title": "Créer les données de base", "body": "Parcs, zones et attractions.", "action": "Données de base" },
+      "integrations": { "title": "Intégrations (optionnel)", "body": "Clés API et fournisseurs.", "action": "Intégrations" },
+      "uns": { "title": "UNS / sujets MQTT", "body": "Namespace unifié et sujets MQTT.", "action": "Sujets MQTT" },
+      "registryMirror": { "title": "Synchroniser le miroir UNS", "body": "Diagnostics → Miroir du registre, puis Synchroniser.", "hint": "Recharger le catalogue ne lance pas le miroir.", "action": "Miroir du registre" },
+      "signalCatalog": { "title": "Catalogue de signaux", "body": "Vérifier les signaux MIRRORED_FROM_LEGACY.", "action": "Catalogue" },
+      "rideCapabilities": { "title": "Signaux par attraction", "body": "Capacités de signaux par ride.", "action": "Attractions" },
+      "adapters": { "title": "Adaptateurs (optionnel)", "body": "Appareils et services.", "action": "Appareils" },
+      "platformTabs": { "title": "Paramètres plateforme", "body": "Autres onglets : IA, météo, télémétrie." }
+    }
+  },
+  "platformSettings": {
+    "tabs": { "ai": "IA", "weather": "Météo", "adapters": "Adaptateurs", "sqdc": "SQDCP", "telemetry": "Télémétrie", "mqtt": "MQTT", "general": "Général" }
+  },
   "persona": {
     "operator": "Opérateur",
     "engineer": "Ingénieur",

@@ -443,6 +443,14 @@
           "activePathPrefix": "/diagnostics/governance",
           "permission": { "resource": "iotOt", "action": "settings.read" },
           "requiredRoles": ["SYSTEM_ADMIN", "ADMIN", "OPERATIONS_MANAGER"]
+        },
+        {
+          "to": "/diagnostics/registry-mirror",
+          "labelKey": "menu.diagRegistryMirror",
+          "navIcon": "registry",
+          "activePathPrefix": "/diagnostics/registry-mirror",
+          "permission": { "resource": "iotOt", "action": "settings.read" },
+          "requiredRoles": ["SYSTEM_ADMIN", "ADMIN", "OPERATIONS_MANAGER"]
         }
       ]
     },
