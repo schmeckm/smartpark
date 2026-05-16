@@ -99,6 +99,37 @@ function gridRowFromPark(p) {
   };
 }
 
+function parseGeoCoord(v) {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string' && v.trim() !== '') {
+    const n = Number(v);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
+/** DB columns first; ThemeParks snapshot fallback for list display only. */
+function resolveAssetGeoFields(a) {
+  let latitude = parseGeoCoord(a.latitude);
+  let longitude = parseGeoCoord(a.longitude);
+  let geoSource = latitude != null && longitude != null ? 'DB' : null;
+  if (latitude == null || longitude == null) {
+    const snap = a.providerSnapshot && typeof a.providerSnapshot === 'object' ? a.providerSnapshot : null;
+    const loc = snap?.lastEntity?.location;
+    if (loc && typeof loc === 'object') {
+      const slat = parseGeoCoord(loc.latitude);
+      const slng = parseGeoCoord(loc.longitude);
+      if (slat != null && slng != null) {
+        latitude = slat;
+        longitude = slng;
+        geoSource = 'SNAPSHOT';
+      }
+    }
+  }
+  const hasGeo = latitude != null && longitude != null;
+  return { latitude, longitude, hasGeo, geoSource };
+}
+
 function gridRowFromZone(z) {
   const park = z.park;
   return {
@@ -137,12 +168,17 @@ function gridRowFromAsset(a, waitTimeMin = null) {
     a.templateId && req.length ? a.enrichment?.profileCompleteness || profileCompleteness(req, flat, null) : null;
   const missingKeys =
     a.templateId && req.length ? missingRequiredFieldKeys(req, flat, null) : [];
+  const geo = resolveAssetGeoFields(a);
   return {
     id: a.assetId,
     entityKind: 'asset',
     name: a.name,
     slug: a.slug,
     type: typeCode,
+    latitude: geo.latitude,
+    longitude: geo.longitude,
+    hasGeo: geo.hasGeo,
+    geoSource: geo.geoSource,
     parkName: park?.name || null,
     parentName: parent?.name || null,
     zoneName: a.zone?.name || null,
@@ -519,7 +555,9 @@ class MasterDataService {
       ];
     }
 
-    const sortField = ['name', 'status', 'updatedAt', 'slug'].includes(query.sortBy) ? query.sortBy : 'name';
+    const sortField = ['name', 'status', 'updatedAt', 'slug', 'latitude', 'longitude'].includes(query.sortBy)
+      ? query.sortBy
+      : 'name';
     const baseIncludes = [
       { model: AssetType, as: 'assetType', required: true },
       { model: Park, as: 'park', required: false },
@@ -531,12 +569,34 @@ class MasterDataService {
     if (t === 'shows') baseIncludes.push({ model: ShowMasterData, as: 'showMaster', required: false });
     if (t === 'restaurants') baseIncludes.push({ model: RestaurantMasterData, as: 'restaurantMaster', required: false });
 
+    const order =
+      query.sortBy === 'hasGeo'
+        ? [
+            [
+              sequelize.literal(
+                'CASE WHEN "ParkAsset"."latitude" IS NULL OR "ParkAsset"."longitude" IS NULL THEN 1 ELSE 0 END'
+              ),
+              sortDir === 'desc' ? 'DESC' : 'ASC',
+            ],
+            ['name', 'ASC'],
+          ]
+        : [[sortField, sortDir]];
+
     const { rows, count } = await ParkAsset.findAndCountAll({
       where,
       include: baseIncludes,
-      order: [[sortField, sortDir]],
+      order,
       limit: pageSize,
       offset: page * pageSize,
+    });
+
+    const withGeoCoordinates = await ParkAsset.count({
+      where: {
+        ...where,
+        latitude: { [Op.ne]: null },
+        longitude: { [Op.ne]: null },
+      },
+      include: baseIncludes.filter((inc) => inc.required),
     });
     const waitByAsset = {};
     const assetIds = rows.map((r) => r.assetId).filter(Boolean);
@@ -554,7 +614,7 @@ class MasterDataService {
       }
     }
     const list = rows.map((r) => gridRowFromAsset(r, waitByAsset[String(r.assetId)] ?? null));
-    return { rows: list, total: count, page, pageSize };
+    return { rows: list, total: count, page, pageSize, withGeoCoordinates };
   }
 
   async getByAssetId(assetId) {

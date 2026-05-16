@@ -202,7 +202,17 @@
       "drawer": "Schublade",
       "entityType": "Entitätstyp",
       "code": "Code",
-      "description": "Beschreibung"
+      "description": "Beschreibung",
+      "geo": "GPS",
+      "latitude": "Breite",
+      "longitude": "Länge"
+    },
+    "geo": {
+      "summary": "{withGeo} von {total} Assets mit GPS in park_assets (Breite/Länge). Karte liest dieselben Felder.",
+      "yesDb": "Ja (DB)",
+      "yesSnapshot": "Nur Snapshot",
+      "no": "Fehlt",
+      "snapshotOnlyHint": "Koordinaten nur im ThemeParks-Snapshot — erneut „Sync entities“ oder Spalten per Import pflegen."
     },
     "profileTooltip": {
       "columnHint": "Hat eine Vorlage Pflichtfelder, zeigt der Tooltip auf dem Status die Keys und fehlende Werte.",
@@ -3615,6 +3625,9 @@
       "openTopics": "Unified Namespace",
       "openIntegrations": "Geräte & Services"
     }
+  },
+  "assetMapPage": {
+    "parkFromHeaderHint": "Park im Header oben wechseln"
   },
   "platformSetup": {
     "tab": "Ersteinrichtung",

@@ -8,6 +8,7 @@ const {
   extractCommonAssetFields,
 } = require('./themeparks-mapper');
 const { publishMQTTState } = require('./asset-mqtt.publisher');
+const { Op } = require('sequelize');
 const { logger } = require('../../../utils/logger');
 const env = require('../../../config/env');
 
@@ -220,6 +221,38 @@ async function applyCanonicalSpecialization(models, assetId, typeCode, raw, tran
 }
 
 /**
+ * Persist GPS from provider_snapshot when columns stayed null after upsert.
+ */
+async function backfillAssetCoordsFromSnapshots(models, parkId, transaction) {
+  const rows = await models.ParkAsset.findAll({
+    where: {
+      parkId,
+      [Op.or]: [{ latitude: null }, { longitude: null }],
+    },
+    attributes: ['assetId', 'latitude', 'longitude', 'providerSnapshot', 'enrichment', 'syncManaged'],
+    transaction,
+  });
+  let n = 0;
+  for (const row of rows) {
+    if (row.syncManaged === false) continue;
+    const locks =
+      row.enrichment && typeof row.enrichment === 'object' && Array.isArray(row.enrichment.locks?.asset)
+        ? new Set(row.enrichment.locks.asset)
+        : new Set();
+    if (locks.has('latitude') || locks.has('longitude')) continue;
+    const snap = row.providerSnapshot && typeof row.providerSnapshot === 'object' ? row.providerSnapshot : null;
+    const loc = snap?.lastEntity?.location;
+    if (!loc || typeof loc !== 'object') continue;
+    const lat = parseGeoCoord(loc.latitude);
+    const lng = parseGeoCoord(loc.longitude);
+    if (lat == null || lng == null) continue;
+    await row.update({ latitude: lat, longitude: lng }, { transaction });
+    n += 1;
+  }
+  return n;
+}
+
+/**
  * Upsert one canonical asset row (+ specialization shell).
  */
 async function upsertSingleAsset(models, repo, parkId, zoneId, mapped, transaction) {
@@ -342,6 +375,8 @@ async function syncParkFromThemeParks(sequelize, models, parkExternalId) {
     }
     const liveStats = await updateQueueTimes(repo, park, liveItems, transaction);
 
+    const coordsBackfilled = await backfillAssetCoordsFromSnapshots(models, park.id, transaction);
+
     await transaction.commit();
 
     if (env.adapterDiscoverySpyEnabled) {
@@ -397,6 +432,7 @@ async function syncParkFromThemeParks(sequelize, models, parkExternalId) {
       parkId: park.id,
       zoneId: zone.id,
       assetsUpserted,
+      coordsBackfilled,
       parentsLinked: linked,
       observationsInserted: liveStats.observations,
       mqttPublishes: liveStats.mqttPublishes,

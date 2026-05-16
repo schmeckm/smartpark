@@ -180,8 +180,17 @@ async function runSync(action: 'destinations' | 'parks' | 'entities' | 'live' | 
           'error'
         )
       } else if (pm && typeof pm.assetsUpserted === 'number') {
+        const parkHint =
+          pm.assetsUpserted > 0
+            ? ' Asset-Karte: denselben Park im Dropdown wählen (Integration-Park / Europa-Park).'
+            : ''
+        const backfill =
+          typeof (pm as { coordsBackfilled?: number }).coordsBackfilled === 'number' &&
+          (pm as { coordsBackfilled?: number }).coordsBackfilled! > 0
+            ? ` GPS nachgezogen: ${(pm as { coordsBackfilled?: number }).coordsBackfilled}.`
+            : ''
         push(
-          `Sync entities OK. Plattform-Master-Data: ${pm.assetsUpserted} Asset(s) für diesen Park in der DB (park_assets).`,
+          `Sync entities OK. Plattform-Master-Data: ${pm.assetsUpserted} Asset(s) in park_assets.${backfill}${parkHint}`,
           pm.assetsUpserted > 0 ? 'success' : 'info'
         )
       } else {

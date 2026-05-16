@@ -2673,6 +2673,9 @@
     "missingFlowForRun": "Sin id de flujo.",
     "showingPartial": "{shown} de {total}."
   },
+  "assetMapPage": {
+    "parkFromHeaderHint": "Cambiar el parque en la cabecera"
+  },
   "platformSetup": {
     "tab": "Configuración inicial",
     "title": "Asistente de configuración",

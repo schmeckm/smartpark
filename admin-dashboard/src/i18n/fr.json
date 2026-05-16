@@ -2665,6 +2665,9 @@
     "missingFlowForRun": "Pas d’identifiant de flux.",
     "showingPartial": "{shown} sur {total}."
   },
+  "assetMapPage": {
+    "parkFromHeaderHint": "Changer de parc dans l'en-tête"
+  },
   "platformSetup": {
     "tab": "Première installation",
     "title": "Assistant de configuration",

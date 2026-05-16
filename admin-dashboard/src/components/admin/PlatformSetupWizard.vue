@@ -32,7 +32,7 @@ const operatorSignalCount = ref<number | null>(null)
 const mirroredSignalCount = ref<number | null>(null)
 
 const canReadRides = computed(() => auth.hasPermission('rides', 'read'))
-const canIotSettings = computed(() => auth.hasPermission('iotOt', 'action', 'settings.read'))
+const canIotSettings = computed(() => auth.hasPermission('iotOt', 'settings.read'))
 const canIntegrations = computed(() => auth.hasPermission('integrations', 'read'))
 
 const activeParkName = computed(() => parkCtx.activePark?.name ?? '')

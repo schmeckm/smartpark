@@ -77,6 +77,7 @@ const isAssetSection = computed(() => ['rides', 'shows', 'restaurants', 'shops']
 const isTemplatesTab = computed(() => entityType.value === 'templates')
 
 const rows = ref<MasterDataGridRow[]>([])
+const withGeoCoordinates = ref<number | null>(null)
 const total = ref(0)
 const page = ref(0)
 const pageSize = ref(25)
@@ -212,6 +213,10 @@ const wizardEntityTab = computed((): WizardEntityTab | null => {
   if (t === 'parks' || t === 'rides' || t === 'shows' || t === 'restaurants') return t
   return null
 })
+
+const showAssetGeoColumns = computed(() =>
+  ['rides', 'attractions', 'shows', 'restaurants', 'shops'].includes(entityType.value)
+)
 
 const wizardOpen = ref(false)
 const wizardMode = ref<'create' | 'edit'>('edit')
@@ -667,10 +672,13 @@ async function loadGrid() {
     })
     rows.value = res.rows
     total.value = res.total
+    withGeoCoordinates.value =
+      typeof res.withGeoCoordinates === 'number' ? res.withGeoCoordinates : null
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
     rows.value = []
     total.value = 0
+    withGeoCoordinates.value = null
   } finally {
     loading.value = false
   }
@@ -1434,6 +1442,18 @@ watch([page, pageSize], () => {
       </div>
     </div>
 
+    <p
+      v-if="showAssetGeoColumns && !loading && withGeoCoordinates != null"
+      class="text-xs text-slate-400"
+    >
+      {{
+        t('masterDataEntity.geo.summary', {
+          withGeo: withGeoCoordinates,
+          total: total,
+        })
+      }}
+    </p>
+
     <div v-if="!isTemplatesTab" class="overflow-x-auto rounded-lg border border-slate-800">
       <table class="min-w-full text-left text-sm text-slate-200">
         <thead class="border-b border-slate-800 bg-slate-900/80 text-xs uppercase text-slate-500">
@@ -1461,6 +1481,27 @@ watch([page, pageSize], () => {
             </th>
             <th class="cursor-pointer select-none px-3 py-2" @click="setSort('externalId')">
               {{ t('masterDataEntity.table.externalId') }} {{ sortChevron('externalId') }}
+            </th>
+            <th
+              v-if="showAssetGeoColumns"
+              class="cursor-pointer select-none px-3 py-2"
+              @click="setSort('hasGeo')"
+            >
+              {{ t('masterDataEntity.table.geo') }} {{ sortChevron('hasGeo') }}
+            </th>
+            <th
+              v-if="showAssetGeoColumns"
+              class="cursor-pointer select-none px-3 py-2"
+              @click="setSort('latitude')"
+            >
+              {{ t('masterDataEntity.table.latitude') }} {{ sortChevron('latitude') }}
+            </th>
+            <th
+              v-if="showAssetGeoColumns"
+              class="cursor-pointer select-none px-3 py-2"
+              @click="setSort('longitude')"
+            >
+              {{ t('masterDataEntity.table.longitude') }} {{ sortChevron('longitude') }}
             </th>
             <th class="cursor-pointer select-none px-3 py-2" @click="setSort('status')">
               {{ t('masterDataEntity.table.status') }} {{ sortChevron('status') }}
@@ -1510,6 +1551,37 @@ watch([page, pageSize], () => {
             <td class="px-3 py-2 font-mono text-xs">{{ r.provider }}</td>
             <td class="max-w-[8rem] truncate px-3 py-2 font-mono text-xs" :title="r.externalId || ''">
               {{ r.externalId || '—' }}
+            </td>
+            <td v-if="showAssetGeoColumns" class="px-3 py-2">
+              <span
+                class="inline-flex rounded px-2 py-0.5 text-[11px] font-medium ring-1"
+                :class="
+                  r.hasGeo
+                    ? r.geoSource === 'DB'
+                      ? 'bg-emerald-900/40 text-emerald-300 ring-emerald-700/50'
+                      : 'bg-amber-900/40 text-amber-200 ring-amber-700/50'
+                    : 'bg-slate-800 text-slate-500 ring-slate-700/70'
+                "
+                :title="
+                  r.hasGeo && r.geoSource === 'SNAPSHOT'
+                    ? t('masterDataEntity.geo.snapshotOnlyHint')
+                    : undefined
+                "
+              >
+                {{
+                  r.hasGeo
+                    ? r.geoSource === 'DB'
+                      ? t('masterDataEntity.geo.yesDb')
+                      : t('masterDataEntity.geo.yesSnapshot')
+                    : t('masterDataEntity.geo.no')
+                }}
+              </span>
+            </td>
+            <td v-if="showAssetGeoColumns" class="px-3 py-2 font-mono text-[10px] text-slate-400">
+              {{ typeof r.latitude === 'number' ? r.latitude.toFixed(5) : '—' }}
+            </td>
+            <td v-if="showAssetGeoColumns" class="px-3 py-2 font-mono text-[10px] text-slate-400">
+              {{ typeof r.longitude === 'number' ? r.longitude.toFixed(5) : '—' }}
             </td>
             <td class="px-3 py-2">
               <span class="inline-flex rounded px-2 py-0.5 text-[11px] font-medium ring-1" :class="statusBadgeClass(r.status)">

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
-import * as L from 'leaflet'
+import { useI18n } from 'vue-i18n'
+import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
 type WaitHeatLeafletLayer = L.Layer & {
@@ -14,7 +15,7 @@ type WaitHeatLeafletLayer = L.Layer & {
     maxZoom?: number
   }): WaitHeatLeafletLayer
 }
-import { getGeoPressureLive, getPlatformAssets, getPlatformParks } from '@/api/client'
+import { getGeoPressureLive, getIntegrationSettings, getPlatformAssets, getPlatformParks } from '@/api/client'
 import type { GeoPressureCell, GeoPressurePayload, PlatformAsset, PlatformPark } from '@/types/api'
 import { useToast } from '@/composables/useToast'
 import { waitMinutesFromAssetSnapshot } from '@/utils/assetWaitSnapshot'
@@ -22,12 +23,21 @@ import { setApiParkContextId } from '@/utils/apiParkContext'
 import { useAuthStore } from '@/stores/auth'
 import { useParkContextStore } from '@/stores/parkContext'
 import type { ParkMapFreqBand } from '@/utils/parkMapFreqThresholds'
+import { installLeafletHeatCanvasReadbackHint } from '@/utils/leafletHeatCanvas'
 import { parkMapFreqBandFromPph, resolveParkMapFreqThresholds } from '@/utils/parkMapFreqThresholds'
 
 const { push } = useToast()
+const { t } = useI18n()
 const route = useRoute()
 const auth = useAuthStore()
 const parkCtx = useParkContextStore()
+
+const activeParkLabel = computed(() => {
+  const fromCtx = parkCtx.activePark?.name
+  if (fromCtx) return fromCtx
+  const fromList = parks.value.find((p) => p.id === parkId.value)?.name
+  return fromList ?? '—'
+})
 const parks = ref<PlatformPark[]>([])
 const parkId = ref('')
 const assets = ref<PlatformAsset[]>([])
@@ -65,6 +75,27 @@ const filterFreq = ref<string>('')
 function parkIdFromRouteQuery(): string {
   const v = route.query.parkId
   return Array.isArray(v) ? String(v[0] || '').trim() : String(v || '').trim()
+}
+
+/** Prefer route → Integration ThemeParks park → header context → name match → first list entry. */
+function pickMapParkId(
+  list: PlatformPark[],
+  queryParkId: string,
+  headerParkId: string | null,
+  integrationExternalParkId: string | null
+): string {
+  if (queryParkId && list.some((p) => p.id === queryParkId)) return queryParkId
+  const ext = integrationExternalParkId?.trim()
+  if (ext) {
+    const byIntegration = list.find((p) => String(p.externalEntityId ?? '').trim() === ext)
+    if (byIntegration) return byIntegration.id
+  }
+  if (headerParkId && list.some((p) => p.id === headerParkId)) return headerParkId
+  const byName =
+    list.find((p) => /^europa-park$/i.test(String(p.slug ?? '').trim())) ??
+    list.find((p) => /europa\s*park/i.test(String(p.name ?? '')))
+  if (byName) return byName.id
+  return list[0]?.id ?? ''
 }
 
 function assetIdFromRouteQuery(): string {
@@ -354,7 +385,7 @@ const mapDiag = computed(() => {
   if (total === 0) {
     return {
       tone: 'warn' as const,
-      text: 'Keine Assets für diesen Park — unter Integrationen ThemeParks-Park wählen, speichern und „Sync entities“ ausführen. Dann hier den gleichen Park im Dropdown wählen.',
+      text: 'Keine Assets für den gewählten Park. Nach „Sync entities“ (z. B. 227 Assets) im Dropdown einen anderen Park probieren — oft „Europa-Park“ statt Demo/erstem Eintrag. Header-Park und Karten-Park müssen übereinstimmen.',
     }
   }
   if (onMap === 0) {
@@ -715,28 +746,48 @@ function refreshWaitHeatmap() {
   mountWaitHeatCanvasAboveMarkers()
 }
 
+async function resolveMapParkId(): Promise<string> {
+  parks.value = await getPlatformParks()
+  if (!parkCtx.loaded) await parkCtx.hydrate()
+
+  const queryId = parkIdFromRouteQuery()
+  if (queryId && parks.value.some((p) => p.id === queryId)) return queryId
+
+  const headerId = parkCtx.activeParkId
+  if (headerId && parks.value.some((p) => p.id === headerId)) return headerId
+
+  let integrationExternalParkId: string | null = null
+  try {
+    const st = await getIntegrationSettings()
+    const sel = st?.selectedPark as { externalParkId?: string } | undefined | null
+    integrationExternalParkId = sel?.externalParkId ? String(sel.externalParkId).trim() : null
+  } catch {
+    /* optional */
+  }
+  const picked = pickMapParkId(parks.value, '', headerId, integrationExternalParkId)
+  if (picked && parkCtx.parks.some((p) => p.id === picked)) {
+    parkCtx.setActivePark(picked)
+  }
+  return picked
+}
+
+async function reloadAssetsForPark(opts?: { fitToMarkers?: boolean }) {
+  if (!parkId.value) return
+  clearMapSelection()
+  setApiParkContextId(parkId.value)
+  assets.value = await getPlatformAssets({ parkId: parkId.value, limit: 800 })
+  applyAssetIdFromRouteAfterAssetsLoaded()
+  renderMarkers({ fitToMarkers: opts?.fitToMarkers ?? false })
+  if (showPressureHeat.value) void loadPressureHeat()
+  refreshWaitHeatmap()
+}
+
 async function load() {
   try {
-    clearMapSelection()
-    parks.value = await getPlatformParks()
-    const q = parkIdFromRouteQuery()
-    if (q && parks.value.some((p) => p.id === q)) {
-      parkId.value = q
-    } else {
-      const ctxId = parkCtx.activeParkId
-      if (ctxId && parks.value.some((p) => p.id === ctxId)) {
-        parkId.value = ctxId
-      } else if (parks.value.length) {
-        parkId.value = parks.value[0].id
-      }
-    }
+    const id = await resolveMapParkId()
+    parkId.value = id
     if (!parkId.value) return
-    setApiParkContextId(parkId.value)
-    assets.value = await getPlatformAssets({ parkId: parkId.value, limit: 800 })
-    applyAssetIdFromRouteAfterAssetsLoaded()
-    renderMarkers({ fitToMarkers: true })
-    if (showPressureHeat.value) void loadPressureHeat()
-    refreshWaitHeatmap()
+    await reloadAssetsForPark({ fitToMarkers: true })
   } catch (e) {
     push(e instanceof Error ? e.message : 'Failed', 'error')
   }
@@ -927,14 +978,24 @@ function setBaseMapTiles() {
   baseRasterTiles.addTo(map.value)
 }
 
-watch(parkId, () => void load())
+watch(
+  () => parkCtx.activeParkId,
+  (id) => {
+    if (!id || id === parkId.value) return
+    if (parks.value.length && !parks.value.some((p) => p.id === id)) return
+    parkId.value = id
+    void reloadAssetsForPark({ fitToMarkers: true })
+  }
+)
 
 watch(
   () => route.query.parkId,
   () => {
     const q = parkIdFromRouteQuery()
-    if (q && parks.value.some((p) => p.id === q)) {
+    if (q && parks.value.some((p) => p.id === q) && q !== parkId.value) {
       parkId.value = q
+      if (parkCtx.parks.some((p) => p.id === q)) parkCtx.setActivePark(q)
+      void reloadAssetsForPark({ fitToMarkers: true })
     }
   }
 )
@@ -1008,6 +1069,7 @@ watch(selectedAssetId, (cur, prev) => {
 let mapMoveHandler: (() => void) | null = null
 let mapZoomHandler: (() => void) | null = null
 let mapClearSelect: (() => void) | null = null
+let restoreHeatCanvasGetContext: (() => void) | null = null
 
 onMounted(async () => {
   await load()
@@ -1016,6 +1078,7 @@ onMounted(async () => {
   map.value = L.map(mapEl.value, { zoomControl: true }).setView([48.27, 7.72], 13)
   setBaseMapTiles()
   ;(globalThis as unknown as { L: typeof L }).L = L
+  restoreHeatCanvasGetContext = installLeafletHeatCanvasReadbackHint()
   await import('leaflet.heat')
   const LHeat = L as unknown as { heatLayer: (latlngs: [number, number, number][], o?: Record<string, unknown>) => WaitHeatLeafletLayer }
   waitHeatLeaflet.value = LHeat.heatLayer([], {
@@ -1059,6 +1122,8 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  restoreHeatCanvasGetContext?.()
+  restoreHeatCanvasGetContext = null
   stopHotspotWaveAnimation()
   stopPressureHeatPoll()
   const m = map.value
@@ -1089,13 +1154,10 @@ onUnmounted(() => {
     <div class="flex shrink-0 flex-col gap-2">
       <div class="flex flex-wrap items-center gap-2">
         <h1 class="font-display text-lg font-semibold text-white">Interactive park map</h1>
-        <select
-          v-model="parkId"
-          class="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-white"
-          @change="void load()"
-        >
-          <option v-for="p in parks" :key="p.id" :value="p.id">{{ p.name }}</option>
-        </select>
+        <span class="text-sm text-slate-300" :title="t('assetMapPage.parkFromHeaderHint')">
+          {{ activeParkLabel }}
+        </span>
+        <span class="text-[10px] text-slate-500">{{ t('assetMapPage.parkFromHeaderHint') }}</span>
         <span class="text-xs text-slate-500">
           {{ filteredAssets.length }} shown · {{ withCoordsCount }} on map
         </span>

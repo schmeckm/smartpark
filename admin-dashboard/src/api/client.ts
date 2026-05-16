@@ -6646,6 +6646,12 @@ export type MasterDataGridRow = {
   missingProfileFieldKeys?: string[]
   lastSyncedAt: string | null
   updatedAt: string | null
+  /** WGS84 when present in park_assets (or snapshot-only preview). */
+  latitude?: number | null
+  longitude?: number | null
+  hasGeo?: boolean
+  /** DB = persisted columns; SNAPSHOT = only in provider_snapshot.lastEntity.location */
+  geoSource?: 'DB' | 'SNAPSHOT' | null
 }
 
 export type EntityTypeTemplateRow = {
@@ -6668,6 +6674,8 @@ export type MasterDataListResponse = {
   total: number
   page: number
   pageSize: number
+  /** Assets in filter scope with latitude and longitude in DB. */
+  withGeoCoordinates?: number
 }
 
 export type MasterDataExportItem = {

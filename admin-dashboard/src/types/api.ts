@@ -923,6 +923,7 @@ export interface ThemeParksSyncResult {
   parkId: string
   zoneId: string
   assetsUpserted: number
+  coordsBackfilled?: number
   parentsLinked: number
   observationsInserted: number
   mqttPublishes: number

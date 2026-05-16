@@ -202,7 +202,17 @@
       "drawer": "Drawer",
       "entityType": "Entity type",
       "code": "Code",
-      "description": "Description"
+      "description": "Description",
+      "geo": "GPS",
+      "latitude": "Latitude",
+      "longitude": "Longitude"
+    },
+    "geo": {
+      "summary": "{withGeo} of {total} assets have GPS in park_assets (latitude/longitude). The map uses the same fields.",
+      "yesDb": "Yes (DB)",
+      "yesSnapshot": "Snapshot only",
+      "no": "Missing",
+      "snapshotOnlyHint": "Coordinates only in ThemeParks snapshot — run Sync entities again or set columns via import."
     },
     "profileTooltip": {
       "columnHint": "If a template has required fields, hover the status pill to see keys and any missing values.",
@@ -3716,6 +3726,9 @@
       "openTopics": "Unified Namespace",
       "openIntegrations": "Devices & Services"
     }
+  },
+  "assetMapPage": {
+    "parkFromHeaderHint": "Change park in the header above"
   },
   "platformSetup": {
     "tab": "First-time setup",

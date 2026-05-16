@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
-import { io, type Socket } from 'socket.io-client'
+import type { Socket } from 'socket.io-client'
 import { getApiHealthSummary, getIntegrationSettings, getUnsMqttLiveStatus } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
-import { resolveApiOrigin } from '@/utils/apiOrigin'
+import { createAppSocket, disconnectAppSocket } from '@/utils/socketIo'
 
 const auth = useAuthStore()
-const apiOrigin = resolveApiOrigin()
 
 const wsConnected = ref(false)
 const mqttConnected = ref<boolean | null>(null)
@@ -55,14 +54,12 @@ function connectStatusSocket() {
   const token = auth.accessToken
   if (!token) {
     wsConnected.value = false
-    statusSocket.value?.disconnect()
+    disconnectAppSocket(statusSocket.value)
     statusSocket.value = null
     return
   }
-  statusSocket.value?.disconnect()
-  const s = apiOrigin
-    ? io(apiOrigin, { path: '/socket.io', transports: ['websocket', 'polling'], auth: { token } })
-    : io({ path: '/socket.io', transports: ['websocket', 'polling'], auth: { token } })
+  disconnectAppSocket(statusSocket.value)
+  const s = createAppSocket(token)
   statusSocket.value = s
   s.on('connect', () => {
     wsConnected.value = true
@@ -85,7 +82,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (transportTimer) clearInterval(transportTimer)
-  statusSocket.value?.disconnect()
+  disconnectAppSocket(statusSocket.value)
   statusSocket.value = null
 })
 
