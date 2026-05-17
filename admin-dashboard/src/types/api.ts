@@ -791,6 +791,22 @@ export interface AssetDowntimeEventRow {
   createdBy?: { id: string; email: string; firstName: string; lastName: string } | null
 }
 
+/** Verfügbarkeit nur innerhalb geplanter Parköffnung (Stammdaten / Kalender). */
+export interface AssetAvailabilityDuringParkHours {
+  available: boolean
+  operatingWindowMinutes: number
+  plannedDowntimeMinutes: number
+  unplannedDowntimeMinutes: number
+  availabilityPct: number | null
+  labelDe: string | null
+  scheduleProvider: string | null
+  scheduleProviderLabelDe: string | null
+  timezone: string | null
+  localDates: string[]
+  window: { from: string; to: string } | null
+  methodology: string
+}
+
 /** GET /api/v1/assets/:assetId/oee/availability-summary */
 export interface AssetAvailabilitySummary {
   assetId: string
@@ -799,6 +815,8 @@ export interface AssetAvailabilitySummary {
   plannedDowntimeMinutes: number
   unplannedDowntimeMinutes: number
   availabilityPct: number | null
+  duringParkHours: AssetAvailabilityDuringParkHours
+  effectiveAvailabilityPct: number | null
   targetAvailabilityPct: number | null
   deltaVsTargetPct: number | null
   methodology: string

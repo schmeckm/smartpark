@@ -23,6 +23,7 @@ import {
   type UnsMqttLiveEvent,
   type UnsMqttLiveStatus,
 } from '@/api/client'
+import { collectMatchingLiveEvents, pickLatestLiveEvent } from '@/composables/unsGovernanceHelpers'
 import { resolveRawMqttSparkplugGroupKey, slugifyUnsParkKey } from '@/composables/useOeeMqttCockpit'
 import { useToast } from '@/composables/useToast'
 import { askConfirm } from '@/composables/useConfirmDialog'
@@ -543,6 +544,7 @@ async function loadRideBranch(rideNode: HierarchyNode) {
   }
 
   const caps = capabilitiesCache.value[rideId]
+  const rideSlug = sparkplugDeviceForRide(rideId)
   const byComp = new Map<string, RideSignalCapabilitySignalRow[]>()
   for (const s of caps.signals) {
     const { componentKey } = parsePdmMetric(s.sparkplugMetricPreview, s.signalCode)
@@ -566,6 +568,7 @@ async function loadRideBranch(rideNode: HierarchyNode) {
           children: [],
           signal: sig,
           rideAssetId: rideId,
+          rideSlug,
           componentKey,
           park: rideNode.park,
         }
@@ -579,6 +582,7 @@ async function loadRideBranch(rideNode: HierarchyNode) {
         children: signalNodes,
         componentKey,
         rideAssetId: rideId,
+        rideSlug,
         park: rideNode.park,
       }
     })
@@ -757,73 +761,46 @@ function collapseExactNode() {
   closeTreeContextMenu()
 }
 
-function signalMatchKeys(sig: RideSignalCapabilitySignalRow): Set<string> {
-  const parts = parsePdmMetric(sig.sparkplugMetricPreview, sig.signalCode)
-  const keys = new Set<string>()
-  for (const k of [
-    sig.signalCode,
-    parts.metric,
-    `${parts.componentKey}.${parts.signalKey}`,
-    parts.signalKey,
-    parts.componentKey,
-  ]) {
-    const n = norm(String(k))
-    if (n) keys.add(n)
-  }
-  return keys
+/** Sparkplug device segment / UNS ride slug — scopes live buffer rows to one attraction. */
+function rideSlugForAsset(rideAssetId: string | undefined, hint?: string): string {
+  const fromHint = norm(String(hint || ''))
+  if (fromHint) return fromHint
+  if (!rideAssetId) return ''
+  return norm(sparkplugDeviceForRide(rideAssetId))
 }
 
-function eventMatchesSignal(e: UnsMqttLiveEvent, sig: RideSignalCapabilitySignalRow, rideSlug?: string): boolean {
-  const slug = norm(String(rideSlug || ''))
-  const belongsToRide = (): boolean => {
-    if (!slug) return true
-    const cu = norm(String(e.canonicalUnsTopic || ''))
-    if (cu.includes(`/rides/${slug}/`) || cu.endsWith(`/rides/${slug}`)) return true
-    const sp = String(e.sparkplugTopic || '').toLowerCase()
-    if (sp && sp.split('/').filter(Boolean).some((p) => norm(p) === slug)) return true
-    const dev = norm(String(e.deviceId || ''))
-    return dev === slug
+function telemetryMatchOpts(
+  sig: RideSignalCapabilitySignalRow,
+  rideAssetId: string | undefined,
+  rideSlug?: string
+) {
+  const slug = rideSlugForAsset(rideAssetId, rideSlug)
+  if (!slug) {
+    const fromPreview = String(sig.unsTopicPreview || '').match(/\/rides\/([^/]+)\//i)
+    const parsed = fromPreview?.[1]?.trim().toLowerCase()
+    if (parsed) return { rideAssetSlug: parsed }
+    return undefined
   }
-
-  const keys = signalMatchKeys(sig)
-  const m = norm(String(e.metric || ''))
-  if (m && keys.has(m)) return belongsToRide()
-  const cu = norm(String(e.canonicalUnsTopic || ''))
-  const uns = norm(String(sig.unsTopicPreview || ''))
-  if (cu && uns && (cu === uns || (uns.length > 4 && cu.startsWith(uns)))) return true
-  if (cu) {
-    for (const k of keys) {
-      if (k.length > 2 && cu.includes(k)) {
-        if (!belongsToRide()) continue
-        return true
-      }
-    }
-  }
-  const sp = String(e.sparkplugTopic || '').toLowerCase()
-  if (sp && norm(sig.signalCode) && sp.includes(norm(sig.signalCode))) return belongsToRide()
-  return false
+  return { rideAssetSlug: slug }
 }
 
-function telemetryRowsForSignal(sig: RideSignalCapabilitySignalRow, rideSlug: string | undefined, limit = 50): UnsMqttLiveEvent[] {
-  const rows = liveEvents.value.filter((ev) => eventMatchesSignal(ev, sig, rideSlug))
-  rows.sort((a, b) =>
-    String(b.receivedAt || b.timestamp).localeCompare(String(a.receivedAt || a.timestamp))
-  )
-  return rows.slice(0, limit)
-}
-
-function liveEventForSignal(sig: RideSignalCapabilitySignalRow, rideSlug?: string): UnsMqttLiveEvent | null {
-  for (const e of liveEvents.value) {
-    if (eventMatchesSignal(e, sig, rideSlug)) return e
-  }
-  return null
+function liveEventForSignal(
+  sig: RideSignalCapabilitySignalRow,
+  rideAssetId?: string,
+  rideSlug?: string
+): UnsMqttLiveEvent | null {
+  return pickLatestLiveEvent(sig, liveEvents.value, telemetryMatchOpts(sig, rideAssetId, rideSlug))
 }
 
 const selectedSignalTelemetry = computed(() => {
   const n = selectedNode.value
   if (!n || n.kind !== 'signal' || !n.signal) return [] as UnsMqttLiveEvent[]
   void liveEvents.value.length
-  return telemetryRowsForSignal(n.signal, n.rideSlug, 50)
+  return collectMatchingLiveEvents(
+    n.signal,
+    liveEvents.value,
+    telemetryMatchOpts(n.signal, n.rideAssetId, n.rideSlug)
+  ).slice(0, 50)
 })
 
 const telemetryRefreshBusy = ref(false)
@@ -877,9 +854,105 @@ function telemetryDisplayValue(e: UnsMqttLiveEvent): string {
 const liveValueDisplayForSelectedSignal = computed(() => {
   const n = selectedNode.value
   if (!n || n.kind !== 'signal' || !n.signal) return '—'
-  const ev = liveEventForSignal(n.signal, n.rideSlug)
+  const ev = liveEventForSignal(n.signal, n.rideAssetId, n.rideSlug)
   if (!ev) return '—'
   return telemetryDisplayValue(ev)
+})
+
+const canEditSignalSource = computed(() => canUpdateRides.value || canManageIntegrations.value)
+
+function rideLabelForAsset(rideAssetId: string | undefined): string {
+  if (!rideAssetId) return '—'
+  const row = rideRows.value.find((r) => r.id === rideAssetId)
+  return row?.name?.trim() || row?.slug?.trim() || rideAssetId
+}
+
+const selectedSignalTelemetryScope = computed(() => {
+  const n = selectedNode.value
+  if (!n || n.kind !== 'signal' || !n.signal || !n.rideAssetId) return null
+  return {
+    ride: rideLabelForAsset(n.rideAssetId),
+    metric: n.signal.signalCode,
+    count: selectedSignalTelemetry.value.length,
+  }
+})
+
+function defaultTestPayloadForSignal(sig: RideSignalCapabilitySignalRow): string {
+  const code = String(sig.signalCode || '').trim()
+  if (code === 'wait_time' || code === 'queue_time') {
+    return JSON.stringify({ value: 5 }, null, 2)
+  }
+  if (code === 'status' || code === 'ride_status' || code === 'operating_status') {
+    return JSON.stringify({ value: 'OPERATING' }, null, 2)
+  }
+  if (sig.valueType === 'number' || sig.valueType === 'integer') {
+    return JSON.stringify({ value: 42 }, null, 2)
+  }
+  if (sig.valueType === 'boolean') {
+    return JSON.stringify({ value: true }, null, 2)
+  }
+  return JSON.stringify({ value: 'test' }, null, 2)
+}
+
+function resolveSparkplugPublishTopic(rideId: string): string {
+  const park = parkContext.activePark
+  const preview = sparkPreviewCache.value[rideId]
+  const groupId = String(preview?.groupId || mqttGroupResolved.value || slugifyUnsParkKey(park?.slug || '')).replace(
+    /\s+/g,
+    ''
+  )
+  const topicSegs = preview?.topicPreview ? preview.topicPreview.split('/') : []
+  const edgeNodeId =
+    preview?.edgeNodeId ||
+    (topicSegs.length >= 4 ? topicSegs[3] : '') ||
+    readSparkEdges(park || null).defaultEdgeNodeId
+  const deviceId =
+    (topicSegs.length >= 5 ? topicSegs[4] : '') ||
+    preview?.topicPreview?.split('/').pop() ||
+    sparkplugDeviceForRide(rideId)
+  if (!edgeNodeId || !deviceId) return ''
+  return sparkplugDdataTopic(groupId, edgeNodeId, deviceId)
+}
+
+const sparkplugPublishTopicForSelected = computed(() => {
+  const n = selectedNode.value
+  if (!n || n.kind !== 'signal' || !n.rideAssetId) return ''
+  return resolveSparkplugPublishTopic(n.rideAssetId)
+})
+
+function signalSourceDesc(source: RideSignalSource): string {
+  if (source === 'MQTT_EDGE') return t('unsHierarchyExplorer.signalSourceMqttDesc')
+  if (source === 'SIMULATION') return t('unsHierarchyExplorer.signalSourceSimDesc')
+  if (source === 'NOT_AVAILABLE') return t('unsHierarchyExplorer.signalSourceOffDesc')
+  return ''
+}
+
+function signalSourceButtonClass(source: RideSignalSource, current: RideSignalSource): string {
+  const base = 'rounded-md px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-default'
+  if (current !== source) {
+    return `${base} border border-transparent text-slate-400 hover:border-slate-600 hover:bg-slate-800/80 hover:text-slate-200 disabled:opacity-50`
+  }
+  if (source === 'MQTT_EDGE') {
+    return `${base} border border-emerald-600/80 bg-emerald-950/50 text-emerald-100 ring-1 ring-emerald-500/30`
+  }
+  if (source === 'SIMULATION') {
+    return `${base} border border-amber-600/80 bg-amber-950/40 text-amber-100 ring-1 ring-amber-500/30`
+  }
+  return `${base} border border-rose-700/80 bg-rose-950/40 text-rose-100 ring-1 ring-rose-500/30`
+}
+
+function fillTestPayloadSample() {
+  const n = selectedNode.value
+  if (n?.kind === 'signal' && n.signal) {
+    testPayloadJson.value = defaultTestPayloadForSignal(n.signal)
+  }
+}
+
+watch(selectedId, () => {
+  const n = selectedNode.value
+  if (n?.kind === 'signal' && n.signal) {
+    testPayloadJson.value = defaultTestPayloadForSignal(n.signal)
+  }
 })
 
 function healthBadgeClass(quality: string | null | undefined): string {
@@ -934,27 +1007,12 @@ async function onPublishTestSparkplug() {
     push(t('unsHierarchyExplorer.noPermission'), 'error')
     return
   }
-  const park = parkContext.activePark
   const rideId = n.rideAssetId
-  const preview = sparkPreviewCache.value[rideId]
-  const groupId = String(preview?.groupId || mqttGroupResolved.value || slugifyUnsParkKey(park?.slug || '')).replace(
-    /\s+/g,
-    ''
-  )
-  const topicSegs = preview?.topicPreview ? preview.topicPreview.split('/') : []
-  const edgeNodeId =
-    preview?.edgeNodeId ||
-    (topicSegs.length >= 4 ? topicSegs[3] : '') ||
-    readSparkEdges(park || null).defaultEdgeNodeId
-  const deviceId =
-    (topicSegs.length >= 5 ? topicSegs[4] : '') ||
-    preview?.topicPreview?.split('/').pop() ||
-    sparkplugDeviceForRide(rideId)
-  if (!edgeNodeId || !deviceId) {
+  const topic = resolveSparkplugPublishTopic(rideId)
+  if (!topic) {
     push(t('unsHierarchyExplorer.missingTopicContext'), 'error')
     return
   }
-  const topic = sparkplugDdataTopic(groupId, edgeNodeId, deviceId)
   let payload: Record<string, unknown> = {}
   try {
     payload = JSON.parse(testPayloadJson.value || '{}') as Record<string, unknown>
@@ -1185,18 +1243,18 @@ const pdmMetricForSelected = computed(() => {
 
                 <span v-if="n.kind === 'signal' && n.signal" class="flex shrink-0 flex-wrap items-center justify-end gap-1">
                   <span
-                    v-if="liveEventForSignal(n.signal, n.rideSlug)"
+                    v-if="liveEventForSignal(n.signal, n.rideAssetId, n.rideSlug)"
                     class="max-w-[7rem] truncate rounded border border-emerald-800/70 bg-emerald-950/40 px-1 py-0.5 text-[10px] text-emerald-200"
-                    :title="String(liveEventForSignal(n.signal, n.rideSlug)?.value)"
+                    :title="String(liveEventForSignal(n.signal, n.rideAssetId, n.rideSlug)?.value)"
                   >
-                    {{ String(liveEventForSignal(n.signal, n.rideSlug)?.value ?? '—') }}
+                    {{ String(liveEventForSignal(n.signal, n.rideAssetId, n.rideSlug)?.value ?? '—') }}
                   </span>
                   <span
-                    v-if="liveEventForSignal(n.signal, n.rideSlug)?.quality"
+                    v-if="liveEventForSignal(n.signal, n.rideAssetId, n.rideSlug)?.quality"
                     class="rounded border px-1 py-0.5 text-[10px]"
-                    :class="healthBadgeClass(liveEventForSignal(n.signal, n.rideSlug)?.quality)"
+                    :class="healthBadgeClass(liveEventForSignal(n.signal, n.rideAssetId, n.rideSlug)?.quality)"
                   >
-                    {{ liveEventForSignal(n.signal, n.rideSlug)?.quality }}
+                    {{ liveEventForSignal(n.signal, n.rideAssetId, n.rideSlug)?.quality }}
                   </span>
                   <span v-if="n.signal.isActiveTopic || n.signal.isActiveSparkplug" class="rounded border border-sky-700/60 bg-sky-950/35 px-1 py-0.5 text-[10px] text-sky-200">ACTIVE</span>
                   <span
@@ -1378,17 +1436,18 @@ const pdmMetricForSelected = computed(() => {
 
           <!-- Signal -->
           <template v-else-if="selectedNode.kind === 'signal' && selectedNode.signal && selectedNode.rideAssetId">
+            <p class="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+              {{ rideLabelForAsset(selectedNode.rideAssetId) }}
+            </p>
             <h2 class="font-display text-lg font-semibold text-white">{{ selectedNode.signal.signalCode }}</h2>
-            <p class="mt-1 text-xs text-slate-400">{{ selectedNode.signal.label }}</p>
-            <dl class="mt-3 grid gap-2 text-xs">
-              <dt class="text-slate-500">signalKey</dt>
-              <dd class="font-mono text-slate-200">{{ selectedNode.signal.signalCode }}</dd>
+            <p v-if="selectedNode.signal.label" class="mt-0.5 text-xs text-slate-400">{{ selectedNode.signal.label }}</p>
+            <dl class="mt-3 grid gap-2 text-xs sm:grid-cols-[auto_1fr]">
               <dt class="text-slate-500">{{ t('unsHierarchyExplorer.unit') }}</dt>
               <dd class="text-slate-200">{{ selectedNode.signal.unit || '—' }}</dd>
               <dt class="text-slate-500">{{ t('unsHierarchyExplorer.dataType') }}</dt>
               <dd class="font-mono text-slate-200">{{ selectedNode.signal.valueType }}</dd>
               <dt class="text-slate-500">{{ t('unsHierarchyExplorer.liveValue') }}</dt>
-              <dd class="break-words font-mono text-slate-200">{{ liveValueDisplayForSelectedSignal }}</dd>
+              <dd class="break-words font-mono text-emerald-200/90">{{ liveValueDisplayForSelectedSignal }}</dd>
               <dt class="text-slate-500">{{ t('unsHierarchyExplorer.threshold') }}</dt>
               <dd class="font-mono text-slate-200">{{ thresholdDisplay(selectedNode.rideAssetId, selectedNode.signal.signalCode) }}</dd>
               <dt class="text-slate-500">ML / Forecast / PdM</dt>
@@ -1396,9 +1455,17 @@ const pdmMetricForSelected = computed(() => {
                 ML {{ selectedNode.signal.useForMl ? '✓' : '—' }} · Forecast {{ selectedNode.signal.useForForecast ? '✓' : '—' }} · PdM
                 {{ hasPdmForSignal(selectedNode.rideAssetId, selectedNode.signal.signalCode) ? '✓' : '—' }}
               </dd>
-              <dt class="text-slate-500">{{ t('unsHierarchyExplorer.flags') }}</dt>
-              <dd class="text-slate-200">
-                simulator={{ selectedNode.signal.signalSource === 'SIMULATION' }} · mqtt={{ selectedNode.signal.signalSource === 'MQTT_EDGE' }} · uns={{ selectedNode.signal.isActiveTopic }} · sparkplug={{ selectedNode.signal.isActiveSparkplug }}
+              <dt class="text-slate-500">{{ t('unsHierarchyExplorer.routeFlags') }}</dt>
+              <dd class="flex flex-wrap gap-1">
+                <span
+                  v-if="selectedNode.signal.isActiveTopic || selectedNode.signal.isActiveSparkplug"
+                  class="rounded border border-sky-700/60 bg-sky-950/35 px-1.5 py-0.5 text-[10px] text-sky-200"
+                >{{ t('unsHierarchyExplorer.routeActive') }}</span>
+                <span
+                  v-else-if="selectedNode.signal.isPreparedTopic || selectedNode.signal.isPreparedSparkplug"
+                  class="rounded border border-amber-700/50 bg-amber-950/30 px-1.5 py-0.5 text-[10px] text-amber-100"
+                >{{ t('unsHierarchyExplorer.routePrepared') }}</span>
+                <span v-else class="text-slate-500">—</span>
               </dd>
             </dl>
 
@@ -1416,6 +1483,12 @@ const pdmMetricForSelected = computed(() => {
                   {{ telemetryRefreshBusy ? '…' : t('unsHierarchyExplorer.refreshTelemetry') }}
                 </button>
               </div>
+              <p
+                v-if="selectedSignalTelemetryScope"
+                class="mt-1 rounded border border-slate-800/80 bg-slate-900/50 px-2 py-1 text-[11px] text-slate-400"
+              >
+                {{ t('unsHierarchyExplorer.telemetryScope', selectedSignalTelemetryScope) }}
+              </p>
               <p class="mt-1 text-[11px] text-slate-500">{{ t('unsHierarchyExplorer.telemetryHint') }}</p>
               <p v-if="!canReadIntegrations" class="mt-2 text-[11px] text-slate-500">
                 {{ t('unsHierarchyExplorer.telemetryNoPermission') }}
@@ -1469,60 +1542,85 @@ const pdmMetricForSelected = computed(() => {
               </div>
             </div>
 
-            <div class="mt-4 space-y-2">
-              <p class="text-xs font-medium uppercase tracking-wide text-slate-500">UNS path</p>
+            <div class="mt-5 space-y-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+              <p class="text-xs font-medium uppercase tracking-wide text-slate-500">{{ t('unsHierarchyExplorer.pathsTitle') }}</p>
+              <p class="text-[10px] text-slate-500">UNS</p>
               <code class="block break-all rounded border border-slate-800 bg-slate-950/80 p-2 text-[11px] text-sky-200/90">{{ unsPathForSelected }}</code>
               <button type="button" class="text-xs text-brand-400 hover:underline" @click="copyText(String(unsPathForSelected))">
                 {{ t('unsHierarchyExplorer.copy') }}
               </button>
-              <p class="text-xs font-medium uppercase tracking-wide text-slate-500">Sparkplug · DDATA</p>
+              <p class="text-[10px] text-slate-500">Sparkplug · DDATA</p>
               <code class="block break-all rounded border border-slate-800 bg-slate-950/80 p-2 text-[11px] text-emerald-200/95">{{ sparkplugLineForSelected }}</code>
               <button type="button" class="text-xs text-brand-400 hover:underline" @click="copyText(String(sparkplugLineForSelected))">
                 {{ t('unsHierarchyExplorer.copy') }}
               </button>
-              <p class="text-xs font-medium uppercase tracking-wide text-slate-500">Metric preview</p>
+              <p class="text-[10px] text-slate-500">{{ t('unsHierarchyExplorer.metricPreviewLabel') }}</p>
               <code class="block break-all rounded border border-slate-800 bg-slate-950/80 p-2 text-[11px] text-amber-100/90">{{ pdmMetricForSelected }}</code>
             </div>
 
-            <div class="mt-4 flex flex-wrap gap-2">
-              <button
-                type="button"
-                class="rounded-lg border border-slate-600 bg-slate-900 px-2 py-1 text-xs font-medium text-white hover:border-slate-500 disabled:opacity-50"
-                :disabled="signalBusy || selectedNode.signal.signalSource === 'MQTT_EDGE'"
-                @click="saveSignalCapability(selectedNode.rideAssetId, selectedNode.signal.signalCatalogId, 'MQTT_EDGE')"
+            <div class="mt-5 border-t border-slate-800 pt-4">
+              <p class="text-xs font-medium uppercase tracking-wide text-slate-500">{{ t('unsHierarchyExplorer.signalSourceTitle') }}</p>
+              <p class="mt-1 text-[11px] text-slate-500">{{ signalSourceDesc(selectedNode.signal.signalSource as RideSignalSource) }}</p>
+              <div
+                class="mt-2 flex flex-wrap gap-1 rounded-lg border border-slate-700 bg-slate-900/80 p-1"
+                role="group"
+                :aria-label="t('unsHierarchyExplorer.signalSourceTitle')"
               >
-                {{ t('unsHierarchyExplorer.enableMqtt') }}
-              </button>
-              <button
-                type="button"
-                class="rounded-lg border border-slate-600 bg-slate-900 px-2 py-1 text-xs font-medium text-white hover:border-slate-500 disabled:opacity-50"
-                :disabled="signalBusy || selectedNode.signal.signalSource === 'SIMULATION'"
-                @click="saveSignalCapability(selectedNode.rideAssetId, selectedNode.signal.signalCatalogId, 'SIMULATION')"
-              >
-                {{ t('unsHierarchyExplorer.setSimulation') }}
-              </button>
-              <button
-                type="button"
-                class="rounded-lg border border-rose-800/70 bg-rose-950/30 px-2 py-1 text-xs font-medium text-rose-100 hover:border-rose-700 disabled:opacity-50"
-                :disabled="signalBusy || selectedNode.signal.signalSource === 'NOT_AVAILABLE'"
-                @click="confirmDisableSignal(selectedNode.rideAssetId!, selectedNode.signal.signalCatalogId)"
-              >
-                {{ t('unsHierarchyExplorer.disableSignal') }}
-              </button>
+                <button
+                  type="button"
+                  :class="signalSourceButtonClass('MQTT_EDGE', selectedNode.signal.signalSource as RideSignalSource)"
+                  :disabled="signalBusy || !canEditSignalSource || selectedNode.signal.signalSource === 'MQTT_EDGE'"
+                  @click="saveSignalCapability(selectedNode.rideAssetId, selectedNode.signal.signalCatalogId, 'MQTT_EDGE')"
+                >
+                  {{ t('unsHierarchyExplorer.enableMqtt') }}
+                </button>
+                <button
+                  type="button"
+                  :class="signalSourceButtonClass('SIMULATION', selectedNode.signal.signalSource as RideSignalSource)"
+                  :disabled="signalBusy || !canEditSignalSource || selectedNode.signal.signalSource === 'SIMULATION'"
+                  @click="saveSignalCapability(selectedNode.rideAssetId, selectedNode.signal.signalCatalogId, 'SIMULATION')"
+                >
+                  {{ t('unsHierarchyExplorer.setSimulation') }}
+                </button>
+                <button
+                  type="button"
+                  :class="signalSourceButtonClass('NOT_AVAILABLE', selectedNode.signal.signalSource as RideSignalSource)"
+                  :disabled="signalBusy || !canEditSignalSource || selectedNode.signal.signalSource === 'NOT_AVAILABLE'"
+                  @click="confirmDisableSignal(selectedNode.rideAssetId!, selectedNode.signal.signalCatalogId)"
+                >
+                  {{ t('unsHierarchyExplorer.disableSignal') }}
+                </button>
+              </div>
+              <p v-if="!canEditSignalSource" class="mt-2 text-[11px] text-slate-500">{{ t('unsHierarchyExplorer.noPermission') }}</p>
             </div>
 
             <div class="mt-6 border-t border-slate-800 pt-4">
               <p class="text-xs font-medium uppercase tracking-wide text-slate-500">{{ t('unsHierarchyExplorer.testPublish') }}</p>
+              <p class="mt-1 text-[11px] text-slate-500">{{ t('unsHierarchyExplorer.publishPayloadHint') }}</p>
+              <p class="mt-2 text-[10px] font-medium uppercase tracking-wide text-slate-500">{{ t('unsHierarchyExplorer.publishTargetLabel') }}</p>
+              <code
+                v-if="sparkplugPublishTopicForSelected"
+                class="mt-1 block break-all rounded border border-slate-800 bg-slate-950/80 p-2 text-[11px] text-emerald-200/95"
+              >{{ sparkplugPublishTopicForSelected }}</code>
+              <p v-else class="mt-1 text-[11px] text-amber-200/90">{{ t('unsHierarchyExplorer.missingTopicContext') }}</p>
+              <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
+                <span class="text-[10px] text-slate-500">{{ t('unsHierarchyExplorer.publishPayloadLabel') }}</span>
+                <button type="button" class="text-[10px] text-brand-400 hover:underline" @click="fillTestPayloadSample">
+                  {{ t('unsHierarchyExplorer.publishFillSample') }}
+                </button>
+              </div>
               <textarea
                 v-model="testPayloadJson"
-                rows="3"
-                class="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 font-mono text-[11px] text-slate-200"
+                rows="4"
+                class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 font-mono text-[11px] text-slate-200"
+                :aria-label="t('unsHierarchyExplorer.publishPayloadLabel')"
               />
               <div class="mt-2 flex flex-wrap gap-2">
                 <button
                   type="button"
                   class="rounded-lg border border-emerald-800/70 bg-emerald-950/30 px-2 py-1 text-xs font-medium text-emerald-100 hover:border-emerald-600 disabled:opacity-50"
-                  :disabled="!canManageIntegrations"
+                  :disabled="!canManageIntegrations || !sparkplugPublishTopicForSelected"
+                  :title="!sparkplugPublishTopicForSelected ? t('unsHierarchyExplorer.missingTopicContext') : undefined"
                   @click="onPublishTestSparkplug"
                 >
                   {{ t('unsHierarchyExplorer.publishCustom') }}
@@ -1536,7 +1634,9 @@ const pdmMetricForSelected = computed(() => {
                   {{ t('unsHierarchyExplorer.syntheticPublish') }}
                 </button>
               </div>
-              <p class="mt-2 text-[11px] text-slate-500">{{ t('unsHierarchyExplorer.publishHint') }}</p>
+              <p class="mt-2 rounded border border-amber-900/40 bg-amber-950/20 px-2 py-1.5 text-[11px] text-amber-100/90">
+                {{ t('unsHierarchyExplorer.syntheticWarning') }}
+              </p>
             </div>
           </template>
         </div>

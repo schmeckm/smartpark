@@ -2,7 +2,7 @@
 schemaVersion: 1
 adapterKey: predictive_maintenance
 installedAt: '2026-05-14T20:27:45.306Z'
-updatedAt: '2026-05-16T11:38:14.781Z'
+updatedAt: '2026-05-17T07:35:12.629Z'
 configJson:
   parkSlug: europa_park
   demoTelemetryEnabled: true

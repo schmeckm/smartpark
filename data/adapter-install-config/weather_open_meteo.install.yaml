@@ -2,7 +2,7 @@
 schemaVersion: 1
 adapterKey: weather_open_meteo
 installedAt: '2026-04-26T17:54:10.830Z'
-updatedAt: '2026-05-16T11:37:55.707Z'
+updatedAt: '2026-05-17T07:35:13.662Z'
 configJson:
   latitude: 48.2661
   parkSlug: europa_park

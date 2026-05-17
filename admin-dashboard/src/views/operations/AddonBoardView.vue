@@ -1675,7 +1675,16 @@ function swdecPillWrapClass(pillKey: string) {
                 </dd>
               </div>
               <div class="flex justify-between gap-2 rounded-md border border-slate-800/80 bg-slate-950/30 px-3 py-2">
-                <dt class="text-slate-500">{{ t('addonBoard.availabilityToday') }}</dt>
+                <dt class="text-slate-500">
+                  {{ t('addonBoard.availabilityToday') }}
+                  <span
+                    v-if="rideOperations.operatingWindowMinutesToday != null"
+                    class="mt-0.5 block text-[10px] font-normal text-slate-600"
+                  >
+                    {{ t('addonBoard.availabilityTodayParkHoursHint') }}
+                    ({{ rideOperations.operatingWindowMinutesToday }} min)
+                  </span>
+                </dt>
                 <dd class="text-right font-medium">
                   {{
                     rideOperations.availabilityPercentToday != null

@@ -29,6 +29,11 @@ const {
 const { slugifyName } = require('../modules/uns/uns-topic-generator.service');
 const { sparkplugDeviceTopicSegment } = require('../modules/uns/sparkplug-topic-builder.service');
 const env = require('../config/env');
+const { operatingIntervalsForParkLocalToday } = require('./park-operating-window.service');
+const {
+  sumDowntimeMsInIntervals,
+  availabilityPctFromDowntime,
+} = require('../utils/downtime-interval-aggregate.util');
 
 const RIDE_PAYLOAD_CACHE_TTL_MS = Number(process.env.ADDON_BOARD_CACHE_MS || 5000);
 const RELIABILITY_LOOKBACK_DAYS = 30;
@@ -125,6 +130,8 @@ async function rideOperationsRollupByAsset(parkId, assetIds) {
     unplannedMinToday: 0,
     plannedMinToday: 0,
     availabilityPctToday: null,
+    availabilitySourceToday: null,
+    operatingWindowMinutesToday: null,
     mttrMinutes: null,
     mtbfHours: null,
   });
@@ -132,11 +139,28 @@ async function rideOperationsRollupByAsset(parkId, assetIds) {
   if (!assetIds.length) return out;
   for (const id of assetIds) out.set(String(id), empty());
 
-  const dayStart = startOfUtcDay();
-  const dayEnd = new Date(dayStart.getTime() + 86400000);
   const now = new Date();
-  const windowEnd = now < dayEnd ? now : dayEnd;
-  const dayWindowMs = windowEnd.getTime() - dayStart.getTime();
+  let dayStart = startOfUtcDay();
+  let windowEnd = now;
+  let dayWindowMs = windowEnd.getTime() - dayStart.getTime();
+  /** @type {Array<{ startMs: number, endMs: number }>} */
+  let todayIntervals = [];
+  let availabilitySourceToday = 'UTC_CALENDAR_DAY';
+
+  try {
+    const opToday = await operatingIntervalsForParkLocalToday(parkId, now);
+    if (opToday.intervals.length > 0) {
+      todayIntervals = opToday.intervals;
+      dayStart = new Date(opToday.intervals[0].startMs);
+      windowEnd = new Date(Math.min(now.getTime(), opToday.intervals[opToday.intervals.length - 1].endMs));
+      dayWindowMs = opToday.operatingWindowMs;
+      availabilitySourceToday = 'PARK_OPERATING_HOURS';
+    }
+  } catch {
+    const dayEnd = new Date(dayStart.getTime() + 86400000);
+    windowEnd = now < dayEnd ? now : dayEnd;
+    dayWindowMs = windowEnd.getTime() - dayStart.getTime();
+  }
 
   const histFrom = new Date(now.getTime() - RELIABILITY_LOOKBACK_DAYS * 86400000);
   const histWindowMs = now.getTime() - histFrom.getTime();
@@ -152,23 +176,50 @@ async function rideOperationsRollupByAsset(parkId, assetIds) {
     limit: 8000,
   });
 
-  for (const r of rowsToday) {
-    const aid = r.assetId ? String(r.assetId) : null;
-    if (!aid || !out.has(aid)) continue;
-    const rec = out.get(aid);
-    const s = new Date(r.startedAt).getTime();
-    const eCap = r.endedAt ? new Date(r.endedAt).getTime() : now.getTime();
-    const ms = clipOverlapMs(s, eCap, dayStart.getTime(), windowEnd.getTime());
-    if (ms <= 0) continue;
-    if (r.planned) rec.plannedMinToday += ms / 60000;
-    else rec.unplannedMinToday += ms / 60000;
-    out.set(aid, rec);
+  if (todayIntervals.length) {
+    const opMinToday = Math.round(dayWindowMs / 60000);
+    for (const id of assetIds) {
+      const rec = out.get(String(id));
+      rec.operatingWindowMinutesToday = opMinToday;
+      rec.availabilitySourceToday = availabilitySourceToday;
+    }
+    const byAsset = new Map();
+    for (const r of rowsToday) {
+      const aid = r.assetId ? String(r.assetId) : null;
+      if (!aid || !out.has(aid)) continue;
+      if (!byAsset.has(aid)) byAsset.set(aid, []);
+      byAsset.get(aid).push(r);
+    }
+    for (const [aid, assetRows] of byAsset) {
+      const rec = out.get(aid);
+      const { plannedMs, unplannedMs } = sumDowntimeMsInIntervals(assetRows, todayIntervals, windowEnd);
+      rec.plannedMinToday = plannedMs / 60000;
+      rec.unplannedMinToday = unplannedMs / 60000;
+      rec.operatingWindowMinutesToday = Math.round(dayWindowMs / 60000);
+      rec.availabilitySourceToday = availabilitySourceToday;
+      out.set(aid, rec);
+    }
+  } else {
+    for (const r of rowsToday) {
+      const aid = r.assetId ? String(r.assetId) : null;
+      if (!aid || !out.has(aid)) continue;
+      const rec = out.get(aid);
+      const s = new Date(r.startedAt).getTime();
+      const eCap = r.endedAt ? new Date(r.endedAt).getTime() : now.getTime();
+      const ms = clipOverlapMs(s, eCap, dayStart.getTime(), windowEnd.getTime());
+      if (ms <= 0) continue;
+      if (r.planned) rec.plannedMinToday += ms / 60000;
+      else rec.unplannedMinToday += ms / 60000;
+      out.set(aid, rec);
+    }
   }
 
   for (const [, rec] of out) {
     if (dayWindowMs > 0) {
       const upMs = rec.unplannedMinToday * 60000;
-      rec.availabilityPctToday = Math.round(Math.max(0, Math.min(100, ((dayWindowMs - upMs) / dayWindowMs) * 100)) * 10) / 10;
+      rec.availabilityPctToday =
+        Math.round(availabilityPctFromDowntime(dayWindowMs, upMs) * 10) / 10;
+      if (!rec.availabilitySourceToday) rec.availabilitySourceToday = availabilitySourceToday;
     }
   }
 
@@ -791,7 +842,12 @@ function buildRideBoardRow(
       },
       efficiency: {
         availabilityPercent: availabilityPercentBoard,
-        availabilitySource: availFromDowntime != null ? 'DOWNTIME_EVENTS_UTCDAY' : 'SNAPSHOT_HEURISTIC',
+        availabilitySource:
+          availFromDowntime != null
+            ? roll.availabilitySourceToday === 'PARK_OPERATING_HOURS'
+              ? 'DOWNTIME_EVENTS_PARK_HOURS'
+              : 'DOWNTIME_EVENTS_UTCDAY'
+            : 'SNAPSHOT_HEURISTIC',
         performancePercent: performancePct(snap, rm),
         qualityPercent: 95,
         rideOeePercent: liveMqtt?.rideOeePercent ?? snapshotOeePct,
@@ -805,6 +861,8 @@ function buildRideBoardRow(
         unplannedDowntimeMinutesToday: roll.unplannedMinToday != null ? Math.round(roll.unplannedMinToday * 10) / 10 : 0,
         plannedDowntimeMinutesToday: roll.plannedMinToday != null ? Math.round(roll.plannedMinToday * 10) / 10 : 0,
         availabilityPercentToday: availFromDowntime,
+        availabilitySourceToday: roll.availabilitySourceToday ?? null,
+        operatingWindowMinutesToday: roll.operatingWindowMinutesToday ?? null,
         mttrMinutes: roll.mttrMinutes ?? null,
         mtbfHours: roll.mtbfHours ?? null,
         reliabilityLookbackDays: RELIABILITY_LOOKBACK_DAYS,

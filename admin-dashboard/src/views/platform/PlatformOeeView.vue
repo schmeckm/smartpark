@@ -120,7 +120,7 @@ function initDefaultRangeAndFormTimes() {
   const now = new Date()
   const wall = wallDateTimePartsForPrefs(now, prefs.value)
   rangeFromDate.value = wall.date
-  rangeFromTime.value = '00:00'
+  rangeFromTime.value = '09:00'
   rangeToDate.value = wall.date
   rangeToTime.value = wall.time
   formStartedDate.value = wall.date
@@ -236,6 +236,16 @@ const paretoDisplay = computed((): AssetDowntimeParetoPayload | null => {
     items,
   }
 })
+
+/** Primäre Verfügbarkeit: während Parköffnung wenn ermittelbar, sonst Gesamtfenster. */
+const displayAvailabilityPct = computed(() => {
+  const s = summary.value
+  if (!s) return null
+  if (s.effectiveAvailabilityPct != null) return s.effectiveAvailabilityPct
+  return s.availabilityPct
+})
+
+const duringParkHours = computed(() => summary.value?.duringParkHours ?? null)
 
 /** Anteil geplant/ungeplant am Zeitfenster — erklärt die Verfügbarkeit (A) zusammen mit der Methodik. */
 const availabilityBreakdown = computed(() => {
@@ -455,7 +465,8 @@ function renderOeeGaugeChart() {
     oeeGaugeChart?.clear()
     return
   }
-  if (s.availabilityPct == null || Number.isNaN(s.availabilityPct)) {
+  const pct = displayAvailabilityPct.value
+  if (pct == null || Number.isNaN(pct)) {
     oeeGaugeChart.clear()
     oeeGaugeChart.setOption(
       {
@@ -481,7 +492,7 @@ function renderOeeGaugeChart() {
     return
   }
 
-  const val = Math.max(0, Math.min(100, s.availabilityPct))
+  const val = Math.max(0, Math.min(100, pct))
 
   oeeGaugeChart.clear()
   oeeGaugeChart.setOption(
@@ -964,6 +975,11 @@ onUnmounted(() => {
       (leer im Profil = Browser-Zeitzone). Tabellen unten im Datums-/Zeitformat der Kontoeinstellungen.
     </p>
     <p v-if="!isWindowValid" class="mt-1 text-xs text-amber-400">Ungültiges Zeitfenster: „Von“ muss vor „Bis“ liegen.</p>
+    <p class="mt-2 text-xs text-slate-500">
+      Die Kennzahl <strong class="font-medium text-slate-400">A — Verfügbarkeit</strong> bezieht sich auf die
+      <strong class="font-medium text-slate-400">geplante Parköffnung</strong> im gewählten Zeitraum (Stammdaten oder
+      ThemeParks-Kalender), nicht auf die Nacht außerhalb der Öffnungszeiten.
+    </p>
 
     <div v-if="summary" class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
       <h2 class="text-sm font-medium text-white">OEE &amp; Verfügbarkeit</h2>
@@ -990,7 +1006,7 @@ onUnmounted(() => {
               >
                 <span class="text-slate-300">A — Verfügbarkeit</span>
                 <span class="font-mono text-lg text-emerald-300">
-                  {{ summary.availabilityPct != null ? `${summary.availabilityPct}%` : '—' }}
+                  {{ displayAvailabilityPct != null ? `${displayAvailabilityPct}%` : '—' }}
                 </span>
               </li>
               <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-800/80 bg-slate-900/40 px-3 py-2">
@@ -1016,15 +1032,33 @@ onUnmounted(() => {
                 {{ summary.deltaVsTargetPct != null ? `${summary.deltaVsTargetPct}` : '—' }}
               </dd>
             </div>
+            <div v-if="duringParkHours?.available">
+              <dt class="text-xs text-slate-500">Betriebsfenster (Park offen)</dt>
+              <dd class="text-slate-300">
+                <span class="font-mono">{{ duringParkHours.operatingWindowMinutes }} min</span>
+                <span v-if="duringParkHours.labelDe" class="text-slate-500"> · {{ duringParkHours.labelDe }}</span>
+              </dd>
+            </div>
+            <div v-if="duringParkHours?.available">
+              <dt class="text-xs text-slate-500">Stillstand in Öffnungszeit</dt>
+              <dd class="text-slate-300">
+                geplant {{ duringParkHours.plannedDowntimeMinutes }} · ungeplant
+                {{ duringParkHours.unplannedDowntimeMinutes }}
+              </dd>
+            </div>
             <div>
-              <dt class="text-xs text-slate-500">Zeitfenster</dt>
+              <dt class="text-xs text-slate-500">Abfragefenster gesamt</dt>
               <dd class="font-mono text-slate-300">{{ summary.windowMinutes }} min</dd>
             </div>
             <div>
-              <dt class="text-xs text-slate-500">Stillstand (min)</dt>
+              <dt class="text-xs text-slate-500">Stillstand (gesamtes Fenster)</dt>
               <dd class="text-slate-300">
                 geplant {{ summary.plannedDowntimeMinutes }} · ungeplant {{ summary.unplannedDowntimeMinutes }}
               </dd>
+            </div>
+            <div v-if="duringParkHours?.scheduleProviderLabelDe" class="sm:col-span-2">
+              <dt class="text-xs text-slate-500">Öffnungszeiten-Quelle</dt>
+              <dd class="text-slate-400">{{ duringParkHours.scheduleProviderLabelDe }}</dd>
             </div>
             <div v-if="availabilityBreakdown" class="sm:col-span-2">
               <dt class="text-xs text-slate-500">Anteil am Fenster</dt>

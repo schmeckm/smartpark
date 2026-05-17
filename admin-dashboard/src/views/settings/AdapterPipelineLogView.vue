@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import {
@@ -62,7 +62,10 @@ const troubleshootingOpen = ref(false)
 const actionConfirmOpen = ref(false)
 type ActionKind = 'run' | 'pause' | 'activate' | 'disable'
 const confirmActionKind = ref<ActionKind | null>(null)
-const confirmRow = ref<AdapterOpsGridRow | null>(null)
+const confirmTargets = ref<AdapterOpsGridRow[]>([])
+const selectedAdapterKeys = ref<string[]>([])
+const bulkActionBusy = ref(false)
+const selectAllCheckboxRef = ref<HTMLInputElement | null>(null)
 const undoAction = ref<{
   adapterKey: string
   label: string
@@ -138,6 +141,24 @@ const filteredAdapters = computed(() => {
   })
   return sorted
 })
+
+const selectedAdapterKeySet = computed(() => new Set(selectedAdapterKeys.value))
+
+const allFilteredSelected = computed(
+  () =>
+    filteredAdapters.value.length > 0 &&
+    filteredAdapters.value.every((row) => selectedAdapterKeySet.value.has(row.adapterKey))
+)
+
+const someFilteredSelected = computed(
+  () =>
+    filteredAdapters.value.some((row) => selectedAdapterKeySet.value.has(row.adapterKey)) &&
+    !allFilteredSelected.value
+)
+
+const selectedFilteredRows = computed(() =>
+  filteredAdapters.value.filter((row) => selectedAdapterKeySet.value.has(row.adapterKey))
+)
 
 const missedSchedules = computed(() => {
   const now = Date.now()
@@ -333,41 +354,74 @@ function isThemeParksKey(k: string) {
 async function runAction(
   label: string,
   fn: (key: string) => Promise<unknown>,
-  row: AdapterOpsGridRow
+  row: AdapterOpsGridRow,
+  opts?: { skipRefresh?: boolean; quietToast?: boolean }
 ) {
   if (!canManageIntegrations.value) return false
   actionBusyKey.value = row.adapterKey
   try {
     await fn(row.adapterKey)
-    push(`${label}: ${row.adapterKey}`, 'success')
-    await refreshAll()
-    if (drawerOpen.value && drawerKey.value === row.adapterKey) {
-      detailLoading.value = true
-      try {
-        detail.value = await getAdapterOpsStatus(row.adapterKey)
-      } finally {
-        detailLoading.value = false
+    if (!opts?.quietToast) push(`${label}: ${row.adapterKey}`, 'success')
+    if (!opts?.skipRefresh) {
+      await refreshAll()
+      if (drawerOpen.value && drawerKey.value === row.adapterKey) {
+        detailLoading.value = true
+        try {
+          detail.value = await getAdapterOpsStatus(row.adapterKey)
+        } finally {
+          detailLoading.value = false
+        }
       }
     }
     return true
   } catch (e) {
-    push(e instanceof Error ? e.message : `${label} failed`, 'error')
+    if (!opts?.quietToast) push(e instanceof Error ? e.message : `${label} failed`, 'error')
     return false
   } finally {
     actionBusyKey.value = null
   }
 }
 
+function toggleAdapterSelection(adapterKey: string, checked: boolean) {
+  const s = new Set(selectedAdapterKeys.value)
+  if (checked) s.add(adapterKey)
+  else s.delete(adapterKey)
+  selectedAdapterKeys.value = [...s]
+}
+
+function toggleSelectAllFiltered(checked: boolean) {
+  if (checked) {
+    const s = new Set(selectedAdapterKeys.value)
+    for (const row of filteredAdapters.value) s.add(row.adapterKey)
+    selectedAdapterKeys.value = [...s]
+  } else {
+    const visible = new Set(filteredAdapters.value.map((row) => row.adapterKey))
+    selectedAdapterKeys.value = selectedAdapterKeys.value.filter((key) => !visible.has(key))
+  }
+}
+
+function clearAdapterSelection() {
+  selectedAdapterKeys.value = []
+}
+
 function openActionConfirm(kind: ActionKind, row: AdapterOpsGridRow) {
   confirmActionKind.value = kind
-  confirmRow.value = row
+  confirmTargets.value = [row]
+  actionConfirmOpen.value = true
+}
+
+function openBulkActionConfirm(kind: ActionKind) {
+  const rows = selectedFilteredRows.value
+  if (!rows.length) return
+  confirmActionKind.value = kind
+  confirmTargets.value = rows
   actionConfirmOpen.value = true
 }
 
 function closeActionConfirm() {
   actionConfirmOpen.value = false
   confirmActionKind.value = null
-  confirmRow.value = null
+  confirmTargets.value = []
 }
 
 function setUndoAction(
@@ -403,12 +457,60 @@ async function performAction(
   if (kind !== 'run') push('Action executed. Undo is available for 8 seconds.', 'info')
 }
 
+const adapterActionHandlers: Record<
+  ActionKind,
+  { label: string; fn: (key: string) => Promise<unknown> }
+> = {
+  run: { label: 'Run now', fn: postAdapterOpsRunNow },
+  pause: { label: 'Paused', fn: postAdapterOpsPause },
+  activate: { label: 'Activated', fn: postAdapterOpsActivate },
+  disable: { label: 'Disabled', fn: postAdapterOpsDisable },
+}
+
+async function performBulkAction(kind: ActionKind, targets: AdapterOpsGridRow[]) {
+  if (!canManageIntegrations.value || !targets.length) return
+  const { label, fn } = adapterActionHandlers[kind]
+  bulkActionBusy.value = true
+  let ok = 0
+  let fail = 0
+  try {
+    for (const row of targets) {
+      const success = await runAction(label, fn, row, { skipRefresh: true, quietToast: true })
+      if (success) ok += 1
+      else fail += 1
+    }
+    await refreshAll()
+    if (drawerOpen.value && drawerKey.value) {
+      detailLoading.value = true
+      try {
+        detail.value = await getAdapterOpsStatus(drawerKey.value)
+      } catch {
+        detail.value = null
+      } finally {
+        detailLoading.value = false
+      }
+    }
+    const processed = new Set(targets.map((row) => row.adapterKey))
+    selectedAdapterKeys.value = selectedAdapterKeys.value.filter((key) => !processed.has(key))
+    if (ok > 0 && fail === 0) {
+      push(t('adapterOpsDashboard.bulkSuccess', { n: ok, action: label }), 'success')
+    } else if (ok > 0) {
+      push(t('adapterOpsDashboard.bulkPartial', { ok, fail }), 'warning')
+    } else {
+      push(t('adapterOpsDashboard.bulkFailed', { n: fail }), 'error')
+    }
+  } finally {
+    bulkActionBusy.value = false
+  }
+}
+
 async function confirmAndRun() {
-  if (!confirmActionKind.value || !confirmRow.value) return
+  if (!confirmActionKind.value || !confirmTargets.value.length) return
   const kind = confirmActionKind.value
-  const row = confirmRow.value
+  const targets = [...confirmTargets.value]
   closeActionConfirm()
-  await performAction(kind, row)
+  if (targets.length === 1) await performAction(kind, targets[0]!)
+  else await performBulkAction(kind, targets)
 }
 
 async function undoLastAction() {
@@ -478,6 +580,18 @@ function applyFilterToUrl() {
   router.replace({ name: 'adapter-pipeline-log', query: ak ? { adapterKey: ak } : {} })
   void loadPipeline()
 }
+
+watch(adapters, (list) => {
+  const ok = new Set(list.map((row) => row.adapterKey))
+  selectedAdapterKeys.value = selectedAdapterKeys.value.filter((key) => ok.has(key))
+})
+
+watch([allFilteredSelected, someFilteredSelected], () => {
+  nextTick(() => {
+    const el = selectAllCheckboxRef.value
+    if (el) el.indeterminate = someFilteredSelected.value
+  })
+})
 
 onMounted(() => {
   const q = route.query.adapterKey
@@ -784,10 +898,72 @@ onBeforeUnmount(() => {
           <option value="asc">Asc</option>
         </select>
       </div>
+      <div
+        v-if="selectedAdapterKeys.length"
+        class="space-y-2 border-b border-slate-800 bg-slate-950/50 px-3 py-2"
+      >
+        <div class="flex flex-wrap gap-1">
+          <button
+            type="button"
+            class="rounded border border-slate-700 px-2 py-1 text-[11px] text-brand-300 hover:bg-slate-800 disabled:opacity-40"
+            :disabled="!canManageIntegrations || bulkActionBusy"
+            @click="openBulkActionConfirm('run')"
+          >
+            {{ t('adapterOpsDashboard.bulkRun') }}
+          </button>
+          <button
+            type="button"
+            class="rounded border border-slate-700 px-2 py-1 text-[11px] text-amber-300 hover:bg-slate-800 disabled:opacity-40"
+            :disabled="!canManageIntegrations || bulkActionBusy"
+            @click="openBulkActionConfirm('pause')"
+          >
+            {{ t('adapterOpsDashboard.bulkPause') }}
+          </button>
+          <button
+            type="button"
+            class="rounded border border-slate-700 px-2 py-1 text-[11px] text-emerald-300 hover:bg-slate-800 disabled:opacity-40"
+            :disabled="!canManageIntegrations || bulkActionBusy"
+            @click="openBulkActionConfirm('activate')"
+          >
+            {{ t('adapterOpsDashboard.bulkActivate') }}
+          </button>
+          <button
+            type="button"
+            class="rounded border border-slate-700 px-2 py-1 text-[11px] text-slate-400 hover:bg-slate-800 disabled:opacity-40"
+            :disabled="!canManageIntegrations || bulkActionBusy"
+            @click="openBulkActionConfirm('disable')"
+          >
+            {{ t('adapterOpsDashboard.bulkDisable') }}
+          </button>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-xs text-slate-300">{{ t('adapterOpsDashboard.selectedCount', { n: selectedAdapterKeys.length }) }}</span>
+          <button
+            type="button"
+            class="rounded border border-slate-700 px-2 py-0.5 text-[11px] text-slate-400 hover:bg-slate-800"
+            :disabled="bulkActionBusy"
+            @click="clearAdapterSelection"
+          >
+            {{ t('adapterOpsDashboard.clearSelection') }}
+          </button>
+        </div>
+      </div>
       <div class="overflow-x-auto">
-        <table class="w-full min-w-[1100px] border-collapse text-left text-xs">
+        <table class="w-full min-w-[1120px] border-collapse text-left text-xs">
           <thead>
             <tr class="sticky top-0 z-10 border-b border-slate-800 bg-slate-950/95 text-[10px] uppercase tracking-wide text-slate-500">
+              <th class="w-8 px-2 py-2">
+                <input
+                  ref="selectAllCheckboxRef"
+                  type="checkbox"
+                  class="rounded border-slate-600 bg-slate-950 accent-brand-500"
+                  :checked="allFilteredSelected"
+                  :disabled="!filteredAdapters.length || dashboardLoading || bulkActionBusy"
+                  :aria-label="t('adapterOpsDashboard.selectAll')"
+                  @click.stop
+                  @change="toggleSelectAllFiltered(($event.target as HTMLInputElement).checked)"
+                />
+              </th>
               <th class="px-2 py-2">Name</th>
               <th class="px-2 py-2">Key</th>
               <th class="px-2 py-2">Type</th>
@@ -805,17 +981,28 @@ onBeforeUnmount(() => {
           </thead>
           <tbody>
             <tr v-if="dashboardLoading && !adapters.length">
-              <td colspan="13" class="px-3 py-6 text-center text-slate-500">Loading adapters…</td>
+              <td colspan="14" class="px-3 py-6 text-center text-slate-500">Loading adapters…</td>
             </tr>
             <tr v-else-if="!filteredAdapters.length">
-              <td colspan="13" class="px-3 py-6 text-center text-slate-500">No installed adapters.</td>
+              <td colspan="14" class="px-3 py-6 text-center text-slate-500">No installed adapters.</td>
             </tr>
             <tr
               v-for="row in filteredAdapters"
               :key="row.adapterKey"
               class="cursor-pointer border-b border-slate-800/80 hover:bg-slate-900/50"
+              :class="selectedAdapterKeySet.has(row.adapterKey) ? 'bg-brand-950/20' : ''"
               @click="openDrawer(row.adapterKey)"
             >
+              <td class="px-2 py-1.5" @click.stop>
+                <input
+                  type="checkbox"
+                  class="rounded border-slate-600 bg-slate-950 accent-brand-500"
+                  :checked="selectedAdapterKeySet.has(row.adapterKey)"
+                  :disabled="bulkActionBusy"
+                  :aria-label="t('adapterOpsDashboard.selectRow', { key: row.adapterKey })"
+                  @change="toggleAdapterSelection(row.adapterKey, ($event.target as HTMLInputElement).checked)"
+                />
+              </td>
               <td class="max-w-[140px] truncate px-2 py-1.5 font-medium text-slate-100">{{ row.name }}</td>
               <td class="whitespace-nowrap px-2 py-1.5 font-mono text-[11px] text-brand-300">{{ row.adapterKey }}</td>
               <td class="px-2 py-1.5 text-slate-400">{{ row.adapterType || '—' }}</td>
@@ -845,11 +1032,12 @@ onBeforeUnmount(() => {
               <td class="px-2 py-1.5 font-mono text-slate-300">{{ row.errorsCount }}</td>
               <td class="px-2 py-1.5 font-mono text-slate-300">{{ row.successRate != null ? `${row.successRate}%` : '—' }}</td>
               <td class="px-2 py-1.5">
-                <div class="flex flex-wrap gap-1" @click.stop>
+                <div class="flex flex-col gap-1" @click.stop>
+                  <div class="flex flex-wrap gap-1">
                   <button
                     type="button"
                     class="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-brand-300 hover:bg-slate-800 disabled:opacity-40"
-                    :disabled="!canManageIntegrations || actionBusyKey === row.adapterKey"
+                    :disabled="!canManageIntegrations || actionBusyKey === row.adapterKey || bulkActionBusy"
                     :title="
                       !canManageIntegrations
                         ? 'Benötigt Berechtigung integrations.manage (z. B. Admin, Operator, Operations Manager)'
@@ -862,7 +1050,7 @@ onBeforeUnmount(() => {
                   <button
                     type="button"
                     class="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-amber-300 hover:bg-slate-800 disabled:opacity-40"
-                    :disabled="!canManageIntegrations || actionBusyKey === row.adapterKey"
+                    :disabled="!canManageIntegrations || actionBusyKey === row.adapterKey || bulkActionBusy"
                     :title="
                       !canManageIntegrations
                         ? 'Benötigt Berechtigung integrations.manage (z. B. Admin, Operator, Operations Manager)'
@@ -875,7 +1063,7 @@ onBeforeUnmount(() => {
                   <button
                     type="button"
                     class="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-emerald-300 hover:bg-slate-800 disabled:opacity-40"
-                    :disabled="!canManageIntegrations || actionBusyKey === row.adapterKey"
+                    :disabled="!canManageIntegrations || actionBusyKey === row.adapterKey || bulkActionBusy"
                     :title="
                       !canManageIntegrations
                         ? 'Benötigt Berechtigung integrations.manage (z. B. Admin, Operator, Operations Manager)'
@@ -888,7 +1076,7 @@ onBeforeUnmount(() => {
                   <button
                     type="button"
                     class="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-400 hover:bg-slate-800 disabled:opacity-40"
-                    :disabled="!canManageIntegrations || actionBusyKey === row.adapterKey"
+                    :disabled="!canManageIntegrations || actionBusyKey === row.adapterKey || bulkActionBusy"
                     :title="
                       !canManageIntegrations
                         ? 'Benötigt Berechtigung integrations.manage (z. B. Admin, Operator, Operations Manager)'
@@ -898,22 +1086,25 @@ onBeforeUnmount(() => {
                   >
                     {{ actionBusyKey === row.adapterKey ? actionBusyLabel('disable') : 'Disable' }}
                   </button>
-                  <RouterLink
-                    class="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
-                    :to="{ name: 'integration-detail', params: { id: encodeURIComponent(row.adapterKey) } }"
-                  >
-                    Config
-                  </RouterLink>
-                  <RouterLink
-                    class="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-sky-300 hover:bg-slate-800"
-                    :to="{
-                      name: 'integration-detail',
-                      params: { id: encodeURIComponent(row.adapterKey) },
-                      hash: '#package-readme',
-                    }"
-                  >
-                    Docs
-                  </RouterLink>
+                  </div>
+                  <div class="flex flex-wrap gap-1">
+                    <RouterLink
+                      class="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
+                      :to="{ name: 'integration-detail', params: { id: encodeURIComponent(row.adapterKey) } }"
+                    >
+                      Config
+                    </RouterLink>
+                    <RouterLink
+                      class="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-sky-300 hover:bg-slate-800"
+                      :to="{
+                        name: 'integration-detail',
+                        params: { id: encodeURIComponent(row.adapterKey) },
+                        hash: '#package-readme',
+                      }"
+                    >
+                      Docs
+                    </RouterLink>
+                  </div>
                 </div>
               </td>
             </tr>
@@ -997,17 +1188,40 @@ onBeforeUnmount(() => {
 
     <Teleport to="body">
       <div
-        v-if="actionConfirmOpen && confirmRow"
+        v-if="actionConfirmOpen && confirmTargets.length"
         class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
         @click.self="closeActionConfirm"
       >
         <div class="w-full max-w-md rounded-xl border border-slate-700 bg-slate-950 p-4 shadow-2xl">
-          <h3 class="text-sm font-semibold text-slate-100">Confirm adapter action</h3>
-          <p class="mt-2 text-sm text-slate-300">
+          <h3 class="text-sm font-semibold text-slate-100">
+            {{
+              confirmTargets.length > 1
+                ? t('adapterOpsDashboard.bulkConfirmTitle')
+                : 'Confirm adapter action'
+            }}
+          </h3>
+          <p v-if="confirmTargets.length === 1" class="mt-2 text-sm text-slate-300">
             Continue with
             <span class="font-semibold text-slate-100">{{ confirmActionKind }}</span>
-            for <span class="font-mono text-brand-300">{{ confirmRow.adapterKey }}</span
+            for <span class="font-mono text-brand-300">{{ confirmTargets[0]!.adapterKey }}</span
             >?
+          </p>
+          <p v-else class="mt-2 text-sm text-slate-300">
+            {{
+              t('adapterOpsDashboard.bulkConfirmBody', {
+                action: confirmActionKind,
+                n: confirmTargets.length,
+              })
+            }}
+          </p>
+          <ul
+            v-if="confirmTargets.length > 1 && confirmTargets.length <= 8"
+            class="mt-2 max-h-32 overflow-y-auto rounded border border-slate-800 bg-slate-900/60 px-2 py-1 font-mono text-[11px] text-brand-300"
+          >
+            <li v-for="row in confirmTargets" :key="row.adapterKey">{{ row.adapterKey }}</li>
+          </ul>
+          <p v-else-if="confirmTargets.length > 8" class="mt-2 text-xs text-slate-400">
+            {{ confirmTargets.slice(0, 5).map((r) => r.adapterKey).join(', ') }} … (+{{ confirmTargets.length - 5 }})
           </p>
           <p class="mt-2 text-xs text-slate-400">This action updates adapter state immediately.</p>
           <div class="mt-4 flex justify-end gap-2">

@@ -5,6 +5,11 @@ const { Op } = require('sequelize');
 const { AssetDowntimeEvent, ParkAsset, AssetTarget } = require('../models');
 const { AppError } = require('../utils/app-error');
 const { OEE_REASON_CODES } = require('../constants/oee-reason-codes');
+const { operatingIntervalsForPark } = require('./park-operating-window.service');
+const {
+  sumDowntimeMsInIntervals,
+  availabilityPctFromDowntime,
+} = require('../utils/downtime-interval-aggregate.util');
 
 function parseIso(d) {
   const x = new Date(d);
@@ -182,12 +187,13 @@ class AssetDowntimeService {
   }
 
   async availabilitySummary(assetId, { from, to }, parkScopeId) {
-    await this.assertAssetScoped(assetId, parkScopeId);
+    const asset = await this.assertAssetScoped(assetId, parkScopeId);
     const fromD = parseIso(from);
     const toD = parseIso(to);
     if (!fromD || !toD || fromD >= toD) throw new AppError('Invalid range', 400, { code: 'INVALID_RANGE' });
 
     const windowMs = toD.getTime() - fromD.getTime();
+    const now = new Date();
     const rows = await AssetDowntimeEvent.findAll({
       where: {
         assetId,
@@ -198,7 +204,6 @@ class AssetDowntimeService {
 
     let plannedMs = 0;
     let unplannedMs = 0;
-    const now = new Date();
 
     for (const r of rows) {
       const s = new Date(r.startedAt);
@@ -217,6 +222,56 @@ class AssetDowntimeService {
     const target = await AssetTarget.findByPk(assetId, { attributes: ['targetAvailabilityPct', 'targetOeePct'] });
     const targetAvail = target?.targetAvailabilityPct != null ? Number(target.targetAvailabilityPct) : null;
 
+    let duringParkHours = null;
+    try {
+      const opWin = await operatingIntervalsForPark(asset.parkId, fromD, toD);
+      const { plannedMs: pOp, unplannedMs: uOp } = sumDowntimeMsInIntervals(rows, opWin.intervals, toD);
+      const opMs = opWin.operatingWindowMs;
+      const availOp = availabilityPctFromDowntime(opMs, uOp);
+      const firstIv = opWin.intervals[0];
+      const lastIv = opWin.intervals.length ? opWin.intervals[opWin.intervals.length - 1] : null;
+      duringParkHours = {
+        available: opMs > 0,
+        operatingWindowMinutes: Math.round(opMs / 60000),
+        plannedDowntimeMinutes: Math.round(pOp / 60000),
+        unplannedDowntimeMinutes: Math.round(uOp / 60000),
+        availabilityPct: availOp != null ? Math.round(availOp * 100) / 100 : null,
+        labelDe: opWin.labelDe,
+        scheduleProvider: opWin.scheduleProvider,
+        scheduleProviderLabelDe: opWin.scheduleProviderLabelDe,
+        timezone: opWin.timezone,
+        localDates: opWin.localDates,
+        window:
+          firstIv && lastIv
+            ? { from: new Date(firstIv.startMs).toISOString(), to: new Date(lastIv.endMs).toISOString() }
+            : null,
+        methodology:
+          opMs > 0
+            ? 'Verfügbarkeit während geplanter Parköffnung ≈ (Betriebsfenster − ungeplante Stillstände) / Betriebsfenster. Nur Schnittmenge mit Öffnungszeiten (Stammdaten oder Kalender).'
+            : 'Kein Betriebsfenster im gewählten Zeitraum (Park zu oder keine Öffnungszeiten hinterlegt).',
+      };
+    } catch {
+      duringParkHours = {
+        available: false,
+        operatingWindowMinutes: 0,
+        plannedDowntimeMinutes: 0,
+        unplannedDowntimeMinutes: 0,
+        availabilityPct: null,
+        labelDe: null,
+        scheduleProvider: null,
+        scheduleProviderLabelDe: null,
+        timezone: null,
+        localDates: [],
+        window: null,
+        methodology: 'Parköffnungszeiten konnten nicht aufgelöst werden.',
+      };
+    }
+
+    const primaryAvail =
+      duringParkHours?.available && duringParkHours.availabilityPct != null
+        ? duringParkHours.availabilityPct
+        : availabilityPct;
+
     return {
       assetId,
       window: { from: fromD.toISOString(), to: toD.toISOString() },
@@ -224,13 +279,18 @@ class AssetDowntimeService {
       plannedDowntimeMinutes: Math.round(plannedMs / 60000),
       unplannedDowntimeMinutes: Math.round(unplannedMs / 60000),
       availabilityPct: availabilityPct != null ? Math.round(availabilityPct * 100) / 100 : null,
+      duringParkHours,
+      /** Bevorzugt Verfügbarkeit in Parköffnungszeit, sonst volles Abfragefenster. */
+      effectiveAvailabilityPct: primaryAvail != null ? Math.round(primaryAvail * 100) / 100 : null,
       targetAvailabilityPct: targetAvail,
       deltaVsTargetPct:
-        availabilityPct != null && targetAvail != null
-          ? Math.round((availabilityPct - targetAvail) * 100) / 100
+        primaryAvail != null && targetAvail != null
+          ? Math.round((primaryAvail - targetAvail) * 100) / 100
           : null,
       methodology:
-        'MVP: Verfügbarkeit ≈ (Fenster − ungeplante Stillstandszeit) / Fenster. Geplante Stopps werden separat ausgewiesen.',
+        duringParkHours?.available
+          ? `${duringParkHours.methodology} Zusätzlich: Gesamtfenster ${Math.round(windowMs / 60000)} min (ungeplant ${Math.round(unplannedMs / 60000)} min).`
+          : 'MVP: Verfügbarkeit ≈ (Fenster − ungeplante Stillstandszeit) / Fenster. Geplante Stopps werden separat ausgewiesen. Parköffnung im Zeitraum nicht ermittelbar — nur Gesamtfenster.',
     };
   }
 
