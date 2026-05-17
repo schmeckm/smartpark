@@ -560,30 +560,104 @@ class AiParkForecastService {
   }
 
   async getEntitySummariesForPark(externalParkId, { provider = 'themeparks_wiki', limit = 150 } = {}) {
-    const latestRows = await RideFeatureSnapshot.findAll({
-      where: { provider, externalParkId },
-      order: [['snapshotAt', 'DESC']],
-      limit: 3000,
+    const cap = Math.min(500, Math.max(1, Number(limit) || 150));
+    const factors = await this.getFactorConfigs();
+
+    const distinctEntities = await sequelize.query(
+      `SELECT DISTINCT ON (external_entity_id) external_entity_id AS "externalEntityId",
+              entity_type AS "entityType"
+       FROM ride_feature_snapshots_5m
+       WHERE provider = :provider AND external_park_id = :externalParkId
+       ORDER BY external_entity_id, snapshot_at DESC
+       LIMIT :cap`,
+      {
+        replacements: { provider, externalParkId, cap },
+        type: sequelize.QueryTypes.SELECT,
+      }
+    );
+
+    if (!distinctEntities.length) return [];
+
+    const entityIds = distinctEntities.map((r) => r.externalEntityId).filter(Boolean);
+    const lookbackMs = 72 * 5 * 60 * 1000;
+    const since = new Date(Date.now() - lookbackMs);
+
+    const allPoints = await RideFeatureSnapshot.findAll({
+      where: {
+        provider,
+        externalParkId,
+        externalEntityId: { [Op.in]: entityIds },
+        snapshotAt: { [Op.gte]: since },
+      },
+      order: [
+        ['externalEntityId', 'ASC'],
+        ['snapshotAt', 'DESC'],
+      ],
     });
-    const seen = new Map();
-    for (const row of latestRows) {
-      if (!row.externalEntityId || seen.has(row.externalEntityId)) continue;
-      seen.set(row.externalEntityId, {
-        externalEntityId: row.externalEntityId,
-        entityType: row.entityType || null,
-      });
-      if (seen.size >= limit) break;
+
+    const byEntity = new Map();
+    for (const row of allPoints) {
+      const eid = row.externalEntityId;
+      if (!eid) continue;
+      let list = byEntity.get(eid);
+      if (!list) {
+        list = [];
+        byEntity.set(eid, list);
+      }
+      if (list.length < 72) list.push(row);
     }
+
+    const [parkRow, rideLatestRows] = await Promise.all([
+      ParkFeatureSnapshot.findOne({
+        where: { provider, externalParkId },
+        order: [['snapshotAt', 'DESC']],
+      }),
+      RideFeatureSnapshot.findAll({
+        where: { provider, externalParkId, externalEntityId: { [Op.in]: entityIds } },
+        order: [['snapshotAt', 'DESC']],
+        limit: entityIds.length * 2,
+      }),
+    ]);
+    const parkPlain = parkRow ? parkRow.get({ plain: true }) : null;
+    const ridePlainByEntity = new Map();
+    for (const r of rideLatestRows) {
+      const eid = r.externalEntityId;
+      if (eid && !ridePlainByEntity.has(eid)) {
+        ridePlainByEntity.set(eid, r.get({ plain: true }));
+      }
+    }
+
     const out = [];
-    for (const item of seen.values()) {
-      // Sequential to keep DB pressure low on shared dev setups.
+    for (const item of distinctEntities) {
+      const eid = item.externalEntityId;
+      const points = byEntity.get(eid) || [];
+      if (points.length >= MIN_SERIES_POINTS) {
+        let summary = this.buildFromSeries(points, {
+          externalParkId,
+          externalEntityId: eid,
+          provider,
+          entityType: item.entityType || undefined,
+          factors,
+          scope: 'RIDE',
+        });
+        const ridePlain = ridePlainByEntity.get(eid) || null;
+        const xLayer = applyXLayerToForecast(summary, { parkSnap: parkPlain, rideSnap: ridePlain });
+        summary = await mergeMlEnterpriseLayer(xLayer, {
+          internalParkId: ridePlain?.internalParkId ?? parkPlain?.internalParkId ?? null,
+          internalAssetId: ridePlain?.internalAssetId ?? null,
+          parkSnap: parkPlain,
+          rideSnap: ridePlain,
+        });
+        out.push(summary);
+        continue;
+      }
       // eslint-disable-next-line no-await-in-loop
-      const summary = await this.getEntitySummary(item.externalEntityId, {
+      const fallback = await this.getEntitySummary(eid, {
         provider,
         externalParkId,
         entityType: item.entityType || undefined,
       });
-      out.push(summary);
+      out.push(fallback);
     }
     return out;
   }

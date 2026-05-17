@@ -113,6 +113,7 @@ async function fetchEnvelope<T>(path: string, init?: RequestInit): Promise<T> {
   }
   const res = await fetch(url(path), {
     ...init,
+    signal: init?.signal,
     // Avoid stale GET (e.g. model list) after mutations when a cache/proxy/browser would reuse responses.
     cache: init?.cache ?? 'no-store',
     headers: {
@@ -4788,6 +4789,20 @@ export async function getLatestTrafficSnapshotDebug(
 ): Promise<TrafficCorridorSnapshotDebugPayload> {
   return fetchEnvelope<TrafficCorridorSnapshotDebugPayload>(
     `/api/v1/traffic-corridors/${encodeURIComponent(corridorId)}/snapshots/latest/debug`
+  )
+}
+
+export async function listTrafficCorridorSnapshots(
+  corridorId: string,
+  query?: { from?: string; to?: string; limit?: number }
+): Promise<{ corridor: TrafficCorridorRow; snapshots: TrafficCorridorSnapshotRow[] }> {
+  const q = new URLSearchParams()
+  if (query?.from) q.set('from', query.from)
+  if (query?.to) q.set('to', query.to)
+  if (query?.limit != null) q.set('limit', String(query.limit))
+  const qs = q.toString()
+  return fetchEnvelope<{ corridor: TrafficCorridorRow; snapshots: TrafficCorridorSnapshotRow[] }>(
+    `/api/v1/traffic-corridors/${encodeURIComponent(corridorId)}/snapshots${qs ? `?${qs}` : ''}`
   )
 }
 

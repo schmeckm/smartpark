@@ -26,9 +26,11 @@ class ZoneRepository {
     });
   }
 
-  findAllActive() {
+  findAllActive(options = {}) {
+    const where = { status: 'ACTIVE' };
+    if (options.parkId) where.parkId = options.parkId;
     return Zone.findAll({
-      where: { status: 'ACTIVE' },
+      where,
       order: [['name', 'ASC']],
     });
   }

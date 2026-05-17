@@ -113,9 +113,22 @@ class AssetsRepository {
     return zone;
   }
 
-  findAssetByExternal(externalSource, externalEntityId) {
+  findAssetByExternal(externalSource, externalEntityId, transaction) {
     return this.m.ParkAsset.findOne({
       where: { externalSource: String(externalSource), externalEntityId: String(externalEntityId) },
+      transaction,
+    });
+  }
+
+  findAssetsByExternalIds(externalSource, externalEntityIds, transaction) {
+    const ids = [...new Set(externalEntityIds.map((id) => String(id)).filter(Boolean))];
+    if (!ids.length) return Promise.resolve([]);
+    return this.m.ParkAsset.findAll({
+      where: {
+        externalSource: String(externalSource),
+        externalEntityId: { [Op.in]: ids },
+      },
+      transaction,
     });
   }
 

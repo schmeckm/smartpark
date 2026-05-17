@@ -11,7 +11,7 @@ const { logger } = require('../utils/logger');
 const { MANUAL_ALGORITHMS } = require('./ai-studio.service');
 const { FEATURE_STORE_TRAIN_FEATURES } = require('./ai-studio-dataset.service');
 
-const { ParkAsset, AiStudioModel } = models;
+const { ParkAsset, AiStudioModel, AiStudioBatchJob } = models;
 
 /** @type {Map<string, object>} */
 const batchStatusByPark = new Map();
@@ -75,22 +75,77 @@ async function loadPreTrainSnapshot(parkId, entityId) {
   return { previousAlgorithm, previousR2 };
 }
 
-function getBatchTrainStatus(parkId) {
-  const key = String(parkId);
-  const s = batchStatusByPark.get(key);
-  if (!s) return { ...defaultStatus() };
+function statusFromRow(row) {
+  if (!row) return { ...defaultStatus() };
+  const plain = row.get ? row.get({ plain: true }) : row;
+  const isRunning = plain.status === 'running';
   return {
-    batchId: s.batchId ?? null,
-    total: s.total,
-    current: s.current,
-    currentEntityId: s.currentEntityId,
-    currentEntityLabel: s.currentEntityLabel || '',
-    results: Array.isArray(s.results) ? [...s.results] : [],
-    isRunning: Boolean(s.isRunning),
-    error: s.error ?? null,
-    startedAt: s.startedAt ?? null,
-    finishedAt: s.finishedAt ?? null,
+    batchId: plain.batchId ?? null,
+    total: plain.total ?? 0,
+    current: plain.current ?? 0,
+    currentEntityId: plain.currentEntityId || '',
+    currentEntityLabel: plain.currentEntityLabel || '',
+    results: Array.isArray(plain.resultsJson) ? [...plain.resultsJson] : [],
+    isRunning,
+    error: plain.error ?? null,
+    startedAt: plain.startedAt ?? null,
+    finishedAt: plain.finishedAt ?? null,
   };
+}
+
+async function loadLatestBatchJob(parkId) {
+  return AiStudioBatchJob.findOne({
+    where: { parkId: String(parkId) },
+    order: [['startedAt', 'DESC']],
+  });
+}
+
+async function persistBatchJob(parkId, status) {
+  const key = String(parkId);
+  const batchId = status.batchId;
+  if (!batchId) return;
+
+  const payload = {
+    parkId: key,
+    batchId,
+    status: status.isRunning ? 'running' : status.error ? 'failed' : 'completed',
+    total: status.total,
+    current: status.current,
+    currentEntityId: status.currentEntityId || null,
+    currentEntityLabel: status.currentEntityLabel || null,
+    resultsJson: status.results || [],
+    error: status.error ?? null,
+    startedAt: status.startedAt ? new Date(status.startedAt) : new Date(),
+    finishedAt: status.finishedAt ? new Date(status.finishedAt) : null,
+  };
+
+  const existing = await AiStudioBatchJob.findOne({ where: { parkId: key, batchId } });
+  if (existing) {
+    await existing.update(payload);
+  } else {
+    await AiStudioBatchJob.create(payload);
+  }
+}
+
+async function getBatchTrainStatus(parkId) {
+  const key = String(parkId);
+  const mem = batchStatusByPark.get(key);
+  if (mem) {
+    return {
+      batchId: mem.batchId ?? null,
+      total: mem.total,
+      current: mem.current,
+      currentEntityId: mem.currentEntityId,
+      currentEntityLabel: mem.currentEntityLabel || '',
+      results: Array.isArray(mem.results) ? [...mem.results] : [],
+      isRunning: Boolean(mem.isRunning),
+      error: mem.error ?? null,
+      startedAt: mem.startedAt ?? null,
+      finishedAt: mem.finishedAt ?? null,
+    };
+  }
+  const row = await loadLatestBatchJob(key);
+  return statusFromRow(row);
 }
 
 /**
@@ -108,7 +163,12 @@ async function applyParkRideBatchAlgorithms(parkId, batchId, studioService) {
     throw new AppError('studioService is required', 500, { code: 'INTERNAL' });
   }
 
-  const s = batchStatusByPark.get(key);
+  let s = batchStatusByPark.get(key);
+  if (!s) {
+    const row = await loadLatestBatchJob(key);
+    s = row ? statusFromRow(row) : null;
+    if (s && s.batchId) batchStatusByPark.set(key, { ...s, results: [...(s.results || [])] });
+  }
   if (!s) {
     throw new AppError('No batch status for this park', 404, { code: 'BATCH_NOT_FOUND' });
   }
@@ -275,11 +335,12 @@ async function startParkRideBatchTrain(parkId, studioService, options = {}) {
     finishedAt: null,
   };
   batchStatusByPark.set(key, status);
+  await persistBatchJob(key, status);
 
   const trainOpts = { strategy, algorithm, features, featureStoreTrainingOptions };
 
   setImmediate(() => {
-    void runBatchLoop(key, studioService, assets, trainOpts).catch((e) => {
+    void runBatchLoop(key, studioService, assets, trainOpts).catch(async (e) => {
       const st = batchStatusByPark.get(key);
       if (st) {
         st.isRunning = false;
@@ -287,6 +348,7 @@ async function startParkRideBatchTrain(parkId, studioService, options = {}) {
         st.finishedAt = new Date().toISOString();
         st.currentEntityId = '';
         st.currentEntityLabel = '';
+        await persistBatchJob(key, st);
       }
     });
   });
@@ -353,12 +415,15 @@ async function runBatchLoop(parkKey, studioService, assets, trainOpts) {
       }
 
       status.current = i + 1;
+      // eslint-disable-next-line no-await-in-loop
+      await persistBatchJob(parkKey, status);
     }
   } finally {
     status.isRunning = false;
     status.currentEntityId = '';
     status.currentEntityLabel = '';
     status.finishedAt = new Date().toISOString();
+    await persistBatchJob(parkKey, status);
   }
 }
 

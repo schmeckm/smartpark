@@ -20,10 +20,20 @@ class RecommendationRepository {
   }
 
   findAllOpen(options = {}) {
+    const include = JSON.parse(JSON.stringify(defaultInclude));
+    if (options.parkId) {
+      const eventInc = include.find((i) => i.as === 'event');
+      const zoneInc = eventInc?.include?.find((i) => i.as === 'zone');
+      if (zoneInc) {
+        zoneInc.where = { parkId: options.parkId };
+        zoneInc.required = true;
+        eventInc.required = true;
+      }
+    }
     return Recommendation.findAll({
       where: { status: 'OPEN' },
       order: [['createdAt', 'DESC']],
-      include: defaultInclude,
+      include,
       limit: options.limit || 500,
     });
   }

@@ -25,11 +25,17 @@ function mountTrafficSnapshotsRouter(controller) {
   });
   const r = express.Router();
   r.post('/traffic/snapshots/poll', requirePermission('rides', 'update'), validate(trafficSnapshotPollBody), controller.postPollTrafficSnapshots);
+  // Tests mount minimal stack; production adds requireParkContext + rate limit.
   r.get('/traffic/snapshots/latest', requirePermission('rides', 'read'), validate(trafficLatestQuery, 'query'), controller.getLatestTrafficSnapshots);
   app.use(r);
   app.use(errorHandler);
   return app;
 }
+
+const accessStub = {
+  parkScopeId: () => null,
+  assertParkRouteScoped: () => {},
+};
 
 test('POST /traffic/snapshots/poll → 403 when TomTom disabled', async () => {
   const ctrl = proxyquire('./traffic-snapshots.controller', {
@@ -40,11 +46,29 @@ test('POST /traffic/snapshots/poll → 403 when TomTom disabled', async () => {
         }
       },
     },
+    '../services/traffic-attendance/traffic-corridor-access': accessStub,
+  });
+  const app = mountTrafficSnapshotsRouter(ctrl);
+  const parkId = '22222222-2222-4222-8222-222222222222';
+  const res = await request(app).post('/traffic/snapshots/poll').send({ parkId });
+  assert.equal(res.status, 403);
+  assert.equal(res.body.code, 'TOMTOM_DISABLED');
+});
+
+test('POST /traffic/snapshots/poll → 422 when parkId missing', async () => {
+  const ctrl = proxyquire('./traffic-snapshots.controller', {
+    '../services/traffic-attendance/traffic-snapshot.service': {
+      TrafficSnapshotService: class {
+        async pollEnabledCorridors() {
+          return { polledAt: new Date().toISOString(), results: [] };
+        }
+      },
+    },
+    '../services/traffic-attendance/traffic-corridor-access': accessStub,
   });
   const app = mountTrafficSnapshotsRouter(ctrl);
   const res = await request(app).post('/traffic/snapshots/poll').send({});
-  assert.equal(res.status, 403);
-  assert.equal(res.body.code, 'TOMTOM_DISABLED');
+  assert.equal(res.status, 422);
 });
 
 test('POST /traffic/snapshots/poll → 503 when API key missing', async () => {
@@ -56,9 +80,11 @@ test('POST /traffic/snapshots/poll → 503 when API key missing', async () => {
         }
       },
     },
+    '../services/traffic-attendance/traffic-corridor-access': accessStub,
   });
   const app = mountTrafficSnapshotsRouter(ctrl);
-  const res = await request(app).post('/traffic/snapshots/poll').send({});
+  const parkId = '22222222-2222-4222-8222-222222222222';
+  const res = await request(app).post('/traffic/snapshots/poll').send({ parkId });
   assert.equal(res.status, 503);
   assert.equal(res.body.code, 'TOMTOM_API_KEY_MISSING');
 });
@@ -83,6 +109,7 @@ test('GET /traffic/snapshots/latest returns envelope', async () => {
         }
       },
     },
+    '../services/traffic-attendance/traffic-corridor-access': accessStub,
   });
   const app = mountTrafficSnapshotsRouter(ctrl);
   const res = await request(app).get('/traffic/snapshots/latest').query({ parkId });

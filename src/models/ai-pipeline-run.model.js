@@ -15,6 +15,7 @@ function defineAiPipelineRun(sequelize) {
       labelsWritten: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'labels_written' },
       featureStoreError: { type: DataTypes.TEXT, allowNull: true, field: 'feature_store_error' },
       scoringError: { type: DataTypes.TEXT, allowNull: true, field: 'scoring_error' },
+      parkId: { type: DataTypes.UUID, allowNull: true, field: 'park_id' },
     },
     {
       sequelize,

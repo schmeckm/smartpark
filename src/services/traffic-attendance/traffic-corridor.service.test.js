@@ -2,7 +2,14 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildLatestSnapshotDetail } = require('./traffic-corridor.service');
+const proxyquire = require('proxyquire').noCallThru();
+const { buildLatestSnapshotDetail } = proxyquire('./traffic-corridor.service', {
+  '../../models': { TrafficCorridor: class {} },
+  './traffic-corridor-snapshot.repository': {
+    findLatestSnapshotsByCorridorIds: async () => new Map(),
+    listSnapshotsForCorridor: async () => [],
+  },
+});
 
 test('buildLatestSnapshotDetail strips raw and surfaces warning', () => {
   const d = buildLatestSnapshotDetail(

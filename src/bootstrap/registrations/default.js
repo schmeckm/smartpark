@@ -34,6 +34,9 @@ const { MlTrainingSchedulerService } = require('../../services/ml/ml-training-sc
 const { IntegrationFlowSchedulerService } = require('../../modules/integration-flow/services/integration-flow-scheduler.service');
 const { IntegrationFlowRetrySchedulerService } = require('../../modules/integration-flow/services/integration-flow-retry-scheduler.service');
 const {
+  TrafficSnapshotRetentionSchedulerService,
+} = require('../../services/traffic-attendance/traffic-snapshot-retention.scheduler.service');
+const {
   startAttractionOeeSimulator,
   stopAttractionOeeSimulator,
 } = require('../../services/attraction-oee-simulator.service');
@@ -177,6 +180,14 @@ function registerDefaultBoot(lifecycle, ctx) {
         return null;
       }
       const stop = new IntegrationFlowRetrySchedulerService().startIfEnabled();
+      return typeof stop === 'function' ? stop : null;
+    },
+  });
+
+  lifecycle.register({
+    name: 'scheduler:traffic-snapshot-retention',
+    run: async () => {
+      const stop = await new TrafficSnapshotRetentionSchedulerService().start();
       return typeof stop === 'function' ? stop : null;
     },
   });

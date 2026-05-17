@@ -263,8 +263,11 @@ class AiRecommendationScoringService {
     return { recommendation: hydrated, score: row };
   }
 
-  async scoreAllOpen({ emitSocket = true } = {}) {
-    const rows = await this.recommendationRepository.findAllOpen({ limit: 500 });
+  async scoreAllOpen({ emitSocket = true, parkId = null } = {}) {
+    const rows = await this.recommendationRepository.findAllOpen({
+      limit: 500,
+      ...(parkId ? { parkId } : {}),
+    });
     let scored = 0;
     for (const rec of rows) {
       try {

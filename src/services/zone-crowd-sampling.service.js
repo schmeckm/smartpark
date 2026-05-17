@@ -13,8 +13,21 @@ class ZoneCrowdSamplingService {
    * Record current crowd for every active zone.
    * @returns {Promise<{ count: number }>}
    */
+  /**
+   * @param {string} parkId
+   */
+  async sampleZonesForPark(parkId) {
+    return this._sampleZones(await this.zoneRepository.findAllActive({ parkId }));
+  }
+
   async sampleAllZones() {
     const zones = await this.zoneRepository.findAllActive();
+    return this._sampleZones(zones);
+  }
+
+  async _sampleZones(zones) {
+    if (!zones.length) return { count: 0 };
+
     const at = new Date();
     const rows = zones.map((z) => {
       const cap = Math.max(1, Number(z.maxCapacity) || 1);

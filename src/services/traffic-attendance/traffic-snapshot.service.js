@@ -1,11 +1,15 @@
 'use strict';
 
+const env = require('../../config/env');
+const { AppError } = require('../../utils/app-error');
 const { logger } = require('../../utils/logger');
 const { TrafficCorridor, TrafficCorridorSnapshot5m } = require('../../models');
 const { computeSnapshotMetrics } = require('./attendance-risk-math');
 const { TomTomTrafficProvider, TomTomTrafficProviderError } = require('./tomtom-traffic.provider');
 const { TrafficProviderConfigService } = require('../traffic-provider-config.service');
 const { sanitizeTomTomRawForPersistence } = require('../../utils/tomtom-raw-sanitize');
+const { mapWithConcurrency } = require('../../utils/async-pool');
+const { findLatestSnapshotsByCorridorIds } = require('./traffic-corridor-snapshot.repository');
 const {
   validateWgs84CorridorCoordinates,
   evaluateRouteRealismWarnings,
@@ -58,9 +62,13 @@ class TrafficSnapshotService {
   }
 
   /**
-   * @param {{ parkId?: string }} [opts]
+   * @param {{ parkId?: string, requireParkId?: boolean }} [opts]
    */
   async pollEnabledCorridors(opts = {}) {
+    if (opts.requireParkId && !opts.parkId) {
+      throw new AppError('parkId is required for traffic snapshot poll', 400, { code: 'PARK_ID_REQUIRED' });
+    }
+
     const rt = await this.trafficProviderConfigService.getTomTomRuntimeOrThrow();
     const provider = this._providerFromRuntime(rt);
 
@@ -68,72 +76,81 @@ class TrafficSnapshotService {
     if (opts.parkId) where.parkId = opts.parkId;
 
     const corridors = await this.TrafficCorridor.findAll({ where, order: [['name', 'ASC']] });
-    const results = [];
+    const concurrency = env.trafficPollConcurrency;
 
-    for (const c of corridors) {
-      const rowPlain = plainRow(c);
-      const oLatRaw = rowPlain.originLat;
-      const oLngRaw = rowPlain.originLng;
-      const dLatRaw = rowPlain.destinationLat;
-      const dLngRaw = rowPlain.destinationLng;
-      if (oLatRaw == null || oLngRaw == null || dLatRaw == null || dLngRaw == null) {
-        const polledAt = new Date().toISOString();
-        await this._persistCorridorLastPoll(c, {
-          polledAt,
-          ok: false,
-          code: 'INVALID_COORDS',
-          message: 'Missing or invalid origin/destination coordinates',
-        });
-        results.push({
-          corridorId: rowPlain.id,
-          ok: false,
-          error: { code: 'INVALID_COORDS', message: 'Missing or invalid origin/destination coordinates' },
-        });
-        continue;
-      }
-      const oLat = Number(oLatRaw);
-      const oLng = Number(oLngRaw);
-      const dLat = Number(dLatRaw);
-      const dLng = Number(dLngRaw);
-      if (![oLat, oLng, dLat, dLng].every(Number.isFinite)) {
-        const polledAt = new Date().toISOString();
-        await this._persistCorridorLastPoll(c, {
-          polledAt,
-          ok: false,
-          code: 'INVALID_COORDS',
-          message: 'Missing or invalid origin/destination coordinates',
-        });
-        results.push({
-          corridorId: rowPlain.id,
-          ok: false,
-          error: { code: 'INVALID_COORDS', message: 'Missing or invalid origin/destination coordinates' },
-        });
-        continue;
-      }
+    const results = await mapWithConcurrency(corridors, concurrency, async (c) =>
+      this._pollOneCorridor(c, provider, rt)
+    );
 
-      const wgs = validateWgs84CorridorCoordinates({
-        originLat: oLat,
-        originLng: oLng,
-        destinationLat: dLat,
-        destinationLng: dLng,
+    return { polledAt: new Date().toISOString(), results };
+  }
+
+  /**
+   * @param {import('sequelize').Model} c
+   * @param {TomTomTrafficProvider} provider
+   * @param {{ apiKey: string }} rt
+   */
+  async _pollOneCorridor(c, provider, rt) {
+    const rowPlain = plainRow(c);
+    const oLatRaw = rowPlain.originLat;
+    const oLngRaw = rowPlain.originLng;
+    const dLatRaw = rowPlain.destinationLat;
+    const dLngRaw = rowPlain.destinationLng;
+    if (oLatRaw == null || oLngRaw == null || dLatRaw == null || dLngRaw == null) {
+      const polledAt = new Date().toISOString();
+      await this._persistCorridorLastPoll(c, {
+        polledAt,
+        ok: false,
+        code: 'INVALID_COORDS',
+        message: 'Missing or invalid origin/destination coordinates',
       });
-      if (!wgs.ok) {
-        const polledAt = new Date().toISOString();
-        await this._persistCorridorLastPoll(c, {
-          polledAt,
-          ok: false,
-          code: wgs.code,
-          message: wgs.message,
-        });
-        results.push({
-          corridorId: rowPlain.id,
-          ok: false,
-          error: { code: wgs.code, message: wgs.message },
-        });
-        continue;
-      }
+      return {
+        corridorId: rowPlain.id,
+        ok: false,
+        error: { code: 'INVALID_COORDS', message: 'Missing or invalid origin/destination coordinates' },
+      };
+    }
+    const oLat = Number(oLatRaw);
+    const oLng = Number(oLngRaw);
+    const dLat = Number(dLatRaw);
+    const dLng = Number(dLngRaw);
+    if (![oLat, oLng, dLat, dLng].every(Number.isFinite)) {
+      const polledAt = new Date().toISOString();
+      await this._persistCorridorLastPoll(c, {
+        polledAt,
+        ok: false,
+        code: 'INVALID_COORDS',
+        message: 'Missing or invalid origin/destination coordinates',
+      });
+      return {
+        corridorId: rowPlain.id,
+        ok: false,
+        error: { code: 'INVALID_COORDS', message: 'Missing or invalid origin/destination coordinates' },
+      };
+    }
 
-      try {
+    const wgs = validateWgs84CorridorCoordinates({
+      originLat: oLat,
+      originLng: oLng,
+      destinationLat: dLat,
+      destinationLng: dLng,
+    });
+    if (!wgs.ok) {
+      const polledAt = new Date().toISOString();
+      await this._persistCorridorLastPoll(c, {
+        polledAt,
+        ok: false,
+        code: wgs.code,
+        message: wgs.message,
+      });
+      return {
+        corridorId: rowPlain.id,
+        ok: false,
+        error: { code: wgs.code, message: wgs.message },
+      };
+    }
+
+    try {
         const { normalized, providerRawResponse } = await provider.fetchRouteForCorridor(
           {
             corridorId: rowPlain.id,
@@ -216,38 +233,34 @@ class TrafficSnapshotService {
           snapshotId: snapPlain.id,
         });
 
-        results.push({
-          corridorId: rowPlain.id,
-          ok: true,
-          snapshot: snapPlain,
-          normalized: normalizedFull,
+      return {
+        corridorId: rowPlain.id,
+        ok: true,
+        snapshot: snapPlain,
+        normalized: normalizedFull,
+      };
+    } catch (e) {
+      if (e instanceof TomTomTrafficProviderError) {
+        const polledAt = new Date().toISOString();
+        await this._persistCorridorLastPoll(c, {
+          polledAt,
+          ok: false,
+          code: e.code,
+          message: e.message,
+          ...(e.status != null ? { httpStatus: e.status } : {}),
         });
-      } catch (e) {
-        if (e instanceof TomTomTrafficProviderError) {
-          const polledAt = new Date().toISOString();
-          await this._persistCorridorLastPoll(c, {
-            polledAt,
-            ok: false,
+        return {
+          corridorId: rowPlain.id,
+          ok: false,
+          error: {
             code: e.code,
             message: e.message,
-            ...(e.status != null ? { httpStatus: e.status } : {}),
-          });
-          results.push({
-            corridorId: rowPlain.id,
-            ok: false,
-            error: {
-              code: e.code,
-              message: e.message,
-              ...(e.status != null ? { status: e.status } : {}),
-            },
-          });
-        } else {
-          throw e;
-        }
+            ...(e.status != null ? { status: e.status } : {}),
+          },
+        };
       }
+      throw e;
     }
-
-    return { polledAt: new Date().toISOString(), results };
   }
 
   /**
@@ -259,14 +272,14 @@ class TrafficSnapshotService {
       where: { parkId },
       order: [['name', 'ASC']],
     });
+    const snapByCorridor = await findLatestSnapshotsByCorridorIds(
+      corridors.map((c) => c.id),
+      parkId
+    );
     const out = [];
     for (const c of corridors) {
       const rowPlain = plainRow(c);
-      const snap = await this.TrafficCorridorSnapshot5m.findOne({
-        where: { corridorId: c.id, parkId },
-        order: [['snapshotTs', 'DESC']],
-      });
-      const plainSnap = snap ? plainRow(snap) : null;
+      const plainSnap = snapByCorridor.get(String(c.id)) || null;
       let normalized = null;
       if (plainSnap?.rawPayloadJson?.normalized && typeof plainSnap.rawPayloadJson.normalized === 'object') {
         normalized = { ...plainSnap.rawPayloadJson.normalized };

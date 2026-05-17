@@ -129,6 +129,14 @@ class AiStudioService {
         { scope: 'park', description: 'Whole-park aggregate models' },
       ],
       predictionOrder: ['entity', 'category', 'park', 'rules_fallback'],
+      extensionSignals: {
+        predictiveMaintenance: {
+          adapterKey: 'predictive_maintenance',
+          description:
+            'Optional PdM adapter: Sparkplug metric history can feed custom FEATURE_STORE drafts (see ML signal picker in Studio).',
+          featureHints: ['vibration_rms', 'motor_temp_c', 'bearing_health_index'],
+        },
+      },
       /** Where algorithm choice is enforced: training payload (no post-hoc PATCH). */
       algorithmSupport: {
         SANDBOX: {

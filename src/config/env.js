@@ -222,4 +222,19 @@ module.exports = {
    */
   widgetRuntimeEnabled:
     process.env.WIDGET_RUNTIME_ENABLED === 'true' || process.env.WIDGET_RUNTIME_ENABLED === '1',
+
+  /** TomTom manual poll: max requests per user+park per window (0 = disabled). */
+  trafficPollRateLimitMaxPerWindow: Math.max(0, Number(process.env.TRAFFIC_POLL_RATE_LIMIT_MAX) || 6),
+  trafficPollRateLimitWindowMs: Math.max(10_000, Number(process.env.TRAFFIC_POLL_RATE_LIMIT_WINDOW_MS) || 60_000),
+  /** Concurrent TomTom routing calls per poll batch. */
+  trafficPollConcurrency: Math.max(1, Math.min(8, Number(process.env.TRAFFIC_POLL_CONCURRENCY) || 3)),
+  /** Delete traffic_corridor_snapshots_5m older than N days (scheduler). */
+  trafficSnapshotRetentionDays: Math.max(1, Number(process.env.TRAFFIC_SNAPSHOT_RETENTION_DAYS) || 30),
+  trafficSnapshotRetentionSchedulerEnabled:
+    process.env.TRAFFIC_SNAPSHOT_RETENTION_SCHEDULER_ENABLED !== 'false' &&
+    process.env.TRAFFIC_SNAPSHOT_RETENTION_SCHEDULER_ENABLED !== '0',
+  trafficSnapshotRetentionIntervalSeconds: Math.max(
+    3600,
+    Number(process.env.TRAFFIC_SNAPSHOT_RETENTION_INTERVAL_SECONDS) || 86_400
+  ),
 };

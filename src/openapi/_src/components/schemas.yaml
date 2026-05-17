@@ -4711,6 +4711,13 @@ components:
           type: boolean
         data:
           $ref: '#/components/schemas/TrafficCorridorSnapshotDebugResponse'
+    EnvelopeTrafficCorridorSnapshotHistory:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/TrafficCorridorSnapshotHistoryResponse'
     EnvelopeParkDemandForecast:
       type: object
       properties:
@@ -4769,6 +4776,7 @@ components:
         weight:
           type: number
           minimum: 0
+          maximum: 100
         enabled:
           type: boolean
     TrafficCorridorPatchBody:
@@ -4822,6 +4830,7 @@ components:
           type: string
           format: date-time
           nullable: true
+          description: Optional; must not be in the future or older than 7 days.
     AttendanceRiskForecastRunBody:
       type: object
       required:
@@ -4852,12 +4861,22 @@ components:
           maximum: 100
     TrafficSnapshotPollBody:
       type: object
+      required:
+        - parkId
       properties:
         parkId:
           type: string
           format: uuid
-          nullable: true
-          description: When set, only corridors for this park are polled.
+          description: Park to poll (must match `X-Park-Id` header when park context is sent).
+    TrafficCorridorSnapshotHistoryResponse:
+      type: object
+      properties:
+        corridor:
+          $ref: '#/components/schemas/TrafficCorridor'
+        snapshots:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrafficCorridorSnapshot5m'
     TrafficSnapshotNormalized:
       type: object
       properties:

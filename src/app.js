@@ -110,7 +110,9 @@ app.get('/', (req, res) => {
 app.post(
   '/api/v1/ai/forecasts/refresh',
   authenticate,
+  attachParkContext,
   requirePermission('ai', 'refresh'),
+  requireParkContext,
   aiController.refreshForecasts
 );
 /** Feature-store snapshot deletes — root mount so POST always matches (same rationale as forecasts/refresh). */

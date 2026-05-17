@@ -7,6 +7,7 @@ const { defineIncident } = require('./incident.model');
 const { defineRecommendation } = require('./recommendation.model');
 const { defineUser } = require('./user.model');
 const { defineUserRole } = require('./user-role.model');
+const { defineUserPark } = require('./user-park.model');
 const { defineRefreshToken } = require('./refresh-token.model');
 const { defineAuditLog } = require('./audit-log.model');
 const { defineIntegrationEventLog } = require('./integration-event-log.model');
@@ -34,6 +35,7 @@ const { defineAssetMlProfileAssignment } = require('./asset-ml-profile-assignmen
 const { defineAssetMlOverride } = require('./asset-ml-override.model');
 const { defineForecastTrainingLabel } = require('./forecast-training-label.model');
 const { defineAiPipelineRun } = require('./ai-pipeline-run.model');
+const { defineAiStudioBatchJob } = require('./ai-studio-batch-job.model');
 const { defineAiStudioModel } = require('./ai-studio-model.model');
 const { defineModelMetricsDaily } = require('./model-metrics-daily.model');
 const { defineAdapterPackage } = require('./adapter-package.model');
@@ -93,6 +95,7 @@ const Incident = defineIncident(sequelize);
 const Recommendation = defineRecommendation(sequelize);
 const User = defineUser(sequelize);
 const UserRole = defineUserRole(sequelize);
+const UserPark = defineUserPark(sequelize);
 const RefreshToken = defineRefreshToken(sequelize);
 const AuditLog = defineAuditLog(sequelize);
 const IntegrationEventLog = defineIntegrationEventLog(sequelize);
@@ -120,6 +123,7 @@ const AssetMlProfileAssignment = defineAssetMlProfileAssignment(sequelize);
 const AssetMlOverride = defineAssetMlOverride(sequelize);
 const ForecastTrainingLabel = defineForecastTrainingLabel(sequelize);
 const AiPipelineRun = defineAiPipelineRun(sequelize);
+const AiStudioBatchJob = defineAiStudioBatchJob(sequelize);
 const AiStudioModel = defineAiStudioModel(sequelize);
 const ModelMetricsDaily = defineModelMetricsDaily(sequelize);
 const AdapterPackage = defineAdapterPackage(sequelize);
@@ -232,6 +236,9 @@ Staff.belongsTo(Ride, { foreignKey: 'currentRideId', as: 'currentRide' });
 Staff.belongsTo(Staff, { foreignKey: 'supervisorId', as: 'supervisor' });
 Staff.hasMany(Staff, { foreignKey: 'supervisorId', as: 'directReports' });
 
+Zone.belongsTo(Park, { foreignKey: 'parkId', as: 'park' });
+Park.hasMany(Zone, { foreignKey: 'parkId', as: 'legacyZones' });
+
 Zone.hasMany(CrowdEvent, { foreignKey: 'zoneId', as: 'crowdEvents' });
 CrowdEvent.belongsTo(Zone, { foreignKey: 'zoneId', as: 'zone' });
 
@@ -273,6 +280,10 @@ Park.hasMany(MlParkFactor, { foreignKey: 'parkId', as: 'mlParkFactors' });
 MlParkFactor.belongsTo(Park, { foreignKey: 'parkId', as: 'park' });
 
 Park.hasMany(AiStudioModel, { foreignKey: 'parkId', as: 'aiStudioModels' });
+Park.hasMany(AiStudioBatchJob, { foreignKey: 'parkId', as: 'aiStudioBatchJobs' });
+AiStudioBatchJob.belongsTo(Park, { foreignKey: 'parkId', as: 'park' });
+Park.hasMany(AiPipelineRun, { foreignKey: 'parkId', as: 'aiPipelineRuns' });
+AiPipelineRun.belongsTo(Park, { foreignKey: 'parkId', as: 'park' });
 AiStudioModel.belongsTo(Park, { foreignKey: 'parkId', as: 'park' });
 
 Park.hasMany(VisitPlanVersion, { foreignKey: 'parkId', as: 'visitPlanVersions' });
@@ -318,6 +329,13 @@ ParkDemandForecast5m.belongsTo(Park, { foreignKey: 'parkId', as: 'park' });
 
 User.hasMany(UserRole, { foreignKey: 'userId', as: 'userRoles' });
 UserRole.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+
+User.belongsToMany(Park, { through: UserPark, foreignKey: 'userId', otherKey: 'parkId', as: 'parks' });
+Park.belongsToMany(User, { through: UserPark, foreignKey: 'parkId', otherKey: 'userId', as: 'users' });
+User.hasMany(UserPark, { foreignKey: 'userId', as: 'userParks' });
+UserPark.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+Park.hasMany(UserPark, { foreignKey: 'parkId', as: 'userParks' });
+UserPark.belongsTo(Park, { foreignKey: 'parkId', as: 'park' });
 
 User.hasMany(RefreshToken, { foreignKey: 'userId', as: 'refreshTokens' });
 RefreshToken.belongsTo(User, { foreignKey: 'userId', as: 'user' });
@@ -407,6 +425,7 @@ module.exports = {
   RecommendationScore,
   User,
   UserRole,
+  UserPark,
   RefreshToken,
   AuditLog,
   IntegrationEventLog,
@@ -433,6 +452,7 @@ module.exports = {
   AssetMlOverride,
   ForecastTrainingLabel,
   AiPipelineRun,
+  AiStudioBatchJob,
   AiStudioModel,
   ModelMetricsDaily,
   AdapterPackage,

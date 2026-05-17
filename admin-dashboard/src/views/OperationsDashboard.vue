@@ -227,6 +227,7 @@ const {
   summary: aiSummary,
   loading: aiLoading,
   busy: aiBusy,
+  error: aiError,
   lastSocketAt: aiSocketAt,
   refresh: refreshAi,
 } = useAiInsights({
@@ -880,6 +881,7 @@ onMounted(() => {
         v-if="auth.hasPermission('ai', 'read')"
         :summary="aiSummary"
         :loading="aiLoading || aiBusy"
+        :error="aiError"
         :last-socket-at="aiSocketAt"
         @refresh="onAiRefresh"
       />

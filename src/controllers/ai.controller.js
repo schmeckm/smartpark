@@ -24,6 +24,11 @@ const { ZoneRepository } = require('../repositories/zone.repository');
 const AUDIT = require('../constants/audit-actions');
 const { jsonSnapshot } = require('../utils/json-snapshot');
 const { parseRequiredUtcOrOffsetInstant } = require('../utils/utc-query-instant.util');
+const {
+  assertExternalParkMatchesContext,
+  assertEntityBelongsToPark,
+  resolveExternalParkForPlatformPark,
+} = require('../utils/ai-park-scope.util');
 
 const orchestrator = new AiOrchestratorService();
 const forecastService = new AiForecastService();
@@ -121,6 +126,7 @@ function serializePipelineRunRow(row) {
     : null;
   return {
     id: row.id,
+    parkId: row.parkId ?? null,
     startedAt,
     finishedAt,
     durationMs: row.durationMs,
@@ -131,6 +137,13 @@ function serializePipelineRunRow(row) {
     featureStoreError: row.featureStoreError,
     scoringError: row.scoringError,
   };
+}
+
+async function insightsScopeFromRequest(req) {
+  const parkId = req.parkContext?.id || null;
+  if (!parkId) return { parkId: null, zoneIds: null };
+  const zones = await zoneRepository.findAllActive({ parkId });
+  return { parkId, zoneIds: zones.map((z) => z.id) };
 }
 
 const getPipelineHealth = asyncHandler(async (_req, res) => {
@@ -196,7 +209,10 @@ const getPipelineHealth = asyncHandler(async (_req, res) => {
 const listPipelineRuns = asyncHandler(async (req, res) => {
   const q = req.validated || req.query || {};
   const limit = Number(q.limit) || 25;
+  const where = {};
+  if (req.parkContext?.id) where.parkId = req.parkContext.id;
   const rows = await AiPipelineRun.findAll({
+    where,
     order: [['startedAt', 'DESC']],
     limit,
     attributes: [
@@ -218,11 +234,13 @@ const listPipelineRuns = asyncHandler(async (req, res) => {
 
 const listForecasts = asyncHandler(async (req, res) => {
   const v = req.validated || req.query;
+  const scope = await insightsScopeFromRequest(req);
   const rows = await forecastService.getForecasts({
     horizonMinutes: v.horizonMinutes,
     subjectType: v.subjectType,
     targetMetric: v.targetMetric,
     limit: v.limit,
+    zoneIds: scope.zoneIds,
   });
   const zoneIds = new Set();
   for (const f of rows) {
@@ -241,17 +259,20 @@ const listForecasts = asyncHandler(async (req, res) => {
 });
 
 const refreshForecasts = asyncHandler(async (req, res) => {
-  const out = await orchestrator.runFullPipeline();
+  const parkId = req.parkContext?.id || null;
+  const out = await orchestrator.runFullPipeline({ parkId });
   res.json({ success: true, data: out });
 });
 
 const insightsSummary = asyncHandler(async (req, res) => {
-  const data = await forecastService.getInsightsSummary();
+  const scope = await insightsScopeFromRequest(req);
+  const data = await forecastService.getInsightsSummary(scope);
   res.json({ success: true, data });
 });
 
 const postScoreAllRecommendations = asyncHandler(async (req, res) => {
-  const out = await scoringService.scoreAllOpen({ emitSocket: true });
+  const parkId = req.parkContext?.id || null;
+  const out = await scoringService.scoreAllOpen({ emitSocket: true, parkId });
   await auditLogService.log({
     action: AUDIT.RECOMMENDATION_AI_SCORE,
     entityType: 'recommendation',
@@ -276,7 +297,11 @@ const postScoreOneRecommendation = asyncHandler(async (req, res) => {
 });
 
 const listScoredRecommendations = asyncHandler(async (req, res) => {
-  const rows = await recommendationRepository.findAllOpen({ limit: 300 });
+  const parkId = req.parkContext?.id || null;
+  const rows = await recommendationRepository.findAllOpen({
+    limit: 300,
+    ...(parkId ? { parkId } : {}),
+  });
   const sorted = [...rows].sort((a, b) => {
     const sa = a.score ? num(a.score.score) : -1;
     const sb = b.score ? num(b.score.score) : -1;
@@ -307,7 +332,11 @@ const getRecommendationExplanation = asyncHandler(async (req, res) => {
 });
 
 const recommendationScoringSummary = asyncHandler(async (req, res) => {
-  const rows = await recommendationRepository.findAllOpen({ limit: 300 });
+  const parkId = req.parkContext?.id || null;
+  const rows = await recommendationRepository.findAllOpen({
+    limit: 300,
+    ...(parkId ? { parkId } : {}),
+  });
   const withScore = rows.filter((r) => r.score);
   withScore.sort((a, b) => num(b.score.score) - num(a.score.score));
   const topRisky = withScore.slice(0, 5).map((r) => {
@@ -334,12 +363,14 @@ const recommendationScoringSummary = asyncHandler(async (req, res) => {
 /** `data` includes `mlFactorCurrents` (object, possibly empty) from mergeMlEnterpriseLayer — see OpenAPI ParkForecastSummary. */
 const parkForecastSummary = asyncHandler(async (req, res) => {
   const q = req.validated || req.query || {};
+  await assertExternalParkMatchesContext(req, req.params.externalParkId, q.provider);
   const data = await parkForecastService.getSummary(req.params.externalParkId, { provider: q.provider });
   res.json({ success: true, data });
 });
 
 const parkForecastSeries = asyncHandler(async (req, res) => {
   const q = req.validated || req.query || {};
+  await assertExternalParkMatchesContext(req, req.params.externalParkId, q.provider);
   const points = await parkForecastService.getSeries(req.params.externalParkId, {
     provider: q.provider,
     horizon: q.horizon ? Number(q.horizon) : 60,
@@ -350,6 +381,7 @@ const parkForecastSeries = asyncHandler(async (req, res) => {
 
 const parkForecastExplanation = asyncHandler(async (req, res) => {
   const q = req.validated || req.query || {};
+  await assertExternalParkMatchesContext(req, req.params.externalParkId, q.provider);
   const data = await parkForecastService.getExplanation(req.params.externalParkId, {
     provider: q.provider,
     horizon: q.horizon ? Number(q.horizon) : 60,
@@ -359,6 +391,9 @@ const parkForecastExplanation = asyncHandler(async (req, res) => {
 
 const entityForecastExplanation = asyncHandler(async (req, res) => {
   const q = req.validated || req.query || {};
+  const extPark = q.externalParkId;
+  if (extPark) await assertExternalParkMatchesContext(req, extPark, q.provider);
+  await assertEntityBelongsToPark(req, req.params.externalEntityId, extPark);
   const data = await parkForecastService.getEntityExplanation(req.params.externalEntityId, {
     provider: q.provider,
     externalParkId: q.externalParkId,
@@ -371,6 +406,9 @@ const entityForecastExplanation = asyncHandler(async (req, res) => {
 /** `data` includes `mlFactorCurrents` when ML merge ran (same shape as park summary). */
 const entityForecastSummary = asyncHandler(async (req, res) => {
   const q = req.validated || req.query || {};
+  const extPark = q.externalParkId;
+  if (extPark) await assertExternalParkMatchesContext(req, extPark, q.provider);
+  await assertEntityBelongsToPark(req, req.params.externalEntityId, extPark);
   const data = await parkForecastService.getEntitySummary(req.params.externalEntityId, {
     provider: q.provider,
     externalParkId: q.externalParkId,
@@ -382,6 +420,7 @@ const entityForecastSummary = asyncHandler(async (req, res) => {
 /** Each array element includes `mlFactorCurrents` when merge ran for that entity. */
 const parkEntityForecastSummaries = asyncHandler(async (req, res) => {
   const q = req.validated || req.query || {};
+  await assertExternalParkMatchesContext(req, req.params.externalParkId, q.provider);
   const data = await parkForecastService.getEntitySummariesForPark(req.params.externalParkId, {
     provider: q.provider,
     limit: q.limit ? Number(q.limit) : 150,

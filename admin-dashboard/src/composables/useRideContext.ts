@@ -1,4 +1,5 @@
 import { computed, ref, watch, type ComputedRef, type Ref } from 'vue'
+import { createRequestGeneration } from '@/utils/requestGeneration'
 import { getRides } from '@/api/client'
 import type { Ride } from '@/types/api'
 
@@ -17,6 +18,7 @@ import type { Ride } from '@/types/api'
  */
 const cache = new Map<string, Ride>()
 let inflightAll: Promise<Ride[]> | null = null
+const resolveGen = createRequestGeneration()
 
 async function loadAllRidesOnce(): Promise<Ride[]> {
   if (!inflightAll) {
@@ -46,6 +48,7 @@ export function useRideContext(rideId: Ref<string> | ComputedRef<string>): UseRi
   const error = ref<Error | null>(null)
 
   async function resolve(id: string) {
+    const gen = resolveGen.next()
     if (!id) {
       rideRef.value = null
       return
@@ -58,15 +61,17 @@ export function useRideContext(rideId: Ref<string> | ComputedRef<string>): UseRi
     error.value = null
     try {
       const all = await loadAllRidesOnce()
+      if (resolveGen.isStale(gen)) return
       const found = all.find((r) => r.id === id) ?? null
       rideRef.value = found
       if (!found) {
         error.value = new Error(`Ride not found: ${id}`)
       }
     } catch (e) {
+      if (resolveGen.isStale(gen)) return
       error.value = e instanceof Error ? e : new Error(String(e))
     } finally {
-      loading.value = false
+      if (!resolveGen.isStale(gen)) loading.value = false
     }
   }
 

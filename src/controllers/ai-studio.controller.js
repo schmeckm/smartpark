@@ -31,7 +31,7 @@ const postValidateFeatures = asyncHandler(async (req, res) => {
 
 const getBatchTrainStatus = asyncHandler(async (req, res) => {
   const parkId = req.parkContext.id;
-  const data = aiStudioBatchTrainer.getBatchTrainStatus(parkId);
+  const data = await aiStudioBatchTrainer.getBatchTrainStatus(parkId);
   res.json({ success: true, data });
 });
 

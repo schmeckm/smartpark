@@ -31,17 +31,53 @@ class ForecastAccuracyService {
     const windowMs = 45 * 60 * 1000;
     const points = [];
 
+    if (!forecasts.length) {
+      return {
+        targetMetric: 'CROWD_LEVEL',
+        subjectType: 'ZONE',
+        horizonMinutes,
+        days,
+        matchedPoints: 0,
+        forecastsConsidered: 0,
+        overallMae: null,
+        zones: [],
+      };
+    }
+
+    const zoneIds = [...new Set(forecasts.map((f) => f.subjectId).filter(Boolean))];
+    let rangeMin = Infinity;
+    let rangeMax = -Infinity;
     for (const f of forecasts) {
       const zid = f.subjectId;
       if (!zid) continue;
       const tMs = new Date(f.producedAt).getTime() + horizonMinutes * 60 * 1000;
-      const samples = await ZoneCrowdSample.findAll({
-        where: {
-          zoneId: zid,
-          sampledAt: { [Op.between]: [new Date(tMs - windowMs), new Date(tMs + windowMs)] },
-        },
-        order: [['sampledAt', 'ASC']],
-      });
+      rangeMin = Math.min(rangeMin, tMs - windowMs);
+      rangeMax = Math.max(rangeMax, tMs + windowMs);
+    }
+
+    const allSamples =
+      Number.isFinite(rangeMin) && zoneIds.length
+        ? await ZoneCrowdSample.findAll({
+            where: {
+              zoneId: { [Op.in]: zoneIds },
+              sampledAt: { [Op.between]: [new Date(rangeMin), new Date(rangeMax)] },
+            },
+            order: [['sampledAt', 'ASC']],
+          })
+        : [];
+
+    const samplesByZone = new Map();
+    for (const s of allSamples) {
+      const zid = s.zoneId;
+      if (!samplesByZone.has(zid)) samplesByZone.set(zid, []);
+      samplesByZone.get(zid).push(s);
+    }
+
+    for (const f of forecasts) {
+      const zid = f.subjectId;
+      if (!zid) continue;
+      const tMs = new Date(f.producedAt).getTime() + horizonMinutes * 60 * 1000;
+      const samples = samplesByZone.get(zid) || [];
       if (!samples.length) continue;
       let best = samples[0];
       let bestDiff = Math.abs(new Date(best.sampledAt).getTime() - tMs);
@@ -79,7 +115,7 @@ class ForecastAccuracyService {
 
     const zones = [];
     for (const [zoneId, agg] of byZone) {
-      const mae = agg.errors.reduce((a, b) => a + b, 0) / agg.count;
+      const mae = agg.errors.reduce((a, b) => a + b, 0) / agg.errors.length;
       zones.push({
         zoneId,
         zoneName: zoneName.get(zoneId) || String(zoneId),
@@ -102,6 +138,11 @@ class ForecastAccuracyService {
       overallMae: overallMae != null ? Math.round(overallMae * 100) / 100 : null,
       zones,
     };
+  }
+
+  /** @param {Parameters<ForecastAccuracyService['zoneCrowdPointwise']>[0]} opts */
+  getZoneCrowdForecastAccuracy(opts) {
+    return this.zoneCrowdPointwise(opts);
   }
 }
 

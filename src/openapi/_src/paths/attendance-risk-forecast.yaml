@@ -229,6 +229,58 @@
       '404':
         $ref: '#/components/responses/NotFound'
 
+'/traffic-corridors/{corridorId}/snapshots':
+  parameters:
+    -
+      name: corridorId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  get:
+    tags:
+      - AttendanceRisk
+    summary: List traffic snapshot history for a corridor (newest first)
+    security:
+      -
+        bearerAuth: []
+    parameters:
+      -
+        name: from
+        in: query
+        schema:
+          type: string
+          format: date-time
+      -
+        name: to
+        in: query
+        schema:
+          type: string
+          format: date-time
+      -
+        name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 500
+    responses:
+      '200':
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopeTrafficCorridorSnapshotHistory'
+      '403':
+        description: Corridor not in scoped park (`X-Park-Id`)
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+      '404':
+        $ref: '#/components/responses/NotFound'
+
 '/traffic-corridors/{corridorId}/snapshots/manual':
   parameters:
     -

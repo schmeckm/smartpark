@@ -23,12 +23,13 @@ import {
   type ParkForecastSummary,
   type PredictionExplainability,
 } from '@/api/client'
-import { getApiParkContextId } from '@/utils/apiParkContext'
+import { useParkContextStore } from '@/stores/parkContext'
 import { resolveApiOrigin } from '@/utils/apiOrigin'
 
 const { t } = useI18n()
 const { push: toast } = useToast()
 const auth = useAuthStore()
+const parkCtx = useParkContextStore()
 const canManageIntegrations = () => auth.hasPermission('integrations', 'manage')
 
 const scoringSectionRef = shallowRef<InstanceType<typeof RecommendationAiSection> | null>(null)
@@ -58,8 +59,11 @@ const currentFlowStep = ref<'input' | 'forecast' | 'result'>('input')
 
 const primaryFactors = computed(() => (showAllFactors.value ? aiForecastFactors.value : aiForecastFactors.value.slice(0, 6)))
 const hiddenFactorCount = computed(() => Math.max(0, aiForecastFactors.value.length - primaryFactors.value.length))
-const parkContextId = computed(() => getApiParkContextId())
+const parkContextId = computed(() => parkCtx.activeParkId)
 const dynamicParkMode = computed(() => Boolean(parkContextId.value))
+const needsParkSelection = computed(
+  () => !parkContextId.value || !parkCtx.activePark?.externalEntityId,
+)
 type ProviderSettings = { provider?: string }
 type ParkSettings = { externalParkId?: string; parkName?: string }
 type LiveRow = { id: string; name: string; waitTime: number | null; status: string | null; isOpen: boolean | null }
@@ -305,27 +309,22 @@ const externalLiveSummary = {
 async function loadSelectedParkForecast() {
   parkLoading.value = true
   try {
-    const settings = (await getIntegrationSettings()) as Record<string, unknown>
-    const context = readParkContext(settings)
-    const provider = context.provider
-    selectedProvider.value = provider
-    selectedExternalParkId.value = context.externalParkId
-    selectedExternalParkName.value = context.parkName
-    parkForecastSource.value = selectedExternalParkId.value ? 'selected' : 'none'
-
-    if (!selectedExternalParkId.value) {
-      const fallback = await resolveFallbackParkId(provider)
-      if (fallback) {
-        selectedExternalParkId.value = fallback.externalParkId
-        selectedExternalParkName.value = fallback.parkName
-        parkForecastSource.value = 'auto'
-      }
-    }
-
-    if (!selectedExternalParkId.value) {
+    const extFromPark = parkCtx.activePark?.externalEntityId
+      ? String(parkCtx.activePark.externalEntityId).trim()
+      : ''
+    if (!parkContextId.value || !extFromPark) {
       clearForecastState()
+      parkForecastSource.value = 'none'
       return
     }
+
+    const settings = (await getIntegrationSettings().catch(() => ({}))) as Record<string, unknown>
+    const context = readParkContext(settings)
+    const provider = context.provider || 'themeparks_wiki'
+    selectedProvider.value = provider
+    selectedExternalParkId.value = extFromPark
+    selectedExternalParkName.value = parkCtx.activePark?.name || extFromPark
+    parkForecastSource.value = 'selected'
 
     parkForecast.value = await getParkForecastSummary(selectedExternalParkId.value, provider)
     externalLiveRows.value = await loadLiveRows(selectedExternalParkId.value, provider)
@@ -391,16 +390,32 @@ watch(selectedExplainEntityId, () => {
   if (!selectedExplainEntityId.value) return
   void loadSelectedEntityExplainability()
 })
+
+watch(
+  () => [parkCtx.activeParkId, parkCtx.activePark?.externalEntityId] as const,
+  () => {
+    void loadSelectedParkForecast()
+    void loadAiFactors()
+  },
+)
 </script>
 
 <template>
   <div class="mx-auto max-w-5xl space-y-6 px-4 py-6 sm:px-6">
     <header class="space-y-2">
-      <h1 class="font-display text-xl font-semibold text-white">AI insights</h1>
+      <h1 class="font-display text-xl font-semibold text-white">{{ t('aiInsightsHub.title') }}</h1>
       <p class="max-w-3xl text-sm text-slate-400">
         Process flow: input parameters (X) are configured first, then transformed into forecast and scoring results (Y).
       </p>
     </header>
+
+    <div
+      v-if="needsParkSelection"
+      class="rounded-xl border border-amber-700/50 bg-amber-950/20 px-4 py-3 text-sm text-amber-200"
+      data-testid="ai-insights-need-park"
+    >
+      {{ t('aiInsightsHub.needPark') }}
+    </div>
 
     <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
       <h2 class="text-base font-semibold text-white">X to Y process</h2>

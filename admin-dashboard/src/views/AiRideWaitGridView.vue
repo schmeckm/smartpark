@@ -40,6 +40,7 @@ import { useToast } from '@/composables/useToast'
 import { usePageSurfaces } from '@/composables/usePageSurfaces'
 import { useParkContextStore } from '@/stores/parkContext'
 import { useRegionalDateTime } from '@/composables/useRegionalDateTime'
+import { createRequestGeneration } from '@/utils/requestGeneration'
 
 type GridRow = {
   assetId: string
@@ -60,6 +61,7 @@ const chartZoneNote = computed(() =>
 const { push } = useToast()
 const { surfaces: ui } = usePageSurfaces()
 const parkCtx = useParkContextStore()
+const gridLoadGen = createRequestGeneration()
 
 const loading = ref(false)
 const assets = ref<PlatformAsset[]>([])
@@ -71,7 +73,8 @@ const factorLabels = ref<Map<string, string>>(new Map())
 const modelWinRates = ref<ModelWinRateStat[]>([])
 
 /** Bulk list only includes entities with feature snapshots; we hydrate the rest per entity (park/type fallback). */
-const MAX_ENTITY_FORECAST_FETCH = 200
+/** Fallback per-entity fetches when bulk summary omitted a ride (backend bulk is primary). */
+const MAX_ENTITY_FORECAST_FETCH = 40
 const ENTITY_FETCH_CONCURRENCY = 6
 
 const searchQ = ref('')
@@ -1152,6 +1155,7 @@ async function loadFactorLabels() {
 }
 
 async function loadGrid() {
+  const gen = gridLoadGen.next()
   const park = parkCtx.activePark
   const extPark = park?.externalEntityId
   if (!parkCtx.activeParkId || !extPark) {
@@ -1169,6 +1173,7 @@ async function loadGrid() {
       getIntegrationSettings().catch(() => ({} as Record<string, unknown>)),
       getMlModelWinRateStats().catch(() => [] as ModelWinRateStat[]),
     ])
+    if (gridLoadGen.isStale(gen)) return
     modelWinRates.value = winRates
     assets.value = rideAssets
     const sel = settings?.selectedProvider as { provider?: string } | undefined
@@ -1240,13 +1245,14 @@ async function loadGrid() {
     }
     canonicalWaitByExtId.value = canon
   } catch (e) {
+    if (gridLoadGen.isStale(gen)) return
     assets.value = []
     summaries.value = []
     currentByAssetId.value = new Map()
     canonicalWaitByExtId.value = new Map()
     push(e instanceof Error ? e.message : 'Error', 'error')
   } finally {
-    loading.value = false
+    if (!gridLoadGen.isStale(gen)) loading.value = false
   }
 }
 

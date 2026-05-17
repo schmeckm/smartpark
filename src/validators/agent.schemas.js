@@ -9,6 +9,8 @@ const AGENT_SKILL_IDS = [
   'mapping_assistant',
   'weather_pivot',
   'ride_down_response',
+  'shift_handover_writer',
+  'adapter_health_triage',
 ];
 
 const listAgentRunsQuery = Joi.object({

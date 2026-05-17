@@ -142,16 +142,19 @@ const PARK_SNAPSHOT_UPDATE_FIELDS = [
 ];
 
 class AiFeatureStoreService {
-  async buildSnapshots({ now = new Date() } = {}) {
+  async buildSnapshots({ now = new Date(), externalParkId = null, provider = null } = {}) {
     const operatingRepo = new ParkOperatingSnapshotRepository();
     const bucket = bucket5m(now);
     const since = new Date(bucket.getTime() - 10 * 60 * 1000);
+    const msgWhere = {
+      messageType: { [Op.in]: ['WAIT_TIME_UPDATED', 'ENTITY_STATUS_UPDATED'] },
+      occurredAt: { [Op.gte]: since, [Op.lte]: now },
+      externalParkId: { [Op.ne]: null },
+    };
+    if (externalParkId) msgWhere.externalParkId = String(externalParkId);
+    if (provider) msgWhere.provider = String(provider);
     const rows = await CanonicalInboundMessage.findAll({
-      where: {
-        messageType: { [Op.in]: ['WAIT_TIME_UPDATED', 'ENTITY_STATUS_UPDATED'] },
-        occurredAt: { [Op.gte]: since, [Op.lte]: now },
-        externalParkId: { [Op.ne]: null },
-      },
+      where: msgWhere,
       order: [['occurredAt', 'DESC']],
       limit: 5000,
     });
@@ -170,6 +173,8 @@ class AiFeatureStoreService {
       const waitTime = coerceNumericWaitMinutes(payload.waitTime);
       const isOpen = typeof payload.isOpen === 'boolean' ? payload.isOpen : null;
       const parkKey = `${row.provider}:${row.externalParkId}`;
+      if (externalParkId && String(row.externalParkId) !== String(externalParkId)) continue;
+      if (provider && String(row.provider) !== String(provider)) continue;
       if (!byPark.has(parkKey)) byPark.set(parkKey, []);
       byPark.get(parkKey).push({ waitTime, isOpen });
     }
@@ -425,11 +430,14 @@ class AiFeatureStoreService {
     return { parkSnapshots: parkItems.length, rideSnapshots: rideItems.length, bucket: bucket.toISOString() };
   }
 
-  async buildLabels({ horizons = [15, 60] } = {}) {
+  async buildLabels({ horizons = [15, 60], externalParkId = null, provider = null } = {}) {
     const now = new Date();
     const lookback = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const baseWhere = { snapshotAt: { [Op.gte]: lookback } };
+    if (externalParkId) baseWhere.externalParkId = String(externalParkId);
+    if (provider) baseWhere.provider = String(provider);
     const bases = await ParkFeatureSnapshot.findAll({
-      where: { snapshotAt: { [Op.gte]: lookback } },
+      where: baseWhere,
       order: [['snapshotAt', 'DESC']],
       limit: 1000,
     });

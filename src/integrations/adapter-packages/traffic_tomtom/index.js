@@ -100,7 +100,19 @@ async function poll(config, context) {
     };
   }
 
-  const pollOpts = scope.parkId ? { parkId: scope.parkId } : {};
+  if (!scope.parkId) {
+    return {
+      observations: [],
+      debug: {
+        adapterKey: ADAPTER_KEY,
+        ok: false,
+        error: 'Park scope required — set parkId, externalParkId, or parkSlug in adapter install config',
+        parkResolution: scope,
+      },
+    };
+  }
+
+  const pollOpts = { parkId: scope.parkId };
   let summary;
   try {
     const svc = new TrafficSnapshotService();

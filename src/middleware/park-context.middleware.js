@@ -1,13 +1,13 @@
 const { AppError } = require('../utils/app-error');
 const { userHasPermission } = require('../constants/rbac');
+const { userCanAccessPark } = require('../services/user-park-access.service');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /**
- * Phase 0: optional `X-Park-Id` on authenticated API calls.
+ * Optional `X-Park-Id` on authenticated API calls.
  * - Validates UUID + park exists.
- * - Access: user must have rides.read, ops.read, or integrations.read (SYSTEM_ADMIN = ALL).
- * - Later: restrict via user_parks / tenant.
+ * - Access: rides.read / ops.read / integrations.read AND `user_parks` row (SYSTEM_ADMIN bypass).
  *
  * Attaches `req.parkContext` = `{ id, name } | null`.
  */
@@ -27,8 +27,10 @@ async function attachParkContext(req, res, next) {
 
   const canScope =
     userHasPermission(req.user, 'rides', 'read') ||
+    userHasPermission(req.user, 'traffic_corridors', 'read') ||
     userHasPermission(req.user, 'ops', 'read') ||
-    userHasPermission(req.user, 'integrations', 'read');
+    userHasPermission(req.user, 'integrations', 'read') ||
+    userHasPermission(req.user, 'ai', 'read');
   if (!canScope) {
     return next(new AppError('Park context not allowed for this user', 403, { code: 'PARK_CONTEXT_FORBIDDEN' }));
   }
@@ -37,6 +39,11 @@ async function attachParkContext(req, res, next) {
   const park = await Park.findByPk(id, { attributes: ['id', 'name'] });
   if (!park) {
     return next(new AppError('Park not found', 404, { code: 'PARK_NOT_FOUND' }));
+  }
+
+  const allowed = await userCanAccessPark(req.user, id);
+  if (!allowed) {
+    return next(new AppError('Park not assigned to this user', 403, { code: 'PARK_ACCESS_DENIED' }));
   }
 
   const plain = park.get({ plain: true });

@@ -1,126 +1,123 @@
-# Production stack for Portainer / Docker Swarm — pulls pre-built images from Docker Hub.
-# Do not use local `build:` contexts; images are published by `.github/workflows/docker-publish.yml`.
-#
-# Required environment (Portainer stack env or `.env` next to this file):
-#   DOCKERHUB_USERNAME=your-dockerhub-user
-#   IMAGE_TAG=latest                    # or `main`, or a commit SHA tag from CI
-#   JWT_SECRET=<long-random-string>     # required — change from default
-#   DB_PASSWORD=<strong-password>
-#
-# Optional: copy from `.env.example` and override MQTT, Influx, feature flags, etc.
-#
-# Deploy:
-#   docker compose -f docker-compose.prod.yml pull
-#   docker compose -f docker-compose.prod.yml up -d
-#
-# UI: http://<host>/  (nginx serves SPA and proxies /api + /socket.io to `api`)
-
-name: smart-park-os-prod
-
-services:
-  db:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${DB_USER:-smartpark}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD}
-      POSTGRES_DB: ${DB_NAME:-smartpark}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${DB_USER:-smartpark} -d ${DB_NAME:-smartpark}']
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
-  mqtt:
-    image: eclipse-mosquitto:2.0.18
-    restart: unless-stopped
-    ports:
-      - '1883:1883'
-      - '9001:9001'
-    volumes:
-      - mosquitto_data:/mosquitto/data
-      - mosquitto_log:/mosquitto/log
-    # Hier übergeben wir Ihre Konfigurationszeilen direkt beim Start als Befehl
-    entrypoint: >
-      sh -c "
-      mkdir -p /mosquitto/config &&
-      echo 'listener 1883' > /mosquitto/config/mosquitto.conf &&
-      echo 'allow_anonymous true' >> /mosquitto/config/mosquitto.conf &&
-      echo 'persistence false' >> /mosquitto/config/mosquitto.conf &&
-      echo 'listener 9001' >> /mosquitto/config/mosquitto.conf &&
-      echo 'protocol websockets' >> /mosquitto/config/mosquitto.conf &&
-      echo 'allow_anonymous true' >> /mosquitto/config/mosquitto.conf &&
-      exec mosquitto -c /mosquitto/config/mosquitto.conf
-      "
-
-  influxdb:
-    image: influxdb:2.7-alpine
-    restart: unless-stopped
-    volumes:
-      - influxdata:/var/lib/influxdb2
-    environment:
-      DOCKER_INFLUXDB_INIT_MODE: setup
-      DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUX_ADMIN_USER:-admin}
-      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUX_ADMIN_PASSWORD:?set INFLUX_ADMIN_PASSWORD}
-      DOCKER_INFLUXDB_INIT_ORG: ${INFLUX_ORG:-smartpark}
-      DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUX_BUCKET:-ot_metrics}
-      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUX_TOKEN:?set INFLUX_TOKEN}
-
-  api:
-    image: ${DOCKERHUB_USERNAME:?set DOCKERHUB_USERNAME}/smart-park-api:${IMAGE_TAG:-latest}
-    restart: unless-stopped
-    volumes:
-      - app_data:/app/data
-    environment:
-      NODE_ENV: production
-      PORT: 3000
-      LOG_LEVEL: ${LOG_LEVEL:-info}
-      DB_HOST: db
-      DB_PORT: 5432
-      DB_NAME: ${DB_NAME:-smartpark}
-      DB_USER: ${DB_USER:-smartpark}
-      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD}
-      CORS_ORIGIN: ${CORS_ORIGIN:-*}
-      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
-      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
-      JWT_REFRESH_DAYS: ${JWT_REFRESH_DAYS:-7}
-      INTEGRATION_FLOW_ENGINE_ENABLED: ${INTEGRATION_FLOW_ENGINE_ENABLED:-true}
-      INTEGRATION_FLOW_CONCURRENCY: ${INTEGRATION_FLOW_CONCURRENCY:-3}
-      INTEGRATION_FLOW_SCHEDULER_ENABLED: ${INTEGRATION_FLOW_SCHEDULER_ENABLED:-false}
-      WIDGET_RUNTIME_ENABLED: ${WIDGET_RUNTIME_ENABLED:-false}
-      MQTT_ENABLED: 'true'
-      MQTT_BROKER_URL: ${MQTT_BROKER_URL:-mqtt://mqtt:1883}
-      MQTT_CLIENT_ID: ${MQTT_CLIENT_ID:-smart-park-os-api}
-      ML_TRACE_ENABLED: ${ML_TRACE_ENABLED:-false}
-      ML_PROFILE_ENABLED: ${ML_PROFILE_ENABLED:-false}
-      ML_FEATURE_WEIGHTS_ENABLED: ${ML_FEATURE_WEIGHTS_ENABLED:-false}
-      WEATHER_OPEN_METEO_ENABLED: ${WEATHER_OPEN_METEO_ENABLED:-false}
-      INFLUX_ENABLED: ${INFLUX_ENABLED:-false}
-      INFLUX_URL: http://influxdb:8086
-      INFLUX_TOKEN: ${INFLUX_TOKEN:-}
-      INFLUX_ORG: ${INFLUX_ORG:-smartpark}
-      INFLUX_BUCKET: ${INFLUX_BUCKET:-ot_metrics}
-    depends_on:
-      db:
-        condition: service_healthy
-      mqtt:
-        condition: service_started
-      influxdb:
-        condition: service_started
-
-  frontend:
-    image: ${DOCKERHUB_USERNAME:?set DOCKERHUB_USERNAME}/smart-park-frontend:${IMAGE_TAG:-latest}
-    restart: unless-stopped
-    ports:
-      - '${FRONTEND_HTTP_PORT:-80}:80'
-    depends_on:
-      - api
-
-volumes:
-  pgdata:
-  influxdata:
-  app_data:
-  mosquitto_data:
-  mosquitto_log:
+# Production stack for Portainer / Docker Swarm — pulls pre-built images from Docker Hub.
+# Do not use local `build:` contexts; images are published by `.github/workflows/docker-publish.yml`.
+#
+# Required environment (Portainer stack env or `.env` next to this file):
+#   DOCKERHUB_USERNAME=your-dockerhub-user
+#   IMAGE_TAG=latest                    # or `main`, or a commit SHA tag from CI
+#   JWT_SECRET=<long-random-string>     # required — change from default
+#   DB_PASSWORD=<strong-password>
+#   MQTT_PASSWORD=<strong-mqtt-password>
+#
+# Optional: copy from `.env.example` and override MQTT, Influx, feature flags, etc.
+#
+# Deploy:
+#   docker compose -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# UI: http://<host>/  (nginx serves SPA and proxies /api + /socket.io to `api`)
+# MQTT is internal-only (no host ports); API connects with MQTT_USERNAME / MQTT_PASSWORD.
+
+name: smart-park-os-prod
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-smartpark}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME:-smartpark}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DB_USER:-smartpark} -d ${DB_NAME:-smartpark}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mqtt:
+    image: eclipse-mosquitto:2.0.18
+    restart: unless-stopped
+    # No published ports — broker reachable only on the Docker network.
+    environment:
+      MQTT_USERNAME: ${MQTT_USERNAME:-smartpark}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:?set MQTT_PASSWORD}
+    volumes:
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+      - ./docker/mosquitto-entrypoint.sh:/mosquitto-entrypoint.sh:ro
+    entrypoint: ['/bin/sh', '/mosquitto-entrypoint.sh']
+
+  influxdb:
+    image: influxdb:2.7-alpine
+    restart: unless-stopped
+    volumes:
+      - influxdata:/var/lib/influxdb2
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUX_ADMIN_USER:-admin}
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUX_ADMIN_PASSWORD:?set INFLUX_ADMIN_PASSWORD}
+      DOCKER_INFLUXDB_INIT_ORG: ${INFLUX_ORG:-smartpark}
+      DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUX_BUCKET:-ot_metrics}
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUX_TOKEN:?set INFLUX_TOKEN}
+
+  api:
+    image: ${DOCKERHUB_USERNAME:?set DOCKERHUB_USERNAME}/smart-park-api:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    volumes:
+      - app_data:/app/data
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-smartpark}
+      DB_USER: ${DB_USER:-smartpark}
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD}
+      DB_POOL_MAX: ${DB_POOL_MAX:-20}
+      DB_POOL_MIN: ${DB_POOL_MIN:-2}
+      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
+      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
+      JWT_REFRESH_DAYS: ${JWT_REFRESH_DAYS:-7}
+      INTEGRATION_FLOW_ENGINE_ENABLED: ${INTEGRATION_FLOW_ENGINE_ENABLED:-true}
+      INTEGRATION_FLOW_CONCURRENCY: ${INTEGRATION_FLOW_CONCURRENCY:-3}
+      INTEGRATION_FLOW_SCHEDULER_ENABLED: ${INTEGRATION_FLOW_SCHEDULER_ENABLED:-false}
+      WIDGET_RUNTIME_ENABLED: ${WIDGET_RUNTIME_ENABLED:-false}
+      MQTT_ENABLED: 'true'
+      MQTT_BROKER_URL: ${MQTT_BROKER_URL:-mqtt://mqtt:1883}
+      MQTT_CLIENT_ID: ${MQTT_CLIENT_ID:-smart-park-os-api}
+      MQTT_USERNAME: ${MQTT_USERNAME:-smartpark}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:?set MQTT_PASSWORD}
+      ML_TRACE_ENABLED: ${ML_TRACE_ENABLED:-false}
+      ML_PROFILE_ENABLED: ${ML_PROFILE_ENABLED:-false}
+      ML_FEATURE_WEIGHTS_ENABLED: ${ML_FEATURE_WEIGHTS_ENABLED:-false}
+      WEATHER_OPEN_METEO_ENABLED: ${WEATHER_OPEN_METEO_ENABLED:-false}
+      INFLUX_ENABLED: ${INFLUX_ENABLED:-false}
+      INFLUX_URL: http://influxdb:8086
+      INFLUX_TOKEN: ${INFLUX_TOKEN:-}
+      INFLUX_ORG: ${INFLUX_ORG:-smartpark}
+      INFLUX_BUCKET: ${INFLUX_BUCKET:-ot_metrics}
+    depends_on:
+      db:
+        condition: service_healthy
+      mqtt:
+        condition: service_started
+      influxdb:
+        condition: service_started
+
+  frontend:
+    image: ${DOCKERHUB_USERNAME:?set DOCKERHUB_USERNAME}/smart-park-frontend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    ports:
+      - '${FRONTEND_HTTP_PORT:-80}:80'
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  influxdata:
+  app_data:
+  mosquitto_data:
+  mosquitto_log:

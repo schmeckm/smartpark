@@ -2,7 +2,23 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { TrafficSnapshotService } = require('./traffic-snapshot.service');
+const proxyquire = require('proxyquire').noCallThru();
+const { TrafficSnapshotService } = proxyquire('./traffic-snapshot.service', {
+  '../../models': {
+    TrafficCorridor: { findAll: async () => [] },
+    TrafficCorridorSnapshot5m: { create: async (p) => ({ get: () => ({ ...p, id: 'snap-1' }) }) },
+  },
+  './traffic-corridor-snapshot.repository': {
+    findLatestSnapshotsByCorridorIds: async () => new Map(),
+  },
+  '../traffic-provider-config.service': {
+    TrafficProviderConfigService: class {
+      async getTomTomRuntimeOrThrow() {
+        return { apiKey: 'k', baseUrl: 'https://example.com', timeoutMs: 5000, enabled: true };
+      }
+    },
+  },
+});
 
 test('pollEnabledCorridors: operator baseline delay + warning when current far above baseline', async () => {
   let createdPayload;

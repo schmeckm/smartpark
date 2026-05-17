@@ -98,23 +98,31 @@ export function useDashboardSocket(options?: UseDashboardSocketOptions) {
       connectionLabel.value = 'No token'
       return
     }
+    socket.value?.removeAllListeners()
+    socket.value?.disconnect()
     const s = apiOrigin
       ? io(apiOrigin, {
           path: '/socket.io',
           transports: ['websocket', 'polling'],
-          auth: { token },
+          auth: { token, parkId: parkCtx.activeParkId ?? undefined },
         })
       : io({
           path: '/socket.io',
           transports: ['websocket', 'polling'],
-          auth: { token },
+          auth: { token, parkId: parkCtx.activeParkId ?? undefined },
         })
 
     socket.value = s
 
+    function subscribePark() {
+      const parkId = parkCtx.activeParkId?.trim()
+      if (parkId && s.connected) s.emit('park:subscribe', { parkId })
+    }
+
     s.on('connect', () => {
       connected.value = true
       connectionLabel.value = 'Live'
+      subscribePark()
     })
 
     s.on('disconnect', () => {
@@ -199,6 +207,8 @@ export function useDashboardSocket(options?: UseDashboardSocketOptions) {
     () => parkCtx.activeParkId,
     (pid, prev) => {
       if (pid === prev) return
+      const s = socket.value
+      if (pid?.trim() && s?.connected) s.emit('park:subscribe', { parkId: pid.trim() })
       void refreshRidesAndStaff()
     }
   )

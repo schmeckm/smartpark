@@ -42,6 +42,11 @@ function defineZone(sequelize) {
         allowNull: false,
         defaultValue: 'ACTIVE',
       },
+      parkId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'park_id',
+      },
       adjacentZoneIds: {
         type: DataTypes.JSONB,
         allowNull: false,

@@ -10,6 +10,7 @@ const { push: toast } = useToast()
 
 const summary = ref<RecommendationScoringSummary | null>(null)
 const loading = ref(true)
+const loadError = ref<string | null>(null)
 const busy = ref(false)
 
 async function load() {
@@ -18,10 +19,13 @@ async function load() {
     return
   }
   loading.value = true
+  loadError.value = null
   try {
     summary.value = await getRecommendationScoringSummary()
   } catch (e) {
-    toast(e instanceof Error ? e.message : 'Failed to load scoring summary', 'error')
+    const msg = e instanceof Error ? e.message : 'Failed to load scoring summary'
+    loadError.value = msg
+    toast(msg, 'error')
   } finally {
     loading.value = false
   }
@@ -75,6 +79,20 @@ defineExpose({ load })
     </div>
 
     <div v-if="loading" class="py-8 text-center text-sm text-slate-500">Loading…</div>
+    <div
+      v-else-if="loadError"
+      class="rounded-lg border border-rose-500/30 bg-rose-950/30 px-4 py-6 text-center text-sm text-rose-200"
+      role="alert"
+    >
+      <p>{{ loadError }}</p>
+      <button
+        type="button"
+        class="mt-3 rounded-lg border border-rose-500/40 px-3 py-1.5 text-xs font-medium hover:bg-rose-950/50"
+        @click="load()"
+      >
+        Retry
+      </button>
+    </div>
     <template v-else-if="summary">
       <div class="mb-4 flex flex-wrap gap-4 text-sm">
         <div class="rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2">

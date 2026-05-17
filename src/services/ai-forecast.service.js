@@ -25,18 +25,26 @@ class AiForecastService {
    * Baseline SMA + linear trend. Persists CROWD_LEVEL for ZONE.
    * @returns {Promise<{ count: number }>}
    */
-  async refreshZoneCrowdForecasts() {
+  /**
+   * @param {{ parkId?: string|null }} [opts]
+   */
+  async refreshZoneCrowdForecasts(opts = {}) {
+    const parkId = opts.parkId || null;
     const [zones, model] = await Promise.all([
-      this.zoneRepository.findAllActive(),
+      this.zoneRepository.findAllActive(parkId ? { parkId } : {}),
       this.modelRepository.getOrCreateBaseline(),
     ]);
 
     const since = new Date(Date.now() - SAMPLE_LOOKBACK_MS);
     const now = new Date();
     const rows = [];
+    const samplesByZone = await this.sampleRepository.findRecentByZoneIds(
+      zones.map((z) => z.id),
+      { since, limitPerZone: 48 }
+    );
 
     for (const z of zones) {
-      const samples = await this.sampleRepository.findRecentByZoneId(z.id, { since, limit: 48 });
+      const samples = samplesByZone.get(z.id) || [];
       const cap = Math.max(1, toNum(z.maxCapacity));
       const levels = samples.length
         ? samples.map((s) => toNum(s.crowdLevel))
@@ -95,25 +103,33 @@ class AiForecastService {
    * @param {object} query
    */
   async getForecasts(query) {
-    const { horizonMinutes, subjectType, targetMetric, limit } = query;
+    const { horizonMinutes, subjectType, targetMetric, limit, zoneIds } = query;
     return this.forecastRepository.listRecent({
       horizonMinutes: horizonMinutes === undefined ? undefined : Number(horizonMinutes),
       subjectType,
       targetMetric,
       limit: limit === undefined ? 100 : Number(limit),
+      zoneIds,
     });
   }
 
-  async getInsightsSummary() {
+  /**
+   * @param {{ parkId?: string|null, zoneIds?: string[]|null }} [opts]
+   */
+  async getInsightsSummary(opts = {}) {
     const horizon = 60;
+    const parkId = opts.parkId || null;
+    const zoneIds = opts.zoneIds?.length ? opts.zoneIds : null;
+
     const [rows, zones, model] = await Promise.all([
       this.forecastRepository.listRecent({
         horizonMinutes: horizon,
         subjectType: 'ZONE',
         targetMetric: 'CROWD_LEVEL',
         limit: 200,
+        zoneIds,
       }),
-      this.zoneRepository.findAll(),
+      parkId ? this.zoneRepository.findAllActive({ parkId }) : this.zoneRepository.findAll(),
       this.modelRepository.getOrCreateBaseline(),
     ]);
     const zoneById = new Map(zones.map((z) => [z.id, z]));
@@ -165,6 +181,8 @@ class AiForecastService {
       confidence: avg,
       generatedAt: new Date().toISOString(),
       model: BASELINE_ML,
+      parkId: parkId || null,
+      scopedToPark: Boolean(parkId),
     };
   }
 }

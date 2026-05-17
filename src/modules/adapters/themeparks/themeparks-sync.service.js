@@ -92,10 +92,20 @@ async function updateQueueTimes(repo, parkRow, liveItems, t) {
   let mqtt = 0;
   const parkSlug = parkRow.slug;
 
+  const extIds = [
+    ...new Set(
+      liveItems
+        .map((l) => String(l.id || l.entityId || ''))
+        .filter(Boolean)
+    ),
+  ];
+  const loadedAssets = await repo.findAssetsByExternalIds(EXTERNAL_SOURCE, extIds, t);
+  const assetByExt = new Map(loadedAssets.map((a) => [String(a.externalEntityId), a]));
+
   for (const l of liveItems) {
     const extId = String(l.id || l.entityId || '');
     if (!extId) continue;
-    const asset = await repo.findAssetByExternal(EXTERNAL_SOURCE, extId);
+    const asset = assetByExt.get(extId);
     if (!asset) continue;
     const assetSlug = asset.slug;
     const ts = new Date().toISOString();
@@ -302,10 +312,14 @@ async function linkParents(models, repo, parkId, transaction) {
     where: { parkId, externalSource: EXTERNAL_SOURCE },
     transaction,
   });
+  const byExt = new Map();
+  for (const a of assets) {
+    if (a.externalEntityId) byExt.set(String(a.externalEntityId), a);
+  }
   let linked = 0;
   for (const a of assets) {
     if (!a.externalParentId) continue;
-    const parent = await repo.findAssetByExternal(EXTERNAL_SOURCE, a.externalParentId);
+    const parent = byExt.get(String(a.externalParentId));
     if (parent && String(parent.assetId) !== String(a.assetId)) {
       await a.update({ parentAssetId: parent.assetId }, { transaction });
       linked += 1;

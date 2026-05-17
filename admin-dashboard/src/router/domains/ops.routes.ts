@@ -135,9 +135,12 @@ export const opsRoutes: RouteRecordRaw[] = [
     name: 'traffic-corridors',
     component: () => import('@/views/operations/TrafficCorridorsView.vue'),
     meta: {
-      title: 'Traffic corridors',
+      titleKey: 'trafficCorridorsPage.title',
       domain: 'operations',
-      permission: { resource: 'rides', action: 'read' },
+      permissionsAny: [
+        { resource: 'traffic_corridors', action: 'read' },
+        { resource: 'rides', action: 'read' },
+      ],
       requiresAnyInstalledAdapters: [...TRAFFIC_CORRIDORS_SURFACE_ADAPTER_KEYS],
     },
   },

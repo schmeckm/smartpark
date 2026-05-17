@@ -1,5 +1,9 @@
 const { Router } = require('express');
 const { requirePermission } = require('../../middleware/rbac.middleware');
+const {
+  requireTrafficCorridorsRead,
+  requireTrafficCorridorsUpdate,
+} = require('../../middleware/traffic-corridors-rbac.middleware');
 const { validate } = require('../../middleware/validate.middleware');
 const parksCtrl = require('./platform-parks.controller');
 const assetsCtrl = require('./platform-assets.controller');
@@ -183,33 +187,33 @@ platformParksRouter.get(
 
 platformParksRouter.get(
   '/:parkId/traffic-corridors',
-  requirePermission('rides', 'read'),
+  requireTrafficCorridorsRead,
   validate(parkIdParam, 'params'),
   trafficAttendanceCtrl.listTrafficCorridors
 );
 platformParksRouter.post(
   '/:parkId/traffic-corridors',
-  requirePermission('rides', 'update'),
+  requireTrafficCorridorsUpdate,
   validate(parkIdParam, 'params'),
   validate(trafficCorridorCreateBody),
   trafficAttendanceCtrl.createTrafficCorridor
 );
 platformParksRouter.post(
   '/:parkId/attendance-risk-forecast/run',
-  requirePermission('rides', 'update'),
+  requireTrafficCorridorsUpdate,
   validate(parkIdParam, 'params'),
   validate(attendanceRiskForecastRunBody),
   trafficAttendanceCtrl.runAttendanceRiskForecast
 );
 platformParksRouter.get(
   '/:parkId/attendance-risk-forecast/latest',
-  requirePermission('rides', 'read'),
+  requireTrafficCorridorsRead,
   validate(parkIdParam, 'params'),
   trafficAttendanceCtrl.getLatestAttendanceRiskForecast
 );
 platformParksRouter.get(
   '/:parkId/attendance-risk-forecast/history',
-  requirePermission('rides', 'read'),
+  requireTrafficCorridorsRead,
   validate(parkIdParam, 'params'),
   validate(forecastHistoryQuery, 'query'),
   trafficAttendanceCtrl.getAttendanceRiskForecastHistory

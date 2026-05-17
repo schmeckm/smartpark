@@ -1,8 +1,9 @@
 'use strict';
 
-const { TrafficCorridor, TrafficCorridorSnapshot5m } = require('../../models');
+const { TrafficCorridor } = require('../../models');
 const { validateWgs84CorridorCoordinates } = require('../../utils/traffic-corridor-coords');
 const { normalizeStoredDelayPercentAs100 } = require('./attendance-risk-math');
+const { findLatestSnapshotsByCorridorIds, listSnapshotsForCorridor } = require('./traffic-corridor-snapshot.repository');
 
 const COORD_FIELDS = [
   ['originLat', 'originLng'],
@@ -102,20 +103,19 @@ class TrafficCorridorService {
       where: { parkId },
       order: [['name', 'ASC']],
     });
-    const out = [];
-    for (const r of rows) {
+    const snapByCorridor = await findLatestSnapshotsByCorridorIds(
+      rows.map((r) => r.id),
+      parkId
+    );
+    return rows.map((r) => {
       const p = plainRow(r);
-      const snap = await TrafficCorridorSnapshot5m.findOne({
-        where: { corridorId: r.id },
-        order: [['snapshotTs', 'DESC']],
-      });
-      out.push({
+      const snapPlain = snapByCorridor.get(String(r.id)) || null;
+      return {
         ...p,
-        latestSnapshot: snap ? plainRow(snap) : null,
-        latestSnapshotDetail: buildLatestSnapshotDetail(p, snap ? plainRow(snap) : null),
-      });
-    }
-    return out;
+        latestSnapshot: snapPlain,
+        latestSnapshotDetail: buildLatestSnapshotDetail(p, snapPlain),
+      };
+    });
   }
 
   async create(parkId, payload) {
@@ -185,11 +185,8 @@ class TrafficCorridorService {
     const row = await TrafficCorridor.findByPk(corridorId);
     if (!row) return null;
     const corridor = plainRow(row);
-    const snap = await TrafficCorridorSnapshot5m.findOne({
-      where: { corridorId },
-      order: [['snapshotTs', 'DESC']],
-    });
-    const snapPlain = snap ? plainRow(snap) : null;
+    const snapMap = await findLatestSnapshotsByCorridorIds([corridorId], corridor.parkId);
+    const snapPlain = snapMap.get(String(corridorId)) || null;
     let providerRawResponse = null;
     if (snapPlain?.rawPayloadJson?.normalized?.providerRawResponse != null) {
       providerRawResponse = snapPlain.rawPayloadJson.normalized.providerRawResponse;
@@ -200,6 +197,21 @@ class TrafficCorridorService {
       latestSnapshotDetail: buildLatestSnapshotDetail(corridor, snapPlain),
       providerRawResponse,
     };
+  }
+
+  /**
+   * @param {string} corridorId
+   * @param {{ from?: Date, to?: Date, limit?: number }} opts
+   */
+  async listSnapshotHistory(corridorId, opts = {}) {
+    const row = await TrafficCorridor.findByPk(corridorId);
+    if (!row) return null;
+    const corridor = plainRow(row);
+    const snapshots = await listSnapshotsForCorridor(corridorId, {
+      ...opts,
+      parkId: corridor.parkId,
+    });
+    return { corridor, snapshots };
   }
 }
 

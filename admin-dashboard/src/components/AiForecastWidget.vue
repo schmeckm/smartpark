@@ -7,6 +7,7 @@ const { formatDateTime, formatTime } = useRegionalDateTime()
 defineProps<{
   summary: AiInsightsSummary | null
   loading: boolean
+  error?: string | null
   lastSocketAt: string | null
 }>()
 
@@ -62,7 +63,14 @@ function showRows(z: AiHotspotRow[]) {
     </div>
 
     <ul class="divide-y divide-slate-800/60">
-      <li v-if="loading && !summary" class="px-5 py-8 text-center text-sm text-slate-500">Loading forecast…</li>
+      <li
+        v-if="error && !loading"
+        class="px-5 py-8 text-center text-sm text-rose-300"
+        role="alert"
+      >
+        {{ error }}
+      </li>
+      <li v-else-if="loading && !summary" class="px-5 py-8 text-center text-sm text-slate-500">Loading forecast…</li>
       <li
         v-for="row in showRows(summary?.topHotspotZones ?? [])"
         :key="row.zoneId"

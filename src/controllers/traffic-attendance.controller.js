@@ -7,6 +7,12 @@ const { TrafficCorridorService } = require('../services/traffic-attendance/traff
 const { TrafficSignalAdapter } = require('../services/traffic-attendance/traffic-signal-adapter.service');
 const { ParkDemandForecastService } = require('../services/traffic-attendance/park-demand-forecast.service');
 
+const {
+  parkScopeId,
+  assertParkRouteScoped,
+  loadCorridorForScope,
+} = require('../services/traffic-attendance/traffic-corridor-access');
+
 const corridorService = new TrafficCorridorService();
 const signalAdapter = new TrafficSignalAdapter();
 const forecastService = new ParkDemandForecastService();
@@ -35,12 +41,14 @@ async function ensurePark(parkId) {
 
 const listTrafficCorridors = asyncHandler(async (req, res) => {
   await ensurePark(req.params.parkId);
+  assertParkRouteScoped(req.params.parkId, parkScopeId(req));
   const data = await corridorService.listByPark(req.params.parkId);
   res.json({ success: true, data });
 });
 
 const createTrafficCorridor = asyncHandler(async (req, res) => {
   await ensurePark(req.params.parkId);
+  assertParkRouteScoped(req.params.parkId, parkScopeId(req));
   try {
     const data = await corridorService.create(req.params.parkId, req.validated || req.body);
     res.status(201).json({ success: true, data });
@@ -58,6 +66,7 @@ const createTrafficCorridor = asyncHandler(async (req, res) => {
 });
 
 const patchTrafficCorridor = asyncHandler(async (req, res) => {
+  await loadCorridorForScope(req.params.corridorId, parkScopeId(req));
   try {
     const data = await corridorService.update(req.params.corridorId, req.validated || req.body);
     if (!data) throw new AppError('Traffic corridor not found', 404, { code: 'NOT_FOUND' });
@@ -76,12 +85,14 @@ const patchTrafficCorridor = asyncHandler(async (req, res) => {
 });
 
 const deleteTrafficCorridor = asyncHandler(async (req, res) => {
+  await loadCorridorForScope(req.params.corridorId, parkScopeId(req));
   const ok = await corridorService.remove(req.params.corridorId);
   if (!ok) throw new AppError('Traffic corridor not found', 404, { code: 'NOT_FOUND' });
   res.json({ success: true, data: { deleted: true, id: req.params.corridorId } });
 });
 
 const postManualSnapshot = asyncHandler(async (req, res) => {
+  await loadCorridorForScope(req.params.corridorId, parkScopeId(req));
   const body = req.validated || req.body;
   const snap = await signalAdapter.createManualSnapshot(
     req.params.corridorId,
@@ -94,6 +105,7 @@ const postManualSnapshot = asyncHandler(async (req, res) => {
 
 const runAttendanceRiskForecast = asyncHandler(async (req, res) => {
   await ensurePark(req.params.parkId);
+  assertParkRouteScoped(req.params.parkId, parkScopeId(req));
   const raw = req.body || {};
   const body = req.validated || raw;
   const flags = {
@@ -108,12 +120,14 @@ const runAttendanceRiskForecast = asyncHandler(async (req, res) => {
 
 const getLatestAttendanceRiskForecast = asyncHandler(async (req, res) => {
   await ensurePark(req.params.parkId);
+  assertParkRouteScoped(req.params.parkId, parkScopeId(req));
   const data = formatAttendanceRiskForecastApi(await forecastService.getLatest(req.params.parkId));
   res.json({ success: true, data });
 });
 
 const getAttendanceRiskForecastHistory = asyncHandler(async (req, res) => {
   await ensurePark(req.params.parkId);
+  assertParkRouteScoped(req.params.parkId, parkScopeId(req));
   const q = req.validated || {};
   const limit = q.limit != null ? q.limit : 96;
   const rows = await forecastService.getHistory(req.params.parkId, limit);
@@ -122,7 +136,20 @@ const getAttendanceRiskForecastHistory = asyncHandler(async (req, res) => {
 });
 
 const getLatestTrafficSnapshotDebug = asyncHandler(async (req, res) => {
+  await loadCorridorForScope(req.params.corridorId, parkScopeId(req));
   const data = await corridorService.getLatestSnapshotDebug(req.params.corridorId);
+  if (!data) throw new AppError('Traffic corridor not found', 404, { code: 'NOT_FOUND' });
+  res.json({ success: true, data });
+});
+
+const listTrafficCorridorSnapshots = asyncHandler(async (req, res) => {
+  await loadCorridorForScope(req.params.corridorId, parkScopeId(req));
+  const q = req.validated || {};
+  const data = await corridorService.listSnapshotHistory(req.params.corridorId, {
+    from: q.from,
+    to: q.to,
+    limit: q.limit,
+  });
   if (!data) throw new AppError('Traffic corridor not found', 404, { code: 'NOT_FOUND' });
   res.json({ success: true, data });
 });
@@ -137,4 +164,5 @@ module.exports = {
   getLatestAttendanceRiskForecast,
   getAttendanceRiskForecastHistory,
   getLatestTrafficSnapshotDebug,
+  listTrafficCorridorSnapshots,
 };

@@ -35,11 +35,15 @@ class ForecastRepository {
   }
 
   async listRecent(options = {}) {
-    const { horizonMinutes, subjectType, targetMetric, limit = 100 } = options;
+    const { horizonMinutes, subjectType, targetMetric, limit = 100, zoneIds } = options;
     const where = {};
     if (horizonMinutes != null) where.horizonMinutes = horizonMinutes;
     if (subjectType) where.subjectType = subjectType;
     if (targetMetric) where.targetMetric = targetMetric;
+    if (Array.isArray(zoneIds) && zoneIds.length) {
+      where.subjectType = 'ZONE';
+      where.subjectId = { [Op.in]: zoneIds };
+    }
 
     const now = new Date();
     return Forecast.findAll({

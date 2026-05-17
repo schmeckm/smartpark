@@ -11,6 +11,8 @@ const { runCrowdSpikeTriage } = require('../skills/crowd-spike-triage.skill');
 const { runMappingAssistant } = require('../skills/mapping-assistant.skill');
 const { runWeatherPivot } = require('../skills/weather-pivot.skill');
 const { runRideDownResponse } = require('../skills/ride-down-response.skill');
+const { runShiftHandoverWriter } = require('../skills/shift-handover-writer.skill');
+const { runAdapterHealthTriage } = require('../skills/adapter-health-triage.skill');
 
 const auditLogService = new AuditLogService();
 
@@ -20,6 +22,8 @@ const SUPPORTED_SKILLS = new Set([
   'mapping_assistant',
   'weather_pivot',
   'ride_down_response',
+  'shift_handover_writer',
+  'adapter_health_triage',
 ]);
 
 const SKILL_MODE = {
@@ -28,11 +32,15 @@ const SKILL_MODE = {
   mapping_assistant: 'suggest',
   weather_pivot: 'suggest',
   ride_down_response: 'suggest',
+  shift_handover_writer: 'auto',
+  adapter_health_triage: 'auto',
 };
 
 function metaPhaseForSkill(skillId) {
-  if (skillId === 'daily_executive_brief') return 'A';
-  if (skillId === 'weather_pivot' || skillId === 'ride_down_response') return 'C';
+  if (skillId === 'daily_executive_brief' || skillId === 'shift_handover_writer') return 'A';
+  if (skillId === 'weather_pivot' || skillId === 'ride_down_response' || skillId === 'adapter_health_triage') {
+    return 'C';
+  }
   return 'B';
 }
 
@@ -181,6 +189,26 @@ async function executeAgentSkill(params) {
         parkId,
         parkName: park.name,
         rideId: rideId || null,
+        toolRegistry,
+        createStep,
+        createAction,
+      });
+      markdown = out.markdown;
+    } else if (skillId === 'shift_handover_writer') {
+      const out = await runShiftHandoverWriter({
+        runId: run.id,
+        parkId,
+        parkName: park.name,
+        toolRegistry,
+        createStep,
+        createAction,
+      });
+      markdown = out.markdown;
+    } else if (skillId === 'adapter_health_triage') {
+      const out = await runAdapterHealthTriage({
+        runId: run.id,
+        parkId,
+        parkName: park.name,
         toolRegistry,
         createStep,
         createAction,

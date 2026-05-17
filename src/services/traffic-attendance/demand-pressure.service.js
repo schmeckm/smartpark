@@ -1,6 +1,7 @@
 'use strict';
 
-const { TrafficCorridor, TrafficCorridorSnapshot5m } = require('../../models');
+const { TrafficCorridor } = require('../../models');
+const { findLatestSnapshotsByCorridorIds } = require('./traffic-corridor-snapshot.repository');
 const {
   computeWeightedTrafficPressure,
   computeExternalDemandPressure,
@@ -23,7 +24,6 @@ function incidentCountFromSnapshot(plainSnap) {
 class DemandPressureService {
   constructor(deps) {
     this.TrafficCorridor = deps?.TrafficCorridor || TrafficCorridor;
-    this.TrafficCorridorSnapshot5m = deps?.TrafficCorridorSnapshot5m || TrafficCorridorSnapshot5m;
   }
 
   /**
@@ -35,14 +35,14 @@ class DemandPressureService {
     const corridors = await this.TrafficCorridor.findAll({
       where: { parkId, enabled: true, direction: 'inbound' },
     });
+    const snapByCorridor = await findLatestSnapshotsByCorridorIds(
+      corridors.map((c) => c.id),
+      parkId
+    );
     const rows = [];
     for (const c of corridors) {
-      const snap = await this.TrafficCorridorSnapshot5m.findOne({
-        where: { corridorId: c.id, parkId },
-        order: [['snapshotTs', 'DESC']],
-      });
-      if (!snap) continue;
-      const plainSnap = plainRow(snap);
+      const plainSnap = snapByCorridor.get(String(c.id));
+      if (!plainSnap) continue;
       const plainC = plainRow(c);
       const delayPct = normalizeStoredDelayPercentAs100(plainSnap.delayPercent);
       const cong = Number(plainSnap.congestionScore) || 0;

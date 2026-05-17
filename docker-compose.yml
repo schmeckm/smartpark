@@ -79,6 +79,8 @@ services:
       # Default mqtt://mqtt:1883 when unset; do not set MQTT_BROKER_URL=127.0.0.1 in root .env for compose.
       MQTT_BROKER_URL: ${MQTT_BROKER_URL:-mqtt://mqtt:1883}
       MQTT_CLIENT_ID: ${MQTT_CLIENT_ID:-smart-park-os-api}
+      MQTT_USERNAME: ${MQTT_USERNAME:-}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
       # ML observability / metadata (Phase 1–4). Compose defaults all three on for local E2E (profiles → trace → Weighted X).
       # Override in .env for prod-like runs (e.g. ML_FEATURE_WEIGHTS_ENABLED=false). See docs/architecture/ml-forecast-phased-roadmap.md
       ML_TRACE_ENABLED: ${ML_TRACE_ENABLED:-true}

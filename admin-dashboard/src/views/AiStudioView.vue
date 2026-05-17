@@ -173,6 +173,12 @@ const predictFeatures = ref<Record<string, number>>({
 })
 const predictResult = ref<unknown>(null)
 const predictLoading = ref(false)
+
+const predictShowsStubWarning = computed(() => {
+  const r = predictResult.value as { fallback?: boolean; model?: { stub?: boolean } } | null
+  if (!r) return false
+  return Boolean(r.fallback || r.model?.stub !== false)
+})
 const predictUseLatestSnapshot = ref(false)
 
 const runtimeResolution = shallowRef<AiStudioRuntimeResolution | null>(null)
@@ -592,8 +598,9 @@ async function refreshBatchTrainStatus() {
       stopBatchPolling()
       await loadModels()
     }
-  } catch {
-    /* non-fatal */
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    push(t('aiStudio.batchPollError', { msg }), 'error')
   }
 }
 
@@ -3339,6 +3346,13 @@ async function confirmBulkActionModal() {
         >
           {{ predictLoading ? '…' : t('aiStudio.runPredict') }}
         </button>
+        <p
+          v-if="predictShowsStubWarning"
+          class="mt-4 rounded border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-sm text-amber-200"
+          data-testid="ai-studio-stub-warning"
+        >
+          {{ t('aiStudio.stubPredictWarning') }}
+        </p>
         <pre v-if="predictResult" class="mt-4 overflow-x-auto rounded-lg border border-slate-800 bg-slate-950 p-4 text-xs text-slate-300">{{
           JSON.stringify(predictResult, null, 2)
         }}</pre>

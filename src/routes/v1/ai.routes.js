@@ -67,10 +67,16 @@ function registerProtectedAiRoutes(v1Router) {
   v1Router.get(
     '/ai/forecasts',
     requirePermission('ai', 'read'),
+    requireParkContext,
     validate(listForecastsQuery, 'query'),
     aiController.listForecasts
   );
-  v1Router.get('/ai/insights/summary', requirePermission('ai', 'read'), aiController.insightsSummary);
+  v1Router.get(
+    '/ai/insights/summary',
+    requirePermission('ai', 'read'),
+    requireParkContext,
+    aiController.insightsSummary
+  );
 
   v1Router.get('/ai/studio/catalog', requirePermission('ai', 'read'), aiStudioController.getCatalog);
   v1Router.get(
@@ -215,6 +221,7 @@ function registerProtectedAiRoutes(v1Router) {
   v1Router.get(
     '/ai/parks/:externalParkId/forecast/summary',
     requirePermission('ai', 'read'),
+    requireParkContext,
     validate(parkForecastParams, 'params'),
     validate(parkForecastQuery, 'query'),
     aiController.parkForecastSummary
@@ -222,6 +229,7 @@ function registerProtectedAiRoutes(v1Router) {
   v1Router.get(
     '/ai/parks/:externalParkId/forecast/series',
     requirePermission('ai', 'read'),
+    requireParkContext,
     validate(parkForecastParams, 'params'),
     validate(parkForecastQuery, 'query'),
     aiController.parkForecastSeries
@@ -229,6 +237,7 @@ function registerProtectedAiRoutes(v1Router) {
   v1Router.get(
     '/ai/parks/:externalParkId/forecast/explanation',
     requirePermission('ai', 'read'),
+    requireParkContext,
     validate(parkForecastParams, 'params'),
     validate(parkForecastQuery, 'query'),
     aiController.parkForecastExplanation
@@ -236,6 +245,7 @@ function registerProtectedAiRoutes(v1Router) {
   v1Router.get(
     '/ai/entities/:externalEntityId/forecast/summary',
     requirePermission('ai', 'read'),
+    requireParkContext,
     validate(entityForecastParams, 'params'),
     validate(parkForecastQuery, 'query'),
     aiController.entityForecastSummary
@@ -243,6 +253,7 @@ function registerProtectedAiRoutes(v1Router) {
   v1Router.get(
     '/ai/entities/:externalEntityId/forecast/explanation',
     requirePermission('ai', 'read'),
+    requireParkContext,
     validate(entityForecastParams, 'params'),
     validate(parkForecastQuery, 'query'),
     aiController.entityForecastExplanation
@@ -250,6 +261,7 @@ function registerProtectedAiRoutes(v1Router) {
   v1Router.get(
     '/ai/parks/:externalParkId/entities/forecast/summary',
     requirePermission('ai', 'read'),
+    requireParkContext,
     validate(parkForecastParams, 'params'),
     validate(parkForecastQuery, 'query'),
     aiController.parkEntityForecastSummaries
@@ -372,15 +384,22 @@ function registerProtectedAiRoutes(v1Router) {
     mlAiController.deleteParkFeatureSnapshot
   );
 
-  v1Router.get('/ai/recommendations/scored', requirePermission('ai', 'read'), aiController.listScoredRecommendations);
+  v1Router.get(
+    '/ai/recommendations/scored',
+    requirePermission('ai', 'read'),
+    requireParkContext,
+    aiController.listScoredRecommendations
+  );
   v1Router.get(
     '/ai/recommendations/scoring-summary',
     requirePermission('ai', 'read'),
+    requireParkContext,
     aiController.recommendationScoringSummary
   );
   v1Router.post(
     '/ai/recommendations/score',
     requireAnyPermission(['ai', 'refresh'], ['recommendations', 'update']),
+    requireParkContext,
     aiController.postScoreAllRecommendations
   );
   v1Router.post(

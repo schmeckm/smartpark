@@ -24,7 +24,7 @@ const trafficCorridorCreateBody = Joi.object({
   destinationLng: lng.optional(),
   direction: Joi.string().valid('inbound', 'outbound').optional(),
   baselineTravelTimeMin: Joi.number().min(0).required(),
-  weight: Joi.number().min(0).optional(),
+  weight: Joi.number().min(0).max(100).optional(),
   enabled: Joi.boolean().optional(),
 });
 
@@ -39,7 +39,7 @@ const trafficCorridorPatchBody = Joi.object({
   destinationLng: lng.optional(),
   direction: Joi.string().valid('inbound', 'outbound').optional(),
   baselineTravelTimeMin: Joi.number().min(0).optional(),
-  weight: Joi.number().min(0).optional(),
+  weight: Joi.number().min(0).max(100).optional(),
   enabled: Joi.boolean().optional(),
 })
   .min(1)
@@ -47,7 +47,21 @@ const trafficCorridorPatchBody = Joi.object({
 
 const manualTrafficSnapshotBody = Joi.object({
   currentTravelTimeMin: Joi.number().min(0).required(),
-  snapshotTs: Joi.date().iso().optional(),
+  snapshotTs: Joi.date()
+    .iso()
+    .max('now')
+    .min(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))
+    .optional()
+    .messages({
+      'date.max': 'snapshotTs cannot be in the future',
+      'date.min': 'snapshotTs cannot be older than 7 days',
+    }),
+});
+
+const trafficCorridorSnapshotHistoryQuery = Joi.object({
+  from: Joi.date().iso().optional(),
+  to: Joi.date().iso().optional(),
+  limit: Joi.number().integer().min(1).max(500).optional(),
 });
 
 const score0to100 = Joi.number().min(0).max(100).optional();
@@ -71,6 +85,7 @@ module.exports = {
   trafficCorridorCreateBody,
   trafficCorridorPatchBody,
   manualTrafficSnapshotBody,
+  trafficCorridorSnapshotHistoryQuery,
   attendanceRiskForecastRunBody,
   forecastHistoryQuery,
 };

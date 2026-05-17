@@ -2,15 +2,16 @@
   post:
     tags:
       - TrafficSnapshots
-    summary: Poll TomTom for all enabled traffic corridors (optional park filter)
+    summary: Poll TomTom for enabled corridors in one park (requires parkId and X-Park-Id)
     description: >
       Triggers a TomTom Routing "Calculate Route" call per enabled corridor that has complete origin/destination coordinates.
       Persists normalized snapshots (`source=tomtom` vendor tag). Requires TomTom to be **enabled** with a stored API key under the **traffic_tomtom** adapter (Devices & Services) or **Integration settings → Traffic providers** (not via `.env` credentials).
+      Request body **`parkId`** is required and must match the **`X-Park-Id`** header when park context is sent. Rate-limited per user and park.
     security:
       -
         bearerAuth: []
     requestBody:
-      required: false
+      required: true
       content:
         application/json:
           schema:
@@ -30,6 +31,12 @@
               $ref: '#/components/schemas/ErrorBody'
       '503':
         description: TomTom API key missing / not decryptable while integration is enabled
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorBody'
+      '429':
+        description: Poll rate limit exceeded
         content:
           application/json:
             schema:

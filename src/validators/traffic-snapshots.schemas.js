@@ -5,8 +5,8 @@ const Joi = require('joi');
 const uuid = Joi.string().uuid();
 
 const trafficSnapshotPollBody = Joi.object({
-  parkId: uuid.optional(),
-}).default({});
+  parkId: uuid.required(),
+});
 
 const trafficLatestQuery = Joi.object({
   parkId: uuid.required(),
